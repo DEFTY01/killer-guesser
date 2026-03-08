@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (role management: GET/POST /api/admin/roles, PATCH/DELETE /api/admin/roles/[id], /admin/roles page with interactive chance sliders and permission checkboxes)
+> **Last Updated:** 2026-03-08 (game creation: GET/POST /api/admin/games, POST /api/upload/murder-item, /admin/games list page, /admin/games/new 4-step wizard, /admin/games/[id] detail page)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -56,6 +56,13 @@ killer-guesser/
 │   │   │   │   ├── roles/     # Role management pages
 │   │   │   │   │   ├── page.tsx              # Roles list (server component)
 │   │   │   │   │   └── RolesClient.tsx       # Interactive table + add/edit panels (client)
+│   │   │   │   ├── games/     # Game management pages
+│   │   │   │   │   ├── page.tsx              # Games list (server component)
+│   │   │   │   │   ├── new/                  # 4-step game creation wizard
+│   │   │   │   │   │   ├── page.tsx          # Server wrapper (fetches players + roles)
+│   │   │   │   │   │   └── NewGameWizard.tsx # 4-step client wizard component
+│   │   │   │   │   └── [id]/                 # Game detail page
+│   │   │   │   │       └── page.tsx          # Game info, settings, and players
 │   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
@@ -69,11 +76,14 @@ killer-guesser/
 │   │   │   │   └── roles/     # Admin role management API
 │   │   │   │       ├── route.ts         # GET (list roles) + POST (create role)
 │   │   │   │       └── [id]/route.ts    # PATCH (update) + DELETE (forbidden if is_default=1)
+│   │   │   │   └── games/     # Admin game management API
+│   │   │   │       └── route.ts         # GET (list games with player count) + POST (transactional create)
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
 │   │   │   ├── player/        # Player registration / session API
 │   │   │   └── upload/
 │   │   │       └── avatar/    # Vercel Blob avatar upload endpoint
+│   │   │       └── murder-item/ # Vercel Blob murder item upload endpoint
 │   │   ├── login/             # Player login page (single-page avatar picker)
 │   │   ├── globals.css        # Global styles (Tailwind v4 imports)
 │   │   ├── layout.tsx         # Root layout (fonts, metadata)
@@ -128,6 +138,10 @@ killer-guesser/
 | `src/app/(admin)/admin/players/new/page.tsx` | New player form: name input, avatar upload with live preview |
 | `src/app/(admin)/admin/roles/page.tsx` | Roles list: server component — fetches roles from DB, passes to RolesClient |
 | `src/app/(admin)/admin/roles/RolesClient.tsx` | Interactive roles table: color swatch, inline chance slider (optimistic), add/edit panels, permission checkboxes, team-total warning |
+| `src/app/(admin)/admin/games/page.tsx` | Games list: server component — fetches all games with player counts |
+| `src/app/(admin)/admin/games/new/page.tsx` | New game wizard wrapper: server component fetches players + roles, renders NewGameWizard |
+| `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + randomize, step 3 roles/settings/murder item, step 4 summary + submit |
+| `src/app/(admin)/admin/games/[id]/page.tsx` | Game detail: server component — shows game info, settings, and player roster |
 | `src/app/(game)/game/page.tsx` | Main game room page |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
@@ -153,7 +167,9 @@ killer-guesser/
 | `src/app/api/admin/players/[id]/route.ts` | PATCH (update player fields) + DELETE (soft-delete: sets is_active=0) — admin only |
 | `src/app/api/admin/roles/route.ts` | GET (all roles, ordered by name) + POST (create role with Zod validation) — admin only |
 | `src/app/api/admin/roles/[id]/route.ts` | PATCH (update role fields) + DELETE (forbidden if is_default=1; otherwise hard-delete) — admin only |
+| `src/app/api/admin/games/route.ts` | GET (all games with player counts) + POST (create game in DB transaction: games + game_settings + game_players, Zod validation) — admin only |
 | `src/app/api/upload/avatar/route.ts` | POST: multipart form, validates webp/gif + 4 MB limit, uploads to Vercel Blob |
+| `src/app/api/upload/murder-item/route.ts` | POST: multipart form, validates jpeg/png/webp/gif + 4 MB limit, uploads to Vercel Blob with unique filename |
 | `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
@@ -187,7 +203,10 @@ killer-guesser/
 | `POST` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | Create new role (Zod validation: name, team, chance_percent required; description, color_hex, permissions optional) — admin only |
 | `PATCH` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Update role fields — admin only |
 | `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") — admin only |
+| `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | List all games with per-game player counts ordered by created_at desc — admin only |
+| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Create game in a single DB transaction (games + game_settings + game_players) — admin only |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
+| `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
 
 > This table will be expanded as new API routes are added.
 
