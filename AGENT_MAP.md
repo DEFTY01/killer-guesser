@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (game creation: GET/POST /api/admin/games, POST /api/upload/murder-item, /admin/games list page, /admin/games/new 4-step wizard, /admin/games/[id] detail page)
+> **Last Updated:** 2026-03-08 (live game editor: GET/PATCH /api/admin/games/[id], PATCH /api/admin/games/[id]/players/[playerId], POST /api/admin/games/[id]/reroll, /admin/games/[id] live editor with optimistic UI)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -61,8 +61,9 @@ killer-guesser/
 │   │   │   │   │   ├── new/                  # 4-step game creation wizard
 │   │   │   │   │   │   ├── page.tsx          # Server wrapper (fetches players + roles)
 │   │   │   │   │   │   └── NewGameWizard.tsx # 4-step client wizard component
-│   │   │   │   │   └── [id]/                 # Game detail page
-│   │   │   │   │       └── page.tsx          # Game info, settings, and players
+│   │   │   │   │   └── [id]/                 # Game detail / live editor
+│   │   │   │   │       ├── page.tsx          # Server wrapper (fetches game, settings, players, roles)
+│   │   │   │   │       └── GameEditorClient.tsx # Live editor: status bar, players panel, actions panel
 │   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
@@ -77,7 +78,13 @@ killer-guesser/
 │   │   │   │       ├── route.ts         # GET (list roles) + POST (create role)
 │   │   │   │       └── [id]/route.ts    # PATCH (update) + DELETE (forbidden if is_default=1)
 │   │   │   │   └── games/     # Admin game management API
-│   │   │   │       └── route.ts         # GET (list games with player count) + POST (transactional create)
+│   │   │   │       ├── route.ts         # GET (list games with player count) + POST (transactional create)
+│   │   │   │       └── [id]/            # Per-game API
+│   │   │   │           ├── route.ts     # GET (full game data) + PATCH (close_voting / close / delete)
+│   │   │   │           ├── reroll/      # Re-randomise teams or roles
+│   │   │   │           │   └── route.ts # POST ?type=teams|roles
+│   │   │   │           └── players/[playerId]/
+│   │   │   │               └── route.ts # PATCH (mark dead / change role)
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
 │   │   │   ├── player/        # Player registration / session API
@@ -141,7 +148,8 @@ killer-guesser/
 | `src/app/(admin)/admin/games/page.tsx` | Games list: server component — fetches all games with player counts |
 | `src/app/(admin)/admin/games/new/page.tsx` | New game wizard wrapper: server component fetches players + roles, renders NewGameWizard |
 | `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + randomize, step 3 roles/settings/murder item, step 4 summary + submit |
-| `src/app/(admin)/admin/games/[id]/page.tsx` | Game detail: server component — shows game info, settings, and player roster |
+| `src/app/(admin)/admin/games/[id]/page.tsx` | Game editor: server component — fetches game, settings, players (with role data), and all roles; renders GameEditorClient |
+| `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
 | `src/app/(game)/game/page.tsx` | Main game room page |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
@@ -168,6 +176,9 @@ killer-guesser/
 | `src/app/api/admin/roles/route.ts` | GET (all roles, ordered by name) + POST (create role with Zod validation) — admin only |
 | `src/app/api/admin/roles/[id]/route.ts` | PATCH (update role fields) + DELETE (forbidden if is_default=1; otherwise hard-delete) — admin only |
 | `src/app/api/admin/games/route.ts` | GET (all games with player counts) + POST (create game in DB transaction: games + game_settings + game_players, Zod validation) — admin only |
+| `src/app/api/admin/games/[id]/route.ts` | GET (full game with settings + players including role data) + PATCH (action: close_voting / close / delete) — admin only |
+| `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | PATCH (mark player dead / change role assignment) — admin only |
+| `src/app/api/admin/games/[id]/reroll/route.ts` | POST ?type=teams (random 50/50 split) or ?type=roles (weighted random by chance_percent) — admin only |
 | `src/app/api/upload/avatar/route.ts` | POST: multipart form, validates webp/gif + 4 MB limit, uploads to Vercel Blob |
 | `src/app/api/upload/murder-item/route.ts` | POST: multipart form, validates jpeg/png/webp/gif + 4 MB limit, uploads to Vercel Blob with unique filename |
 | `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
@@ -205,6 +216,10 @@ killer-guesser/
 | `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") — admin only |
 | `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | List all games with per-game player counts ordered by created_at desc — admin only |
 | `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Create game in a single DB transaction (games + game_settings + game_players) — admin only |
+| `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Get full game data (game + settings + players with role details) — admin only |
+| `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "close_voting" (null vote window), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
+| `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Update game player: is_dead (0/1) and/or role_id — admin only |
+| `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) — admin only |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
 | `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
 
