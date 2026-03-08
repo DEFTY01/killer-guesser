@@ -5,28 +5,43 @@ import { NextResponse } from "next/server";
  * Route-protection middleware powered by Auth.js v5.
  *
  * Rules:
- *  - /admin/*  → requires role === "admin"; redirects to / otherwise.
- *  - /game/*   → requires an authenticated session; redirects to /login otherwise.
- *  - /login    → redirects already-authenticated users to /.
+ *  - /admin/login     → redirects to /admin/dashboard if already an admin.
+ *  - /admin/*         → requires role === "admin"; redirects to /admin/login otherwise.
+ *  - /game/*          → requires role === "player"; redirects to /login otherwise.
+ *  - /login           → redirects to / if the user already has an active player session.
  */
 export default auth((req) => {
   const { pathname } = req.nextUrl;
   const session = req.auth;
   const role = session?.user?.role;
 
-  // Already logged-in users don't need the login page.
-  if (pathname === "/login" && session) {
-    return NextResponse.redirect(new URL("/", req.url));
+  // /admin/login → redirect to dashboard if already an admin.
+  if (pathname === "/admin/login") {
+    if (role === "admin") {
+      return NextResponse.redirect(new URL("/admin/dashboard", req.url));
+    }
+    return NextResponse.next();
   }
 
-  // Admin section: requires the "admin" role.
-  if (pathname.startsWith("/admin") && role !== "admin") {
-    return NextResponse.redirect(new URL("/", req.url));
+  // All other /admin/* routes (explicitly excluding /admin/login) → require admin role.
+  if (pathname.startsWith("/admin") && pathname !== "/admin/login") {
+    if (role !== "admin") {
+      return NextResponse.redirect(new URL("/admin/login", req.url));
+    }
   }
 
-  // Game section: requires any authenticated session.
-  if (pathname.startsWith("/game") && !session) {
-    return NextResponse.redirect(new URL("/login", req.url));
+  // /game/* → require player role.
+  if (pathname.startsWith("/game")) {
+    if (role !== "player") {
+      return NextResponse.redirect(new URL("/login", req.url));
+    }
+  }
+
+  // /login → redirect players with an active session to /.
+  if (pathname === "/login") {
+    if (role === "player") {
+      return NextResponse.redirect(new URL("/", req.url));
+    }
   }
 });
 

@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (schema role fix: "player" only, drizzle-kit generate migration 0001)
+> **Last Updated:** 2026-03-08 (auth: two separate Credentials providers — avatar-based player login and password-only admin login; middleware updated; admin login page rebuilt)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -106,7 +106,7 @@ killer-guesser/
 | `src/app/(admin)/layout.tsx` | Admin shell: role-based auth, sidebar (desktop), bottom tab bar (mobile) |
 | `src/app/(admin)/admin/page.tsx` | Redirects to `/admin/dashboard` |
 | `src/app/(admin)/admin/dashboard/page.tsx` | Dashboard: stats cards, quick actions, recent games |
-| `src/app/(admin)/admin/login/page.tsx` | Admin login UI |
+| `src/app/(admin)/admin/login/page.tsx` | Admin login page — minimal client component; single password input; calls `signIn("admin", { password })`; on success redirects to `/admin/dashboard`; shows inline "Invalid password" on error |
 | `src/app/(game)/game/page.tsx` | Main game room page |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
@@ -122,10 +122,10 @@ killer-guesser/
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
-| `src/lib/auth.ts` | NextAuth.js v5 config — avatar-click Credentials provider; JWT strategy; role + activeGameId in token & session |
+| `src/lib/auth.ts` | NextAuth.js v5 config — two Credentials providers: "player" (userId only, avatar-click) and "admin" (password-only, `timingSafeEqual`, hardcoded identity); JWT strategy; role + avatar_url + activeGameId in token & session |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
-| `src/middleware.ts` | Route-protection middleware: /admin/* → admin role; /game/* → auth; /login → redirect if authed |
+| `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
@@ -146,6 +146,8 @@ killer-guesser/
 | Method | Path | Handler file | Description |
 |---|---|---|---|
 | `GET/POST` | `/api/auth/[...nextauth]` | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js catch-all (sign-in, session, CSRF) |
+| `POST` | `/api/auth/callback/player` | `src/app/api/auth/[...nextauth]/route.ts` | Credentials callback for the "player" provider (userId, no password) |
+| `POST` | `/api/auth/callback/admin` | `src/app/api/auth/[...nextauth]/route.ts` | Credentials callback for the "admin" provider (password-only) |
 | `POST` | `/api/player` | `src/app/api/player/route.ts` | Register player nickname; create/return session |
 | `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Upload & resize player avatar (→ Cloudflare R2) |
 
