@@ -43,6 +43,12 @@ function parsePermissions(raw: string | null | undefined): RolePermission[] {
  *
  * If the caller has `see_votes` permission:
  *  - votes[]: today's { voter_id, target_id } entries
+ *
+ * **Security constraint:** The `killer_id` field is **only** included in the
+ * response when the authenticated caller's role grants the `see_killer`
+ * permission (e.g. the Seer role).  For every other role the field is omitted
+ * entirely so that the killer's identity is never leaked to unauthorised
+ * players.
  */
 export async function GET(
   _req: NextRequest,
