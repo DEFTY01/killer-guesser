@@ -3,50 +3,20 @@ import Credentials from "next-auth/providers/credentials";
 import { db } from "@/db";
 import { users, game_players, games } from "@/db/schema";
 import { and, eq, or } from "drizzle-orm";
-import type { DefaultSession } from "next-auth";
 import crypto from "crypto";
-
-// ── Module augmentation: extend NextAuth types ────────────────────
-
-declare module "next-auth" {
-  interface User {
-    avatar_url?: string | null;
-    role?: string;
-    activeGameId?: string;
-  }
-  interface Session {
-    user: {
-      id: string;
-      avatar_url: string | null;
-      role: string;
-      activeGameId: string;
-    } & DefaultSession["user"];
-  }
-}
+import { authConfig } from "./auth.config";
 
 /**
- * Auth.js v5 configuration.
+ * Auth.js v5 configuration — Node.js runtime only.
  *
- * Two separate Credentials providers:
+ * Spreads the edge-safe authConfig (JWT/session callbacks, pages) and adds
+ * the two Credentials providers that require Node.js + database access:
  *
- * 1. "player" — Avatar-click login flow:
- *    - Receives a userId (no password).
- *    - Verifies the user is active and has an active/scheduled game.
- *    - Returns user object with id, name, avatar_url, role, activeGameId.
- *
- * 2. "admin" — Password-only login flow:
- *    - Receives a password field only.
- *    - Compares against ADMIN_PASSWORD env var using timingSafeEqual.
- *    - Returns a hardcoded admin identity (never stored in the database).
- *
- * JWT strategy — no DrizzleAdapter (users table uses integer PKs).
+ * 1. "player" — Avatar-click login flow.
+ * 2. "admin"  — Password-only login flow (timingSafeEqual via Node crypto).
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  session: { strategy: "jwt" },
-  pages: {
-    signIn: "/login",
-    error: "/login",
-  },
+  ...authConfig,
   providers: [
     // ── Provider 1: player ────────────────────────────────────────
     Credentials({
@@ -131,32 +101,5 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       },
     }),
   ],
-  callbacks: {
-    jwt({ token, user }) {
-      if (user) {
-        // JWT extends Record<string, unknown>; bracket notation is required
-        // because @auth/core/jwt cannot be augmented with the bundler module
-        // resolver used in this project.
-        token["id"] = user.id;
-        token["role"] = user.role ?? "player";
-        // Player-only fields — undefined for admin sessions.
-        token["avatar_url"] = user.avatar_url ?? null;
-        token["activeGameId"] = user.activeGameId ?? "";
-      }
-      return token;
-    },
-    session({ session, token }) {
-      if (token && session.user) {
-        session.user.id = (token["id"] as string | undefined) ?? "";
-        session.user.role = (token["role"] as string | undefined) ?? "player";
-        // Player-only fields — null / empty for admin sessions.
-        session.user.avatar_url =
-          (token["avatar_url"] as string | null | undefined) ?? null;
-        session.user.activeGameId =
-          (token["activeGameId"] as string | undefined) ?? "";
-      }
-      return session;
-    },
-  },
 });
 
