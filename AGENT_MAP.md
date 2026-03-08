@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 23 — Spy Vote View: vote GET endpoint enriched with voter/target avatar_url for see_votes callers; vote POST Ably VOTE_CAST payload extended with voter_avatar_url + target_avatar_url; VotePageClient collapsible "Secret Info 🕵️" section with avatar+name rows, real-time via Ably VOTE_CAST, hidden for non-spy roles)
+> **Last Updated:** 2026-03-08 (PROMPT 24 — Seer Killer Identification View: added src/lib/roleUtils.ts isKiller helper; GameBoardClient uses helper + shows Seer info banner; board API JSDoc hardened with security constraint)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -134,6 +134,8 @@ killer-guesser/
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
 │   │   ├── blob.ts            # Vercel Blob upload helper (thin wrapper around @vercel/blob)
 │   │   ├── gameEnd.ts         # Game-end logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame
+│   │   ├── role-constants.ts  # Role permissions + colors
+│   │   ├── roleUtils.ts       # Role utility helpers (isKiller)
 │   │   └── validations.ts     # Zod schemas for shared validation
 │   ├── hooks/
 │   │   ├── useAbly.ts         # React hook: subscribe to an Ably channel/event with singleton client
@@ -209,6 +211,7 @@ killer-guesser/
 | `src/lib/blob.ts` | Thin wrapper around `@vercel/blob` — `uploadBlob(filename, buffer, mimeType)` → public URL |
 | `src/lib/gameEnd.ts` | Game-end scenarios: `handleKillerDefeated` (killer voted out → archive events, close, survivors win), `handleKillerWins` (killer wins → archive events, close, killer team wins), `deleteGame` (hard-delete all game data), `closeGame` (close without deletion); all publish Ably `game_ended` event |
 | `src/lib/role-constants.ts` | Shared role constants — `DEFAULT_ROLE_COLOR`, `ROLE_PERMISSIONS` tuple, `RolePermission` type |
+| `src/lib/roleUtils.ts` | Role utility helpers — `isKiller(playerId, killerId)` for testable killer identification |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
 | `src/app/api/admin/players/route.ts` | GET (all players, ordered by name) + POST (create player with Zod validation) — admin only |
 | `src/app/api/admin/players/[id]/route.ts` | PATCH (update player fields) + DELETE (soft-delete: sets is_active=0) — admin only |
@@ -226,6 +229,7 @@ killer-guesser/
 | `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
 | `src/db/migrations/0002_revive_cooldown.sql` | Migration: add `revive_cooldown_seconds` integer column to `game_settings` |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
+| `tests/unit/roleUtils.test.ts` | Unit tests for `isKiller` helper |
 | `tests/unit/gameEnd.test.ts` | Unit tests for all four game-end functions (DB transaction, archiving, deletion, Ably publish) |
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
 | `tests/unit/Button.test.tsx` | Unit tests for Button UI component |

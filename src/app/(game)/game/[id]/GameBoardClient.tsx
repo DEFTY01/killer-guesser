@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { VoteCountdown } from "@/components/game/VoteCountdown";
 import { PlayerCard, type PlayerCardPlayer } from "@/components/game/PlayerCard";
 import type { RolePermission } from "@/lib/role-constants";
+import { isKiller } from "@/lib/roleUtils";
 import { useAbly } from "@/hooks/useAbly";
 import { ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
@@ -432,6 +433,17 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         />
       )}
 
+      {/* ── Seer info banner ─────────────────────────────────── */}
+      {canSeeKiller && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-sm text-purple-700"
+        >
+          <span aria-hidden="true">👁️</span>
+          <span>You know who the killer is. Keep it secret.</span>
+        </div>
+      )}
+
       {/* ── Game title ───────────────────────────────────────── */}
       {isLoading ? (
         <div className="h-7 w-48 rounded-full bg-gray-200 animate-pulse" />
@@ -481,7 +493,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               key={player.id}
               player={player}
               isOwnCard={player.user_id === data.caller.user_id}
-              isKiller={canSeeKiller && data.killer_id != null && player.user_id === data.killer_id}
+              isKiller={canSeeKiller && isKiller(player.user_id, data.killer_id ?? undefined)}
               canRevive={canRevive}
               onSelfTap={() => setShowDeathModal(true)}
               onRevive={handleRevive}
