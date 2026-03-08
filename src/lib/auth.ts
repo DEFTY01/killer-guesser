@@ -1,5 +1,4 @@
 import NextAuth from "next-auth";
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Credentials from "next-auth/providers/credentials";
 import { db } from "@/db";
 import { users } from "@/db/schema";
@@ -10,11 +9,14 @@ import { eq } from "drizzle-orm";
  * Auth.js v5 configuration.
  *
  * Supports two flows:
- *  1. Admin session — email/password credentials (or OAuth providers).
+ *  1. Admin session — credentials-based login (JWT strategy, no DB adapter).
  *  2. Player session — handled separately via avatar/session API routes.
+ *
+ * Note: DrizzleAdapter is not used here because the `users` table uses
+ * integer primary keys and does not carry Auth.js OAuth columns. Admin
+ * authentication is JWT-only.
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: DrizzleAdapter(db),
   session: { strategy: "jwt" },
   pages: {
     signIn: "/admin/login",
@@ -33,17 +35,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
         const { email } = parsed.data;
 
-        // In production, verify the hashed password here.
-        // This scaffold checks only that the user record exists.
+        // Look up admin user by name. In production, verify a hashed
+        // password stored on the user record. The email field from the
+        // login form is matched against users.name for the initial scaffold.
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, email))
+          .where(eq(users.name, email))
           .limit(1);
 
-        if (!user) return null;
+        if (!user || user.role !== "admin") return null;
 
-        return { id: user.id, email: user.email, name: user.name };
+        return { id: String(user.id), name: user.name };
       },
     }),
   ],

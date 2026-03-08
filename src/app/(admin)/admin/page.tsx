@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/db";
-import { games, players } from "@/db/schema";
+import { games, users } from "@/db/schema";
 import { sql } from "drizzle-orm";
 
 export const metadata: Metadata = { title: "Dashboard" };
@@ -13,7 +13,7 @@ export default async function AdminDashboard() {
       .then((r) => r[0]?.count ?? 0),
     db
       .select({ count: sql<number>`count(*)` })
-      .from(players)
+      .from(users)
       .then((r) => r[0]?.count ?? 0),
   ]);
 
