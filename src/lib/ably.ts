@@ -2,11 +2,30 @@ import Ably from "ably";
 
 /**
  * Server-side Ably REST client.
- * Initialised from the `ABLY_API_KEY` environment variable.
- * Only available in server-side code (API routes, server actions, etc.).
+ * Lazily instantiated — the `Ably.Rest` constructor throws when the key is
+ * absent, so we only create the instance when `ABLY_API_KEY` is present.
+ *
+ * All callers must guard with `if (process.env.ABLY_API_KEY)` before
+ * accessing this value, which is the existing convention throughout the
+ * codebase.  The `null as unknown as Ably.Rest` cast keeps callers' types
+ * consistent without requiring a null-check after the env guard.
  */
-export const ablyServer = new Ably.Rest({
-  key: process.env.ABLY_API_KEY ?? "",
+let _ablyServer: Ably.Rest | undefined;
+
+export const ablyServer: Ably.Rest = new Proxy({} as Ably.Rest, {
+  get(_target, prop) {
+    if (!_ablyServer) {
+      const key = process.env.ABLY_API_KEY;
+      if (!key) {
+        throw new Error(
+          "ablyServer accessed without ABLY_API_KEY being set. " +
+            "Always guard with `if (process.env.ABLY_API_KEY)` before using ablyServer.",
+        );
+      }
+      _ablyServer = new Ably.Rest({ key });
+    }
+    return (_ablyServer as unknown as Record<string | symbol, unknown>)[prop];
+  },
 });
 
 /**
