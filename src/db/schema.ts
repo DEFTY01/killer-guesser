@@ -136,6 +136,7 @@ export const game_settings = sqliteTable("game_settings", {
   bg_dark_url: text("bg_dark_url"),
   murder_item_url: text("murder_item_url"),
   murder_item_name: text("murder_item_name"),
+  revive_cooldown_seconds: integer("revive_cooldown_seconds"),
 });
 
 // ── Relations ─────────────────────────────────────────────────────

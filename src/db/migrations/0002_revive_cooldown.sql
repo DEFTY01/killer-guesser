@@ -1,0 +1,1 @@
+ALTER TABLE `game_settings` ADD `revive_cooldown_seconds` integer;
