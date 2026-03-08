@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 25 — Mayor anonymous view: board API strips `role_color`+`team` for Mayor callers; PlayerCard `team`/`role_color` made optional; GameBoardClient hides VoteCountdown + shows ⚖️ Mayor banner for Mayor role)
+> **Last Updated:** 2026-03-08 (PROMPT 26 — Murder item display: GameBoardClient `MurderItemCard` shows "The killer's weapon:" header, thumbnail, bold name, and fullscreen image modal with backdrop blur on tap; hidden when no murder item set)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -71,7 +71,7 @@ killer-guesser/
 │   │   │   │   ├── page.tsx   # Join-game page (renders PlayerLogin)
 │   │   │   │   └── [id]/      # Per-game board
 │   │   │   │       ├── page.tsx          # Server wrapper → GameBoardClient
-│   │   │   │       ├── GameBoardClient.tsx # Interactive game board (vote countdown hidden for Mayor, player grid, self-death modal, game-ended modal; Mayor ⚖️ banner; Seer 👁️ banner; subscribes to PLAYER_DIED, PLAYER_REVIVED, GAME_ENDED)
+│   │   │   │       ├── GameBoardClient.tsx # Interactive game board (murder item card with fullscreen modal, vote countdown hidden for Mayor, player grid, self-death modal, game-ended modal; Mayor ⚖️ banner; Seer 👁️ banner; subscribes to PLAYER_DIED, PLAYER_REVIVED, GAME_ENDED)
 │   │   │   │       └── vote/[day]/       # Per-day voting page
 │   │   │   │           ├── page.tsx       # Server wrapper → VotePageClient
 │   │   │   │           └── VotePageClient.tsx # Voting UI: submit vote, spy view (VOTE_CAST), results (VOTE_CLOSED)

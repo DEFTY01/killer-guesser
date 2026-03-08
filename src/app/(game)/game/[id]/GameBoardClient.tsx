@@ -58,31 +58,87 @@ function isVoteWindowActive(
   return now >= startMs && now < endMs;
 }
 
+// ── Murder item fullscreen modal ──────────────────────────────────
+
+function MurderItemModal({
+  url,
+  name,
+  onClose,
+}: {
+  url: string;
+  name: string | null;
+  onClose: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/70"
+      role="dialog"
+      aria-modal="true"
+      aria-label={name ?? "Murder item fullscreen view"}
+      onClick={onClose}
+      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
+      tabIndex={-1}
+    >
+      <div className="relative w-full h-full flex items-center justify-center p-6">
+        <Image
+          src={url}
+          alt={name ?? "Murder item"}
+          fill
+          sizes="100vw"
+          className="object-contain"
+          onClick={(e) => e.stopPropagation()}
+        />
+      </div>
+    </div>
+  );
+}
+
 // ── Murder item card ──────────────────────────────────────────────
 
 function MurderItemCard({ url, name }: { url: string | null; name: string | null }) {
+  const [modalOpen, setModalOpen] = useState(false);
+
   if (!url && !name) return null;
 
   return (
-    <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden max-w-xs mx-auto">
-      {url && (
-        <div className="relative w-full aspect-square bg-gray-50">
-          <Image
-            src={url}
-            alt={name ?? "Murder item"}
-            fill
-            sizes="(max-width: 320px) 100vw, 320px"
-            className="object-contain p-4"
-          />
+    <>
+      <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden max-w-xs mx-auto">
+        <div className="px-4 pt-3 pb-1 text-center">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
+            The killer&apos;s weapon:
+          </p>
         </div>
+        {url && (
+          <button
+            type="button"
+            aria-label="View murder weapon fullscreen"
+            onClick={() => setModalOpen(true)}
+            className="relative w-full aspect-square bg-gray-50 block cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+          >
+            <Image
+              src={url}
+              alt={name ?? "Murder item"}
+              fill
+              sizes="(max-width: 320px) 100vw, 320px"
+              className="object-contain p-4"
+            />
+          </button>
+        )}
+        {name && (
+          <div className="px-4 py-3 text-center">
+            <p className="text-sm font-bold text-gray-800">{name}</p>
+          </div>
+        )}
+      </div>
+
+      {modalOpen && url && (
+        <MurderItemModal
+          url={url}
+          name={name}
+          onClose={() => setModalOpen(false)}
+        />
       )}
-      {name && (
-        <div className="px-4 py-3 text-center">
-          <p className="text-sm font-semibold text-gray-800">{name}</p>
-          <p className="text-xs text-gray-400 mt-0.5">Murder weapon</p>
-        </div>
-      )}
-    </div>
+    </>
   );
 }
 
