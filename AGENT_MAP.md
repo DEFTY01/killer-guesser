@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08
+> **Last Updated:** 2026-03-08 (PROMPT 03 — deps install)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -134,6 +134,50 @@ killer-guesser/
 | `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Upload & resize player avatar (→ Cloudflare R2) |
 
 > This table will be expanded as new API routes are added.
+
+---
+
+## Installed Packages
+
+### Production Dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `next` | `^16.1.6` | Next.js App Router framework |
+| `react` / `react-dom` | `^19.2.4` | React UI library |
+| `typescript` | `^5.9.3` | Static type checking |
+| `geist` | `^1.7.0` | Geist font family |
+| `next-auth` | `5.0.0-beta.30` | Authentication (Auth.js v5) |
+| `@auth/drizzle-adapter` | `^1.11.1` | Drizzle ORM adapter for Auth.js |
+| `drizzle-orm` | `^0.45.1` | Type-safe SQL ORM |
+| `@libsql/client` | `^0.17.0` | Turso/libSQL database client |
+| `ably` | `^2.19.0` | Real-time pub/sub messaging |
+| `@aws-sdk/client-s3` | `^3.1004.0` | AWS / Cloudflare R2 S3-compatible object storage |
+| `@aws-sdk/s3-request-presigner` | `^3.1004.0` | Generate pre-signed S3/R2 URLs |
+| `zustand` | `^5.0.11` | Lightweight React state management |
+| `date-fns` | `^4.1.0` | Date utility functions |
+| `zod` | `^4.3.6` | Schema validation and type inference |
+| `sharp` | `^0.34.5` | Image processing (avatar resize → 500×500 PNG) |
+
+### Dev Dependencies
+
+| Package | Version | Purpose |
+|---|---|---|
+| `drizzle-kit` | `^0.31.9` | Drizzle schema migrations CLI |
+| `tsx` | `^4.21.0` | TypeScript-first Node.js script runner |
+| `@types/node` | `^25.3.5` | TypeScript types for Node.js |
+| `@types/react` | `^19.2.14` | TypeScript types for React |
+| `@types/react-dom` | `^19.2.3` | TypeScript types for React DOM |
+| `vitest` | `^4.0.18` | Unit test runner (Vite-native) |
+| `@vitest/coverage-v8` | `^4.0.18` | V8-based code coverage for Vitest |
+| `@vitejs/plugin-react` | `^4.4.1` | Vite React plugin (used by Vitest) |
+| `@testing-library/react` | `^16.3.0` | React component testing utilities |
+| `@testing-library/jest-dom` | `^6.6.3` | Custom Jest/Vitest DOM matchers |
+| `jsdom` | `^26.1.0` | DOM environment for unit tests |
+| `@playwright/test` | `^1.58.2` | End-to-end browser testing |
+| `tailwindcss` | `^4.2.1` | Utility-first CSS framework (v4 CSS-first) |
+| `@tailwindcss/postcss` | `^4.2.1` | PostCSS plugin for Tailwind v4 |
+| `postcss` | `^8.5.8` | CSS transformation tool |
 
 ---
 
