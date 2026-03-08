@@ -2,16 +2,15 @@ import { createClient } from "@libsql/client";
 import { drizzle } from "drizzle-orm/libsql";
 import * as schema from "@/db/schema";
 
-const url = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+// Fall back to a local SQLite file when no remote URL is configured.
+// This matches the documented behaviour: "No Turso account is needed to run locally."
+// On first use run `npm run db:push` to create the schema in local.db.
+const url =
+  process.env.DATABASE_URL ??
+  process.env.TURSO_DATABASE_URL ??
+  "file:local.db";
 const authToken =
   process.env.DATABASE_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN;
-
-if (!url) {
-  throw new Error(
-    "Missing database URL. Set DATABASE_URL (preferred) or TURSO_DATABASE_URL " +
-      "to your Turso database URL (e.g. libsql://your-db.turso.io).",
-  );
-}
 
 // Vercel serverless functions cannot reliably use a local SQLite file.
 if (process.env.VERCEL === "1" && url.startsWith("file:")) {

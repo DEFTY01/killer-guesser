@@ -72,6 +72,9 @@ jobs:
 
       - run: npm ci
 
+      - name: Initialise local database schema
+        run: npx drizzle-kit push --force
+
       - name: Build
         run: npm run build
 
@@ -95,6 +98,9 @@ jobs:
 
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
+
+      - name: Initialise local database schema
+        run: npx drizzle-kit push --force
 
       - name: Build app
         run: npm run build
