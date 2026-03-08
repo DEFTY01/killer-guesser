@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 09)
+> **Last Updated:** 2026-03-08 (PROMPT 10)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -47,9 +47,10 @@ killer-guesser/
 │   ├── app/
 │   │   ├── (admin)/           # Admin route group (login, dashboard)
 │   │   │   ├── admin/
+│   │   │   │   ├── dashboard/ # Admin dashboard page
 │   │   │   │   ├── login/     # Admin login page
-│   │   │   │   └── page.tsx   # Admin dashboard
-│   │   │   └── layout.tsx     # Admin layout wrapper
+│   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
+│   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
 │   │   │   ├── game/          # Main game page
 │   │   │   └── layout.tsx     # Game layout wrapper
@@ -99,8 +100,10 @@ killer-guesser/
 | `src/app/layout.tsx` | Root layout: applies Geist + Cinzel fonts, global metadata, global CSS, night-bg class |
 | `src/app/page.tsx` | Landing / home page |
 | `src/app/login/page.tsx` | Player login page — fetches players and renders `LoginScreen` |
+| `src/app/(admin)/layout.tsx` | Admin shell: role-based auth, sidebar (desktop), bottom tab bar (mobile) |
+| `src/app/(admin)/admin/page.tsx` | Redirects to `/admin/dashboard` |
+| `src/app/(admin)/admin/dashboard/page.tsx` | Dashboard: stats cards, quick actions, recent games |
 | `src/app/(admin)/admin/login/page.tsx` | Admin login UI |
-| `src/app/(admin)/admin/page.tsx` | Admin dashboard |
 | `src/app/(game)/game/page.tsx` | Main game room page |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
