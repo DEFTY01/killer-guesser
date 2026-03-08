@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08
+> **Last Updated:** 2026-03-08 (schema role fix: "player" only, drizzle-kit generate migration 0001)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -128,6 +128,7 @@ killer-guesser/
 | `src/middleware.ts` | Route-protection middleware: /admin/* → admin role; /game/* → auth; /login → redirect if authed |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
+| `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
 | `tests/unit/Button.test.tsx` | Unit tests for Button UI component |

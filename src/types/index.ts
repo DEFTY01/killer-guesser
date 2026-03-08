@@ -12,7 +12,7 @@ import type {
 
 // ── Domain string unions ───────────────────────────────────────────
 
-export type UserRole = "admin" | "member";
+export type UserRole = "player";
 export type GameStatus = "scheduled" | "active" | "closed" | "deleted";
 export type TeamName = "team1" | "team2";
 export type TimeOfDay = "morning" | "afternoon" | "evening";

@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     .insert(users)
     .values({
       name: parsed.data.nickname,
-      role: "member",
+      role: "player",
     })
     .returning();
 
