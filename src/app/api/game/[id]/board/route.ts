@@ -49,6 +49,13 @@ function parsePermissions(raw: string | null | undefined): RolePermission[] {
  * permission (e.g. the Seer role).  For every other role the field is omitted
  * entirely so that the killer's identity is never leaked to unauthorised
  * players.
+ *
+ * **Mayor anonymisation:** When the caller's role is "Mayor", every player
+ * object is stripped down to `{ id, user_id, name, avatar_url, is_dead,
+ * revived_at }` only.  The `role_color` and `team` fields are omitted so
+ * that the Mayor cannot infer any faction or role information from the
+ * response.  The Mayor cannot revive, cannot see the killer, and cannot see
+ * votes — their only action is to vote like everyone else.
  */
 export async function GET(
   _req: NextRequest,
@@ -152,6 +159,22 @@ export async function GET(
     role_color: p.role_color ?? DEFAULT_ROLE_COLOR,
   }));
 
+  // ── Mayor anonymisation: strip role/team data ─────────────────
+  // The Mayor's view is deliberately equalized — they cannot see role colours
+  // or team badges.  Strip every field except the bare minimum needed to
+  // render a face-and-name card.
+  const isMayor = callerRow.role_name === "Mayor";
+  const responsePlayers = isMayor
+    ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, revived_at }) => ({
+        id,
+        user_id,
+        name,
+        avatar_url,
+        is_dead,
+        revived_at,
+      }))
+    : normalizedPlayers;
+
   // ── Current game day ──────────────────────────────────────────
   const nowUnix = Math.floor(Date.now() / 1000);
   const currentDay = Math.max(
@@ -180,7 +203,7 @@ export async function GET(
       permissions: RolePermission[];
       role_name: string | null;
     };
-    players: typeof normalizedPlayers;
+    players: typeof responsePlayers;
     killer_id?: number | null;
     votes?: Array<{ voter_id: number; target_id: number }>;
   } = {
@@ -203,7 +226,7 @@ export async function GET(
       permissions: callerPermissions,
       role_name: callerRow.role_name ?? null,
     },
-    players: normalizedPlayers,
+    players: responsePlayers,
   };
 
   // ── see_killer permission: include killer's user_id ───────────

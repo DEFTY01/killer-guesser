@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 18 — Game Board: added `viewerRole`/`team1Name`/`team2Name` props + TeamBadge + Mayor flat view to PlayerCard; board API now includes `role_name` in caller response; GameBoardClient passes new props to PlayerCard)
+> **Last Updated:** 2026-03-08 (PROMPT 25 — Mayor anonymous view: board API strips `role_color`+`team` for Mayor callers; PlayerCard `team`/`role_color` made optional; GameBoardClient hides VoteCountdown + shows ⚖️ Mayor banner for Mayor role)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -71,7 +71,7 @@ killer-guesser/
 │   │   │   │   ├── page.tsx   # Join-game page (renders PlayerLogin)
 │   │   │   │   └── [id]/      # Per-game board
 │   │   │   │       ├── page.tsx          # Server wrapper → GameBoardClient
-│   │   │   │       ├── GameBoardClient.tsx # Interactive game board (vote countdown, player grid, self-death modal, game-ended modal; subscribes to PLAYER_DIED, PLAYER_REVIVED, GAME_ENDED)
+│   │   │   │       ├── GameBoardClient.tsx # Interactive game board (vote countdown hidden for Mayor, player grid, self-death modal, game-ended modal; Mayor ⚖️ banner; Seer 👁️ banner; subscribes to PLAYER_DIED, PLAYER_REVIVED, GAME_ENDED)
 │   │   │   │       └── vote/[day]/       # Per-day voting page
 │   │   │   │           ├── page.tsx       # Server wrapper → VotePageClient
 │   │   │   │           └── VotePageClient.tsx # Voting UI: submit vote, spy view (VOTE_CAST), results (VOTE_CLOSED)
@@ -100,7 +100,7 @@ killer-guesser/
 │   │   │   │   ├── lobby/     # GET — active/scheduled/past games for current player
 │   │   │   │   ├── participants/ # GET — pre-game participant list (no role/dead)
 │   │   │   │   └── [id]/      # Per-game player API routes
-│   │   │   │       ├── board/route.ts              # GET — role-filtered board data
+│   │   │   │       ├── board/route.ts              # GET — role-filtered board data; Mayor callers receive stripped player objects (no role_color, no team)
 │   │   │   │       ├── vote/[day]/route.ts         # GET — vote page data; POST — submit vote (publishes VOTE_CAST)
 │   │   │   │       ├── vote/[day]/close/route.ts   # POST — compute results, publish VOTE_CLOSED
 │   │   │   │       └── players/[playerId]/
@@ -181,7 +181,7 @@ killer-guesser/
 | `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
 | `src/app/(game)/game/page.tsx` | Main game room page (renders PlayerLogin for join flow) |
 | `src/app/(game)/game/[id]/page.tsx` | Game board: server wrapper — resolves `id` param and renders GameBoardClient |
-| `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown, murder item card, player grid, vote button, self-death modal; subscribes to PLAYER_DIED (instant grayscale), PLAYER_REVIVED (remove grayscale+X, show Undead), and GAME_ENDED (modal + 3s redirect) |
+| `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown (hidden for Mayor), murder item card, player grid, vote button, self-death modal; Seer 👁️ banner; Mayor ⚖️ banner; subscribes to PLAYER_DIED (instant grayscale), PLAYER_REVIVED (remove grayscale+X, show Undead), and GAME_ENDED (modal + 3s redirect) |
 | `src/app/(game)/game/[id]/vote/[day]/page.tsx` | Voting page: server wrapper — resolves `id` + `day` params and renders VotePageClient |
 | `src/app/(game)/game/[id]/vote/[day]/VotePageClient.tsx` | Voting page (client): submit vote, "already voted" state, collapsible "Secret Info 🕵️" spy view (see_votes only; shows voter/target avatars+names, "No votes yet", subscribes to VOTE_CAST for real-time live list), results view (subscribes to VOTE_CLOSED), vote-window timer triggers close call |
 | `src/app/(game)/lobby/page.tsx` | Player lobby — client component: active games, upcoming games (with countdown), past games (win/loss); skeleton loading; empty state |
@@ -197,7 +197,7 @@ killer-guesser/
 | `src/components/ui/Button.tsx` | Accessible Button component |
 | `src/components/ui/Card.tsx` | Card layout component |
 | `src/components/ui/Input.tsx` | Accessible Input component |
-| `src/components/game/PlayerCard.tsx` | Role-aware player card: Mayor view=flat grid (only avatar+name, no border/badge/labels); dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; default=role color border+team badge; accepts `viewerRole`, `team1Name`, `team2Name` |
+| `src/components/game/PlayerCard.tsx` | Role-aware player card: Mayor view=flat grid (only avatar+name, no border/badge/labels); dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; default=role color border+team badge; accepts `viewerRole`, `team1Name`, `team2Name`; `team` and `role_color` are optional (stripped server-side for Mayor) |
 | `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
 | `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; game_settings includes revive_cooldown_seconds |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
@@ -269,7 +269,7 @@ killer-guesser/
 | `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
 | `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
 | `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
-| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`); `see_killer` → `killer_id`; `see_votes` → today's vote details |
+| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`); `see_killer` → `killer_id`; `see_votes` → today's vote details; **Mayor**: player objects stripped to `{id, user_id, name, avatar_url, is_dead, revived_at}` only (no `role_color`, no `team`) |
 | `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
 | `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
 | `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names and avatar_url |

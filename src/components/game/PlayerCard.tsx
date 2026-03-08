@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -9,10 +10,12 @@ export interface PlayerCardPlayer {
   user_id: number;
   name: string;
   avatar_url: string | null;
-  team: "team1" | "team2" | null;
+  /** Present for most roles; omitted for Mayor callers — the server strips team data intentionally. */
+  team?: "team1" | "team2" | null;
   is_dead: number;
   revived_at: number | null;
-  role_color: string;
+  /** Present for most roles; omitted for Mayor callers — the server strips role_color intentionally. */
+  role_color?: string;
 }
 
 export interface PlayerCardProps {
@@ -147,7 +150,7 @@ export function PlayerCard({
   // ── Border style (default view) ─────────────────────────────
   const borderStyle = isKiller
     ? { border: "2px solid #c0392b" } // red border for killer (Seer view)
-    : { border: `2px solid ${player.role_color}` };
+    : { border: `2px solid ${player.role_color ?? DEFAULT_ROLE_COLOR}` };
 
   // ── Card wrapper classes ────────────────────────────────────
   const cardClasses = [
@@ -220,7 +223,7 @@ export function PlayerCard({
 
       {/* ── Team badge ────────────────────────────────────────── */}
       <TeamBadge
-        team={player.team}
+        team={player.team ?? null}
         team1Name={team1Name}
         team2Name={team2Name}
       />

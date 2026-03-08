@@ -358,6 +358,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   const canRevive = data?.caller.permissions.includes("revive_dead") ?? false;
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
+  const isMayor = data?.caller.role_name === "Mayor";
 
   // ── Ably: PLAYER_DIED ───────────────────────────────────────
 
@@ -426,8 +427,8 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-      {/* ── Vote countdown ───────────────────────────────────── */}
-      {data && (
+      {/* ── Vote countdown (hidden for Mayor) ───────────────── */}
+      {data && !isMayor && (
         <VoteCountdown
           voteWindowStart={data.game.vote_window_start}
           voteWindowEnd={data.game.vote_window_end}
@@ -442,6 +443,17 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         >
           <span aria-hidden="true">👁️</span>
           <span>You know who the killer is. Keep it secret.</span>
+        </div>
+      )}
+
+      {/* ── Mayor info banner ─────────────────────────────────── */}
+      {isMayor && (
+        <div
+          role="status"
+          className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700"
+        >
+          <span aria-hidden="true">⚖️</span>
+          <span>Everyone looks the same to you. Trust your instincts.</span>
         </div>
       )}
 
