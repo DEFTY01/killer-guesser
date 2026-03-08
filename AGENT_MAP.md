@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 24 — Seer Killer Identification View: added src/lib/roleUtils.ts isKiller helper; GameBoardClient uses helper + shows Seer info banner; board API JSDoc hardened with security constraint)
+> **Last Updated:** 2026-03-08 (PROMPT 18 — Game Board: added `viewerRole`/`team1Name`/`team2Name` props + TeamBadge + Mayor flat view to PlayerCard; board API now includes `role_name` in caller response; GameBoardClient passes new props to PlayerCard)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -197,7 +197,7 @@ killer-guesser/
 | `src/components/ui/Button.tsx` | Accessible Button component |
 | `src/components/ui/Card.tsx` | Card layout component |
 | `src/components/ui/Input.tsx` | Accessible Input component |
-| `src/components/game/PlayerCard.tsx` | Role-aware player card: dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; border in role color |
+| `src/components/game/PlayerCard.tsx` | Role-aware player card: Mayor view=flat grid (only avatar+name, no border/badge/labels); dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; default=role color border+team badge; accepts `viewerRole`, `team1Name`, `team2Name` |
 | `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
 | `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; game_settings includes revive_cooldown_seconds |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
@@ -269,7 +269,7 @@ killer-guesser/
 | `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
 | `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
 | `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
-| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller; `see_killer` → `killer_id`; `see_votes` → today's vote details |
+| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`); `see_killer` → `killer_id`; `see_votes` → today's vote details |
 | `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
 | `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
 | `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names and avatar_url |

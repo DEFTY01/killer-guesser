@@ -110,6 +110,7 @@ export async function GET(
     .select({
       game_player_id: game_players.id,
       permissions: roles.permissions,
+      role_name: roles.name,
     })
     .from(game_players)
     .leftJoin(roles, eq(game_players.role_id, roles.id))
@@ -177,6 +178,7 @@ export async function GET(
       game_player_id: number;
       user_id: number;
       permissions: RolePermission[];
+      role_name: string | null;
     };
     players: typeof normalizedPlayers;
     killer_id?: number | null;
@@ -199,6 +201,7 @@ export async function GET(
       game_player_id: callerRow.game_player_id,
       user_id: userId,
       permissions: callerPermissions,
+      role_name: callerRow.role_name ?? null,
     },
     players: normalizedPlayers,
   };

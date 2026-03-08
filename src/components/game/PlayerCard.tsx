@@ -23,10 +23,47 @@ export interface PlayerCardProps {
   isKiller: boolean;
   /** True when the caller has the `revive_dead` (Healer) permission. */
   canRevive: boolean;
+  /**
+   * The role name of the viewing player (e.g. "Mayor", "Seer").
+   * Used to apply role-specific rendering rules such as the Mayor's flat view.
+   */
+  viewerRole?: string | null;
+  /** Human-readable label for team1 (used by the team badge). */
+  team1Name?: string;
+  /** Human-readable label for team2 (used by the team badge). */
+  team2Name?: string;
   /** Callback when the logged-in user taps their own avatar. */
   onSelfTap?: () => void;
   /** Callback when the Healer taps the Revive button. */
   onRevive?: (gamePlayerId: number) => void;
+}
+
+// ── Team badge ────────────────────────────────────────────────────
+
+function TeamBadge({
+  team,
+  team1Name,
+  team2Name,
+}: {
+  team: "team1" | "team2" | null;
+  team1Name: string;
+  team2Name: string;
+}) {
+  if (!team) return null;
+
+  const label = team === "team1" ? team1Name : team2Name;
+  const colorClass =
+    team === "team1"
+      ? "bg-indigo-100 text-indigo-700"
+      : "bg-rose-100 text-rose-700";
+
+  return (
+    <span
+      className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${colorClass}`}
+    >
+      {label}
+    </span>
+  );
 }
 
 // ── PlayerCard ────────────────────────────────────────────────────
@@ -35,28 +72,81 @@ export interface PlayerCardProps {
  * Displays a single player in the game board grid.
  *
  * Visual states:
- * - Dead:      grayscale filter + red ✕ overlay
- * - Undead:    (is_dead && revived_at) → grayscale, no ✕, green "Undead" label
- * - Killer:    thin red border (visible to Seer only) + "Killer" label
- * - Own card:  tapping the avatar opens the self-death modal
- * - Healer:    "Revive" button below dead player's name
- *
- * Every card has a 2px border in the role's `color_hex`.
+ * - Mayor view: flat grid — only avatar + name; no border color, no team badge, no labels.
+ * - Dead:       grayscale filter + red ✕ overlay (non-Mayor callers).
+ * - Undead:     (is_dead && revived_at) → grayscale, no ✕, green "Undead" label.
+ * - Killer:     thin red border (visible to Seer only) + "Killer" label.
+ * - Own card:   tapping the avatar opens the self-death modal.
+ * - Healer:     "Revive" button below dead player's name.
+ * - Default:    2px border in role color + team badge.
  */
 export function PlayerCard({
   player,
   isOwnCard,
   isKiller,
   canRevive,
+  viewerRole,
+  team1Name = "Team 1",
+  team2Name = "Team 2",
   onSelfTap,
   onRevive,
 }: PlayerCardProps) {
+  const isMayorView = viewerRole === "Mayor";
   const isDead = player.is_dead === 1;
   const isUndead = isDead && player.revived_at != null;
 
-  // ── Border style ────────────────────────────────────────────
+  // ── Avatar click handler (shared between Mayor and default) ─
+  const avatarClickProps =
+    isOwnCard && !isDead
+      ? {
+          onClick: onSelfTap,
+          role: "button" as const,
+          "aria-label": "Report death",
+          tabIndex: 0,
+          onKeyDown: (e: React.KeyboardEvent) => {
+            if (e.key === "Enter" || e.key === " ") onSelfTap?.();
+          },
+        }
+      : {};
+
+  // ── Mayor view: flat equal grid ─────────────────────────────
+  if (isMayorView) {
+    return (
+      <div className="relative flex flex-col items-center gap-2 rounded-2xl bg-white border border-gray-200 p-3 text-center shadow-sm">
+        <div
+          className={[
+            "relative w-16 h-16 rounded-full overflow-hidden bg-indigo-100 shrink-0",
+            isOwnCard ? "cursor-pointer ring-2 ring-offset-1 ring-indigo-400" : "",
+          ]
+            .join(" ")
+            .trim()}
+          {...avatarClickProps}
+        >
+          {player.avatar_url ? (
+            <Image
+              src={player.avatar_url}
+              alt={player.name}
+              fill
+              sizes="64px"
+              className="object-cover"
+            />
+          ) : (
+            <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-indigo-400 select-none">
+              {player.name.charAt(0).toUpperCase()}
+            </div>
+          )}
+        </div>
+
+        <p className="text-sm font-semibold text-gray-800 leading-tight truncate w-full px-1">
+          {player.name}
+        </p>
+      </div>
+    );
+  }
+
+  // ── Border style (default view) ─────────────────────────────
   const borderStyle = isKiller
-    ? { border: "2px solid #ef4444" } // red border for killer (Seer view)
+    ? { border: "2px solid #c0392b" } // red border for killer (Seer view)
     : { border: `2px solid ${player.role_color}` };
 
   // ── Card wrapper classes ────────────────────────────────────
@@ -127,6 +217,13 @@ export function PlayerCard({
       <p className="text-sm font-semibold text-gray-800 leading-tight truncate w-full px-1">
         {player.name}
       </p>
+
+      {/* ── Team badge ────────────────────────────────────────── */}
+      <TeamBadge
+        team={player.team}
+        team1Name={team1Name}
+        team2Name={team2Name}
+      />
 
       {/* ── Status labels ─────────────────────────────────────── */}
       {isUndead && (
