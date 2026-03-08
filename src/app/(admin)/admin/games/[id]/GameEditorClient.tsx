@@ -97,6 +97,11 @@ export default function GameEditorClient({
   const [actionError, setActionError] = useState<string | null>(null);
   const [isPending, startTransition] = useTransition();
 
+  // Vote window editing state
+  const [voteStart, setVoteStart] = useState(initialGame.vote_window_start ?? "");
+  const [voteEnd, setVoteEnd] = useState(initialGame.vote_window_end ?? "");
+  const [voteWindowSaving, setVoteWindowSaving] = useState(false);
+
   // Per-row busy states
   const [deadBusy, setDeadBusy] = useState<Set<number>>(new Set());
   const [roleBusy, setRoleBusy] = useState<Set<number>>(new Set());
@@ -291,6 +296,34 @@ export default function GameEditorClient({
     [game.id, allRoles],
   );
 
+  // ── Vote window update ─────────────────────────────────────────
+
+  const updateVoteWindow = useCallback(async () => {
+    setActionError(null);
+    setVoteWindowSaving(true);
+    try {
+      const res = await fetch(`/api/admin/games/${game.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          action: "update_vote_window",
+          vote_window_start: voteStart || null,
+          vote_window_end: voteEnd || null,
+        }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setActionError(json.error ?? "Unknown error");
+        return;
+      }
+      setGame(json.data);
+    } catch {
+      setActionError("Failed to update vote window. Please try again.");
+    } finally {
+      setVoteWindowSaving(false);
+    }
+  }, [game.id, voteStart, voteEnd]);
+
   // ── Render ─────────────────────────────────────────────────────
 
   return (
@@ -317,6 +350,54 @@ export default function GameEditorClient({
         ) : (
           <span className="text-sm text-gray-400 italic">No vote window</span>
         )}
+      </div>
+
+      {/* ── Vote window editor ────────────────────────────────── */}
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">
+          Vote Window (UTC, HH:MM)
+        </h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Start</span>
+            <input
+              type="time"
+              value={voteStart}
+              onChange={(e) => setVoteStart(e.target.value)}
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <label className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">End</span>
+            <input
+              type="time"
+              value={voteEnd}
+              onChange={(e) => setVoteEnd(e.target.value)}
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={voteWindowSaving}
+            onClick={updateVoteWindow}
+            aria-label="Save vote window"
+          >
+            Save window
+          </Button>
+          {(voteStart || voteEnd) && (
+            <button
+              type="button"
+              onClick={() => {
+                setVoteStart("");
+                setVoteEnd("");
+              }}
+              className="text-xs text-gray-400 hover:text-gray-600 underline"
+            >
+              Clear
+            </button>
+          )}
+        </div>
       </div>
 
       {/* ── Error banner ─────────────────────────────────────── */}

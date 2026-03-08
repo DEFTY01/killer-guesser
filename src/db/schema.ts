@@ -83,7 +83,7 @@ export const game_players = sqliteTable("game_players", {
   died_at: integer("died_at"),
   died_location: text("died_location"),
   died_time_of_day: text("died_time_of_day", {
-    enum: ["morning", "afternoon", "evening"],
+    enum: ["morning", "afternoon", "evening", "day"],
   }),
   revived_at: integer("revived_at"),
   has_tipped: integer("has_tipped").notNull().default(0),

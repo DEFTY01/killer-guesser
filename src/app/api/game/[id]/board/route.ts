@@ -118,6 +118,9 @@ export async function GET(
       game_player_id: game_players.id,
       permissions: roles.permissions,
       role_name: roles.name,
+      is_dead: game_players.is_dead,
+      revived_at: game_players.revived_at,
+      has_tipped: game_players.has_tipped,
     })
     .from(game_players)
     .leftJoin(roles, eq(game_players.role_id, roles.id))
@@ -202,6 +205,9 @@ export async function GET(
       user_id: number;
       permissions: RolePermission[];
       role_name: string | null;
+      is_dead: number;
+      revived_at: number | null;
+      has_tipped: number;
     };
     players: typeof responsePlayers;
     killer_id?: number | null;
@@ -225,6 +231,9 @@ export async function GET(
       user_id: userId,
       permissions: callerPermissions,
       role_name: callerRow.role_name ?? null,
+      is_dead: callerRow.is_dead,
+      revived_at: callerRow.revived_at ?? null,
+      has_tipped: callerRow.has_tipped,
     },
     players: responsePlayers,
   };

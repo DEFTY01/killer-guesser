@@ -4,72 +4,144 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAbly } from "@/hooks/useAbly";
+import { useCountdown } from "@/hooks/useCountdown";
 import { ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import type { RolePermission } from "@/lib/role-constants";
 
 // ── Types ─────────────────────────────────────────────────────────
 
 interface VotePlayer {
-  id: number;
-  user_id: number;
+  id: number; // user_id
   name: string;
-  avatar_url: string | null;
-  is_dead: number;
-  revived_at: number | null;
-  role_color: string;
+  avatarUrl: string | null;
+  voteCount: number;
 }
 
 interface VoteEntry {
-  voter_id: number;
-  voter_name: string;
-  voter_avatar_url: string | null;
-  target_id: number;
-  target_name: string;
-  target_avatar_url: string | null;
+  voterId: number;
+  voterName: string;
+  voterAvatarUrl: string | null;
+  targetId: number;
+  targetName: string;
+  targetAvatarUrl: string | null;
 }
 
 interface VoteResult {
-  target_id: number;
-  target_name: string;
-  vote_count: number;
-}
-
-interface GameInfo {
-  id: string;
+  playerId: number;
   name: string;
-  team1_name: string;
-  team2_name: string;
-  vote_window_start: string | null;
-  vote_window_end: string | null;
-  current_day: number;
+  voteCount: number;
 }
 
-interface CallerInfo {
-  user_id: number;
-  game_player_id: number;
-  permissions: RolePermission[];
-}
-
-interface VotePageData {
-  game: GameInfo;
-  caller: CallerInfo;
+interface OpenState {
+  windowOpen: true;
+  day: number;
+  callerUserId: number;
+  vote_window_start: string;
+  vote_window_end: string;
+  callerVotedFor: number | null;
   players: VotePlayer[];
-  has_voted: boolean;
   votes?: VoteEntry[];
 }
 
+interface ClosedState {
+  windowOpen: false;
+  day: number;
+  callerUserId: number;
+  vote_window_start: string | null;
+  vote_window_end: string | null;
+  results: VoteResult[];
+  votes?: VoteEntry[];
+}
+
+type VoteData = OpenState | ClosedState;
+
 // ── Helpers ────────────────────────────────────────────────────────
 
-function isVoteWindowActive(
-  start: string | null,
-  end: string | null,
-): boolean {
-  if (!start || !end) return false;
-  const now = Date.now();
-  const startMs = Date.parse(start);
-  const endMs = Date.parse(end);
-  if (isNaN(startMs) || isNaN(endMs)) return false;
-  return now >= startMs && now < endMs;
+/** Build a Date for today at the given UTC HH:MM. */
+function todayAt(hhmm: string): Date {
+  const [h, m] = hhmm.split(":").map(Number);
+  const d = new Date();
+  d.setUTCHours(h, m, 0, 0);
+  return d;
+}
+
+// ── PlayerTile ────────────────────────────────────────────────────
+
+function PlayerTile({
+  player,
+  isSelected,
+  isSelf,
+  totalVotes,
+  onClick,
+}: {
+  player: VotePlayer;
+  isSelected: boolean;
+  isSelf: boolean;
+  totalVotes: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={isSelf}
+      aria-pressed={isSelected}
+      aria-label={`Vote for ${player.name}`}
+      className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 p-3 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-default ${
+        isSelected
+          ? "border-indigo-500 bg-indigo-50 shadow-md"
+          : "border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm"
+      }`}
+    >
+      <div className="relative w-14 h-14 rounded-full overflow-hidden bg-gray-100 shrink-0">
+        {player.avatarUrl ? (
+          <Image
+            src={player.avatarUrl}
+            alt={player.name}
+            fill
+            sizes="56px"
+            className="object-cover"
+          />
+        ) : (
+          <span className="flex h-full w-full items-center justify-center text-lg font-bold text-gray-500">
+            {player.name.charAt(0).toUpperCase()}
+          </span>
+        )}
+      </div>
+      <span className="text-xs font-semibold text-gray-900 truncate max-w-full">
+        {player.name}
+        {isSelf && <span className="ml-1 text-gray-400">(you)</span>}
+      </span>
+      {player.voteCount > 0 && (
+        <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">
+          {player.voteCount} {player.voteCount === 1 ? "vote" : "votes"}
+        </span>
+      )}
+      {totalVotes > 0 && player.voteCount === 0 && (
+        <span className="text-xs text-gray-300">0 votes</span>
+      )}
+    </button>
+  );
+}
+
+// ── Countdown display ─────────────────────────────────────────────
+
+function VoteWindowCountdown({ endHhmm }: { endHhmm: string }) {
+  const target = todayAt(endHhmm);
+  const { hours, minutes, seconds, isExpired } = useCountdown(target);
+
+  if (isExpired) return null;
+
+  return (
+    <div className="flex items-center justify-center gap-1 text-sm text-amber-700 font-semibold">
+      <span aria-hidden="true">⏱</span>
+      <span>
+        Closes in{" "}
+        {hours > 0 && `${hours}h `}
+        {minutes > 0 && `${minutes}m `}
+        {String(seconds).padStart(2, "0")}s
+      </span>
+    </div>
+  );
 }
 
 // ── VotePageClient ────────────────────────────────────────────────
@@ -80,132 +152,141 @@ interface VotePageClientProps {
 }
 
 export default function VotePageClient({ gameId, day }: VotePageClientProps) {
-  const [data, setData] = useState<VotePageData | null>(null);
+  const [data, setData] = useState<VoteData | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hasVoted, setHasVoted] = useState(false);
+
+  // Selected suspect (before confirming)
+  const [selectedId, setSelectedId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
-  const [voteActive, setVoteActive] = useState(false);
 
-  // Real-time spy list of votes (see_votes permission)
+  // Live votes for spy view
   const [liveVotes, setLiveVotes] = useState<VoteEntry[]>([]);
-  const [spyPanelOpen, setSpyPanelOpen] = useState(true);
 
-  // Results view state (shown after VOTE_CLOSED)
+  // Results after close
   const [results, setResults] = useState<VoteResult[] | null>(null);
+  const [eliminated, setEliminated] =
+    useState<{ id: number; name: string } | null | undefined>(undefined);
 
-  // Track whether we've already called the close endpoint
+  // Crossfade transition state
+  const [closing, setClosing] = useState(false);
   const closedRef = useRef(false);
-  const [closeError, setCloseError] = useState<string | null>(null);
 
-  // ── Load vote page data ─────────────────────────────────────
+  // ── Load data ──────────────────────────────────────────────
 
   const fetchData = useCallback(() => {
-    fetch(`/api/game/${gameId}/vote/${day}`)
-      .then((res) => {
-        if (!res.ok) throw new Error("Failed to load vote data");
-        return res.json();
-      })
+    fetch(`/api/game/${gameId}/vote`)
+      .then((r) => r.json())
       .then((json) => {
-        if (json.success) {
-          const d = json.data as VotePageData;
-          setData(d);
-          setHasVoted(d.has_voted);
-          if (d.votes) {
-            setLiveVotes(d.votes);
-          }
-        } else {
+        if (!json.success) {
           setError((json.error as string) ?? "Unknown error");
+          return;
+        }
+        const d = json.data as VoteData;
+        setData(d);
+        if (d.votes) setLiveVotes(d.votes);
+        if (!d.windowOpen) {
+          setResults(d.results);
         }
       })
       .catch((err: Error) => setError(err.message));
-  }, [gameId, day]);
+  }, [gameId]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
-  // ── Track vote window ───────────────────────────────────────
-
+  // Pre-select the player the caller already voted for
   useEffect(() => {
-    if (!data) return;
-    const { vote_window_start, vote_window_end } = data.game;
-
-    function checkWindow() {
-      const active = isVoteWindowActive(vote_window_start, vote_window_end);
-      setVoteActive(active);
-
-      // When window expires, trigger close once
-      if (!active && !closedRef.current && vote_window_end) {
-        const endMs = Date.parse(vote_window_end);
-        if (!isNaN(endMs) && Date.now() >= endMs) {
-          closedRef.current = true;
-          fetch(`/api/game/${gameId}/vote/${day}/close`, { method: "POST" })
-            .then((r) => r.json())
-            .then((json) => {
-              if (json.success) {
-                setResults(json.data.results as VoteResult[]);
-              } else {
-                setCloseError(
-                  (json.error as string) ??
-                    "Failed to close voting. Please try again or contact an administrator.",
-                );
-              }
-            })
-            .catch(() => {
-              setCloseError(
-                "Failed to close voting. Please try again or contact an administrator.",
-              );
-            });
-        }
-      }
+    if (data?.windowOpen && data.callerVotedFor) {
+      setSelectedId(data.callerVotedFor);
     }
+  }, [data]);
 
-    checkWindow();
-    const id = setInterval(checkWindow, 1000);
-    return () => clearInterval(id);
-  }, [data, gameId, day]);
+  // ── Submit / change vote ────────────────────────────────────
 
-  // ── Submit vote ─────────────────────────────────────────────
-
-  const handleVote = useCallback(
-    async (targetId: number) => {
-      setSubmitting(true);
-      setVoteError(null);
-      try {
-        const res = await fetch(`/api/game/${gameId}/vote/${day}`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ target_id: targetId }),
-        });
-        const json = await res.json();
-        if (!json.success) {
-          setVoteError((json.error as string) ?? "Something went wrong");
-          return;
-        }
-        setHasVoted(true);
-      } catch {
-        setVoteError("Network error. Please try again.");
-      } finally {
-        setSubmitting(false);
+  const handleConfirmVote = useCallback(async () => {
+    if (selectedId === null) return;
+    setSubmitting(true);
+    setVoteError(null);
+    try {
+      const res = await fetch(`/api/game/${gameId}/vote`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetId: selectedId }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setVoteError((json.error as string) ?? "Something went wrong");
+        return;
       }
-    },
-    [gameId, day],
-  );
+      // Optimistically update callerVotedFor
+      setData((prev) => {
+        if (!prev?.windowOpen) return prev;
+        return { ...prev, callerVotedFor: selectedId };
+      });
+    } catch {
+      setVoteError("Network error. Please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  }, [gameId, selectedId]);
 
-  // ── Ably: VOTE_CAST (spy view) ──────────────────────────────
+  // ── Ably: VOTE_CAST ─────────────────────────────────────────
 
-  const canSeeVotes =
-    data?.caller.permissions.includes("see_votes") ?? false;
+  const canSeeVotes = !!(data?.votes !== undefined);
 
   useAbly(
     ABLY_CHANNELS.vote(gameId, day),
     ABLY_EVENTS.vote_cast,
     useCallback(
       (msg) => {
-        if (!canSeeVotes) return;
         const payload = msg.data as VoteEntry;
-        setLiveVotes((prev) => [...prev, payload]);
+        // Update spy list
+        if (canSeeVotes) {
+          setLiveVotes((prev) => {
+            // Replace if same voter, otherwise append
+            const idx = prev.findIndex((v) => v.voterId === payload.voterId);
+            if (idx >= 0) {
+              const next = [...prev];
+              next[idx] = payload;
+              return next;
+            }
+            return [...prev, payload];
+          });
+        }
+        // Update aggregate counts on player tiles
+        setData((prev) => {
+          if (!prev?.windowOpen) return prev;
+          // Find old target for this voter and decrement, then increment new
+          const oldVote = prev.votes?.find((v) => v.voterId === payload.voterId);
+          const oldTargetId = oldVote?.targetId ?? null;
+          return {
+            ...prev,
+            players: prev.players.map((p) => {
+              let delta = 0;
+              if (p.id === payload.targetId) delta += 1;
+              if (oldTargetId !== null && p.id === oldTargetId) delta -= 1;
+              return delta !== 0
+                ? { ...p, voteCount: Math.max(0, p.voteCount + delta) }
+                : p;
+            }),
+            votes: canSeeVotes
+              ? (() => {
+                  const existing = prev.votes ?? [];
+                  const idx = existing.findIndex(
+                    (v) => v.voterId === payload.voterId,
+                  );
+                  if (idx >= 0) {
+                    const next = [...existing];
+                    next[idx] = payload;
+                    return next;
+                  }
+                  return [...existing, payload];
+                })()
+              : prev.votes,
+          };
+        });
       },
       [canSeeVotes],
     ),
@@ -217,8 +298,18 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     ABLY_CHANNELS.game(gameId),
     ABLY_EVENTS.vote_closed,
     useCallback((msg) => {
-      const payload = msg.data as { results: VoteResult[] };
-      setResults(payload.results);
+      if (closedRef.current) return;
+      closedRef.current = true;
+      const payload = msg.data as {
+        eliminated: { id: number; name: string } | null;
+        voteResults: VoteResult[];
+      };
+      setClosing(true);
+      setTimeout(() => {
+        setEliminated(payload.eliminated ?? null);
+        setResults(payload.voteResults);
+        setClosing(false);
+      }, 300);
     }, []),
   );
 
@@ -241,51 +332,95 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 animate-pulse">
         <div className="h-7 w-48 rounded-full bg-gray-200" />
-        <div className="grid grid-cols-2 gap-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-16 rounded-xl bg-gray-200" />
+        <div className="grid grid-cols-3 gap-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-28 rounded-2xl bg-gray-200" />
           ))}
         </div>
       </div>
     );
   }
 
-  // ── Results view ────────────────────────────────────────────
+  // ── Closed results ──────────────────────────────────────────
 
   if (results !== null) {
-    const sorted = [...results].sort((a, b) => b.vote_count - a.vote_count);
+    const sorted = [...results].sort((a, b) => b.voteCount - a.voteCount);
+    const maxVotes = sorted[0]?.voteCount ?? 0;
+    const hasMajority = eliminated !== undefined && eliminated !== null;
+
     return (
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+      <div
+        className="max-w-2xl mx-auto px-4 py-6 space-y-6"
+        style={{
+          transition: "opacity 0.3s ease",
+          opacity: closing ? 0 : 1,
+        }}
+      >
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-gray-900">Vote Results</h1>
-          <p className="text-sm text-gray-500">
-            {data.game.name} — Day {day}
-          </p>
+          <p className="text-sm text-gray-500">Day {day}</p>
         </div>
+
+        {eliminated ? (
+          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-center text-red-700 font-semibold">
+            ☠ {eliminated.name} was eliminated by vote.
+          </div>
+        ) : (
+          !hasMajority && (
+            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-center text-amber-700 font-semibold">
+              No majority — no one was eliminated.
+            </div>
+          )
+        )}
 
         {sorted.length === 0 ? (
           <p className="text-center text-gray-400 py-8">No votes were cast.</p>
         ) : (
           <ul className="space-y-3">
-            {sorted.map((r, i) => (
-              <li
-                key={r.target_id}
-                className="flex items-center justify-between rounded-xl border border-gray-100 bg-white px-4 py-3 shadow-sm"
-              >
-                <span className="flex items-center gap-3">
-                  <span className="text-lg font-bold text-gray-400">
-                    #{i + 1}
-                  </span>
-                  <span className="font-semibold text-gray-900">
-                    {r.target_name}
-                  </span>
-                </span>
-                <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-sm font-semibold text-indigo-700">
-                  {r.vote_count} vote{r.vote_count !== 1 ? "s" : ""}
-                </span>
-              </li>
-            ))}
+            {sorted.map((r) => {
+              const isEliminated = eliminated?.id === r.playerId;
+              const pct = maxVotes > 0 ? (r.voteCount / maxVotes) * 100 : 0;
+              return (
+                <li
+                  key={r.playerId}
+                  className={`rounded-xl border px-4 py-3 shadow-sm overflow-hidden ${
+                    isEliminated
+                      ? "border-red-300 bg-red-50"
+                      : "border-gray-100 bg-white"
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span
+                      className={`font-semibold ${isEliminated ? "text-red-700" : "text-gray-900"}`}
+                    >
+                      {isEliminated && (
+                        <span aria-hidden="true" className="mr-1">
+                          ☠
+                        </span>
+                      )}
+                      {r.name}
+                    </span>
+                    <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-sm font-semibold text-indigo-700">
+                      {r.voteCount} vote{r.voteCount !== 1 ? "s" : ""}
+                    </span>
+                  </div>
+                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${
+                        isEliminated ? "bg-red-400" : "bg-indigo-400"
+                      }`}
+                      style={{ width: `${pct}%` }}
+                    />
+                  </div>
+                </li>
+              );
+            })}
           </ul>
+        )}
+
+        {/* Spy: voter→target breakdown on closed view */}
+        {liveVotes.length > 0 && (
+          <SpyPanel votes={liveVotes} />
         )}
 
         <div className="flex justify-center">
@@ -300,34 +435,21 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     );
   }
 
-  // ── Vote window not active ──────────────────────────────────
+  // ── Window not open ─────────────────────────────────────────
 
-  if (!voteActive) {
+  if (!data.windowOpen) {
     return (
       <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-gray-900">Voting</h1>
-          <p className="text-sm text-gray-500">
-            {data.game.name} — Day {day}
-          </p>
+          <p className="text-sm text-gray-500">Day {day}</p>
         </div>
-
-        {closeError && (
-          <div
-            role="alert"
-            className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600 text-center"
-          >
-            {closeError}
-          </div>
-        )}
-
         <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-6 text-center text-amber-800">
           <p className="font-semibold">Voting is not currently open.</p>
           <p className="text-sm mt-1 text-amber-600">
             Check back when the vote window is active.
           </p>
         </div>
-
         <div className="flex justify-center">
           <Link
             href={`/game/${gameId}`}
@@ -342,17 +464,24 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   // ── Active vote window ──────────────────────────────────────
 
-  const alivePlayers = data.players.filter(
-    (p) => p.is_dead === 0 || p.revived_at !== null,
+  const openData = data as OpenState;
+  const totalVotes = openData.players.reduce(
+    (sum, p) => sum + p.voteCount,
+    0,
   );
+  const hasConfirmedVote = openData.callerVotedFor !== null;
+  const selectedChanged =
+    selectedId !== null && selectedId !== openData.callerVotedFor;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <div
+      className="max-w-2xl mx-auto px-4 py-6 space-y-6"
+      style={{ transition: "opacity 0.3s ease", opacity: closing ? 0 : 1 }}
+    >
       <div className="text-center space-y-1">
         <h1 className="text-2xl font-bold text-gray-900">Vote</h1>
-        <p className="text-sm text-gray-500">
-          {data.game.name} — Day {day}
-        </p>
+        <p className="text-sm text-gray-500">Day {day}</p>
+        <VoteWindowCountdown endHhmm={openData.vote_window_end} />
       </div>
 
       {voteError && (
@@ -364,125 +493,51 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         </div>
       )}
 
-      {hasVoted ? (
-        <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-6 text-center text-green-800">
-          <p className="font-semibold text-lg">✓ Your vote has been cast.</p>
-          <p className="text-sm mt-1 text-green-600">
-            Waiting for the vote window to close…
-          </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          <p className="text-sm font-medium text-gray-700 text-center">
-            Choose who to vote out:
-          </p>
-          <div className="grid grid-cols-2 gap-3">
-            {alivePlayers.map((player) => {
-              const isSelf = player.user_id === data.caller.user_id;
-              return (
-                <button
-                  key={player.id}
-                  onClick={() => !isSelf && handleVote(player.user_id)}
-                  disabled={submitting || isSelf}
-                  className="flex items-center gap-3 rounded-xl border border-gray-200 bg-white px-4 py-3 text-left shadow-sm transition-all hover:border-indigo-400 hover:shadow-md disabled:opacity-50 disabled:cursor-not-allowed focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1"
-                  aria-label={`Vote for ${player.name}`}
-                >
-                  <div className="relative w-10 h-10 rounded-full overflow-hidden bg-gray-100 shrink-0">
-                    {player.avatar_url ? (
-                      <Image
-                        src={player.avatar_url}
-                        alt={player.name}
-                        fill
-                        sizes="40px"
-                        className="object-cover"
-                      />
-                    ) : (
-                      <span className="flex h-full w-full items-center justify-center text-sm font-bold text-gray-500">
-                        {player.name.charAt(0).toUpperCase()}
-                      </span>
-                    )}
-                  </div>
-                  <span className="text-sm font-semibold text-gray-900 truncate">
-                    {player.name}
-                    {isSelf && (
-                      <span className="ml-1 text-xs text-gray-400">(you)</span>
-                    )}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
+      {hasConfirmedVote && !selectedChanged && (
+        <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-center text-green-700 text-sm font-semibold">
+          ✓ Your vote is cast — tap another player to change it.
         </div>
       )}
 
-      {/* ── Spy view: collapsible live vote list ────────────── */}
-      {canSeeVotes && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
-          <button
-            type="button"
-            onClick={() => setSpyPanelOpen((o) => !o)}
-            className="w-full flex items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
-            aria-expanded={spyPanelOpen}
-          >
-            <span className="text-sm font-semibold text-gray-700">
-              Secret Info 🕵️
-            </span>
-            <span
-              className={`text-gray-400 text-xs transition-transform duration-200 inline-block${spyPanelOpen ? " rotate-180" : ""}`}
-              aria-hidden="true"
-            >
-              ▼
-            </span>
-          </button>
-          {spyPanelOpen && (
-            <div className="px-4 pb-4 space-y-2">
-              {liveVotes.length === 0 ? (
-                <p className="text-sm text-gray-400">No votes yet.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {liveVotes.map((v) => (
-                    <li key={`${v.voter_id}-${v.target_id}`} className="flex items-center gap-2 text-sm text-gray-700">
-                      <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
-                        {v.voter_avatar_url ? (
-                          <Image
-                            src={v.voter_avatar_url}
-                            alt={v.voter_name}
-                            fill
-                            sizes="32px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
-                            {v.voter_name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-semibold truncate">{v.voter_name}</span>
-                      <span className="text-gray-400" aria-hidden="true">→</span>
-                      <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
-                        {v.target_avatar_url ? (
-                          <Image
-                            src={v.target_avatar_url}
-                            alt={v.target_name}
-                            fill
-                            sizes="32px"
-                            className="object-cover"
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
-                            {v.target_name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <span className="font-semibold truncate">{v.target_name}</span>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-          )}
-        </div>
-      )}
+      {/* Player grid */}
+      <div className="grid grid-cols-3 gap-3">
+        {openData.players.map((player) => {
+          const isSelf = player.id === openData.callerUserId;
+          return (
+            <PlayerTile
+              key={player.id}
+              player={player}
+              isSelected={selectedId === player.id}
+              isSelf={isSelf}
+              totalVotes={totalVotes}
+              onClick={() => {
+                if (!isSelf) setSelectedId(player.id);
+              }}
+            />
+          );
+        })}
+      </div>
+
+      {/* Confirm button */}
+      <div className="flex justify-center">
+        <button
+          type="button"
+          onClick={handleConfirmVote}
+          disabled={submitting || selectedId === null || (selectedId === openData.callerVotedFor)}
+          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-8 py-3 text-base font-semibold text-white shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
+          {submitting
+            ? "Voting…"
+            : selectedId === null
+              ? "Select a player"
+              : selectedId === openData.callerVotedFor
+                ? "✓ Voted"
+                : "Confirm Vote"}
+        </button>
+      </div>
+
+      {/* Spy view: voter→target breakdown */}
+      {liveVotes.length > 0 && <SpyPanel votes={liveVotes} />}
 
       <div className="flex justify-center">
         <Link
@@ -492,6 +547,76 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
           ← Back to board
         </Link>
       </div>
+    </div>
+  );
+}
+
+// ── SpyPanel ──────────────────────────────────────────────────────
+
+function SpyPanel({ votes }: { votes: VoteEntry[] }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        className="w-full flex items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+        aria-expanded={open}
+      >
+        <span className="text-sm font-semibold text-gray-700">
+          Secret Info 🕵️
+        </span>
+        <span
+          className={`text-gray-400 text-xs transition-transform duration-200 inline-block${open ? " rotate-180" : ""}`}
+          aria-hidden="true"
+        >
+          ▼
+        </span>
+      </button>
+      {open && (
+        <div className="px-4 pb-4 space-y-2">
+          {votes.length === 0 ? (
+            <p className="text-sm text-gray-400">No votes yet.</p>
+          ) : (
+            <ul className="space-y-2">
+              {votes.map((v) => (
+                <li
+                  key={v.voterId}
+                  className="flex items-center gap-2 text-sm text-gray-700"
+                >
+                  <MiniAvatar url={v.voterAvatarUrl} name={v.voterName} />
+                  <span className="font-semibold truncate">{v.voterName}</span>
+                  <span className="text-gray-400" aria-hidden="true">
+                    →
+                  </span>
+                  <MiniAvatar url={v.targetAvatarUrl} name={v.targetName} />
+                  <span className="font-semibold truncate">{v.targetName}</span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MiniAvatar({
+  url,
+  name,
+}: {
+  url: string | null;
+  name: string;
+}) {
+  return (
+    <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
+      {url ? (
+        <Image src={url} alt={name} fill sizes="32px" className="object-cover" />
+      ) : (
+        <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
     </div>
   );
 }

@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 28 — Background image upload & dark/light mode: `app_settings` singleton table, `ThemeProvider` (next-themes), `/api/admin/settings` GET/PATCH, `/api/game/theme` GET, `/api/upload/background` POST, `ThemeSettingsClient` upload zones on admin dashboard, root layout reads bg URLs and sets `--bg-light-image`/`--bg-dark-image` CSS vars)
+> **Last Updated:** 2026-03-08 (PROMPT 27 — Evening vote & daytime killer tip: new `GET/POST /api/game/[id]/vote` (HH:MM window, lazy close, majority elimination), `POST /api/game/[id]/tip` (killer guess with transaction), `update_vote_window` admin PATCH action, inline vote window time inputs in GameEditorClient, updated VotePageClient (re-tappable cards, aggregate tallies, animated bars, crossfade), FAB + 3-screen killer guess modal in GameBoardClient)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -100,9 +100,11 @@ killer-guesser/
 │   │   │   │   ├── lobby/     # GET — active/scheduled/past games for current player
 │   │   │   │   ├── participants/ # GET — pre-game participant list (no role/dead)
 │   │   │   │   └── [id]/      # Per-game player API routes
-│   │   │   │       ├── board/route.ts              # GET — role-filtered board data; Mayor callers receive stripped player objects (no role_color, no team)
+│   │   │   │       ├── board/route.ts              # GET — role-filtered board data; Mayor callers receive stripped player objects (no role_color, no team); caller includes is_dead, revived_at, has_tipped
+│   │   │   │       ├── vote/route.ts               # GET — window-open check (HH:MM), lazy close + VOTE_CLOSED, spy detail; POST — { targetId } upsert, publishes VOTE_CAST
 │   │   │   │       ├── vote/[day]/route.ts         # GET — vote page data; POST — submit vote (publishes VOTE_CAST)
 │   │   │   │       ├── vote/[day]/close/route.ts   # POST — compute results, publish VOTE_CLOSED
+│   │   │   │       ├── tip/route.ts                # POST — { suspectId } killer guess; correct → eliminate killer + GAME_ENDED; wrong → caller dies + PLAYER_DIED
 │   │   │   │       └── players/[playerId]/
 │   │   │   │           ├── die/route.ts            # PATCH — self-report death (publishes PLAYER_DIED)
 │   │   │   │           └── revive/route.ts         # POST — Healer revives player: checks is_dead=1, sets is_dead=0+revived_at, enforces revive_cooldown_seconds, publishes PLAYER_REVIVED
@@ -268,7 +270,7 @@ killer-guesser/
 | `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | List all games with per-game player counts ordered by created_at desc — admin only |
 | `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Create game in a single DB transaction (games + game_settings + game_players); accepts optional `revive_cooldown_seconds` — admin only |
 | `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Get full game data (game + settings + players with role details) — admin only |
-| `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
+| `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "update_vote_window" (set vote_window_start/end as HH:MM), "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Update game player: is_dead (0/1) and/or role_id — admin only |
 | `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) — admin only |
 | `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Get global bg_light_url + bg_dark_url from app_settings singleton — admin only |
@@ -279,12 +281,15 @@ killer-guesser/
 | `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
 | `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
 | `GET` | `/api/game/theme` | `src/app/api/game/theme/route.ts` | Returns bg_light_url + bg_dark_url from app_settings for the client layout — public |
-| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`); `see_killer` → `killer_id`; `see_votes` → today's vote details; **Mayor**: player objects stripped to `{id, user_id, name, avatar_url, is_dead, revived_at}` only (no `role_color`, no `team`) |
+| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`, `is_dead`, `revived_at`, `has_tipped`); `see_killer` → `killer_id`; `see_votes` → today's vote details; **Mayor**: player objects stripped to `{id, user_id, name, avatar_url, is_dead, revived_at}` only (no `role_color`, no `team`) |
 | `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
 | `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
+| `GET` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Evening vote state — compares current UTC HH:MM to `vote_window_start`/`vote_window_end`; open: returns alive players + aggregate tallies; closed: lazy-closes (majority elimination → VOTE_CLOSED), returns results; `see_votes` → full voter→target detail |
+| `POST` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Cast/change vote — body: `{ targetId }`; window must be open (403 "Voting is closed"); alive-only; **upsert** (one row per player per day, re-voteable); publishes `VOTE_CAST` |
 | `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names and avatar_url |
 | `POST` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Submit vote — one per player per day; body: `{ target_id }`; publishes `VOTE_CAST` to vote channel with voter/target names and avatar_url |
 | `POST` | `/api/game/[id]/vote/[day]/close` | `src/app/api/game/[id]/vote/[day]/close/route.ts` | Close vote window — computes grouped results, publishes `VOTE_CLOSED` to game channel; idempotent |
+| `POST` | `/api/game/[id]/tip` | `src/app/api/game/[id]/tip/route.ts` | Daytime killer guess — body: `{ suspectId }`; guards: dead caller, already tipped, is killer, suspect not alive; correct → killer dies + `handleKillerDefeated()` + `{ correct: true }`; wrong → caller dies + `PLAYER_DIED` + `{ correct: false }`; all writes in DB transaction |
 
 > This table will be expanded as new API routes are added.
 
