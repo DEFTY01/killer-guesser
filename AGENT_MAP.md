@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08
+> **Last Updated:** 2026-03-08 (PROMPT 19 — voting page)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -52,11 +52,16 @@ killer-guesser/
 │   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
-│   │   │   ├── game/          # Main game page
+│   │   │   ├── game/
+│   │   │   │   ├── page.tsx             # Main game page
+│   │   │   │   └── [id]/vote/[day]/     # Voting phase page
 │   │   │   └── layout.tsx     # Game layout wrapper
 │   │   ├── api/
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
+│   │   │   ├── game/
+│   │   │   │   └── [id]/
+│   │   │   │       └── vote/  # Voting API (GET state, POST submit/update)
 │   │   │   └── player/        # Player registration / session API
 │   │   ├── login/             # Player login page (single-page avatar picker)
 │   │   ├── globals.css        # Global styles (Tailwind v4 imports)
@@ -76,6 +81,7 @@ killer-guesser/
 │   ├── lib/
 │   │   ├── auth.ts            # NextAuth.js configuration
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
+│   │   ├── gameEnd.ts         # handleKillerDefeated — closes game, sets winner
 │   │   └── validations.ts     # Zod schemas for shared validation
 │   ├── middleware.ts          # Route-protection middleware (admin/game/login)
 │   └── types/
@@ -108,6 +114,7 @@ killer-guesser/
 | `src/app/(admin)/admin/dashboard/page.tsx` | Dashboard: stats cards, quick actions, recent games |
 | `src/app/(admin)/admin/login/page.tsx` | Admin login UI |
 | `src/app/(game)/game/page.tsx` | Main game room page |
+| `src/app/(game)/game/[id]/vote/[day]/page.tsx` | Voting phase page — avatar grid (open), results + outcome popup (closed), Spy spy view |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
 | `src/app/api/player/route.ts` | Handles player registration / session (POST) |
@@ -123,6 +130,7 @@ killer-guesser/
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
 | `src/lib/auth.ts` | NextAuth.js v5 config — avatar-click Credentials provider; JWT strategy; role + activeGameId in token & session |
+| `src/lib/gameEnd.ts` | `handleKillerDefeated(gameId)` — sets game status to "closed", winner_team to "team2" |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
 | `src/middleware.ts` | Route-protection middleware: /admin/* → admin role; /game/* → auth; /login → redirect if authed |
@@ -147,8 +155,8 @@ killer-guesser/
 | `GET/POST` | `/api/auth/[...nextauth]` | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js catch-all (sign-in, session, CSRF) |
 | `POST` | `/api/player` | `src/app/api/player/route.ts` | Register player nickname; create/return session |
 | `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Upload & resize player avatar (→ Cloudflare R2) |
-
-> This table will be expanded as new API routes are added.
+| `GET` | `/api/game/[id]/vote?day=N` | `src/app/api/game/[id]/vote/route.ts` | Returns vote state: open (alive players) or closed (anonymous tallies + optional spy detail) |
+| `POST` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Submit or update caller's vote `{ targetId, day }`; 403 if window closed; triggers majority/end logic |
 
 ---
 
