@@ -1,6 +1,6 @@
-# Killer Guesser
+# Mountain Killer Game
 
-A real-time social deduction guessing game built with Next.js 16, React 19, TypeScript, and Turso.
+A real-time multiplayer guessing game. Work in progress — details coming soon.
 
 ## Tech stack
 
