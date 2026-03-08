@@ -24,7 +24,7 @@ declare module "next-auth" {
  *
  * Contains only the JWT/session callbacks and page routes — no Node.js
  * built-ins, no database access.  Used by both:
- *  - middleware.ts  (Edge Runtime)
+ *  - proxy.ts       (Edge Runtime)
  *  - auth.ts        (Node.js runtime — spreads this and adds providers)
  */
 export const authConfig = {
