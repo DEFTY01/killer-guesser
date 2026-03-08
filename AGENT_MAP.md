@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 17 — participants page + /api/game/participants)
+> **Last Updated:** 2026-03-08 (PROMPT 18 — game board with role-based views, dead overlay, self-death reporting)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -68,6 +68,10 @@ killer-guesser/
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
 │   │   │   ├── game/          # Main game page
+│   │   │   │   ├── page.tsx   # Join-game page (renders PlayerLogin)
+│   │   │   │   └── [id]/      # Per-game board
+│   │   │   │       ├── page.tsx          # Server wrapper → GameBoardClient
+│   │   │   │       └── GameBoardClient.tsx # Interactive game board (vote countdown, player grid, self-death modal)
 │   │   │   ├── lobby/         # Player lobby (active/upcoming/past games)
 │   │   │   ├── participants/  # Pre-game participants page (avatar grid + team badges)
 │   │   │   └── layout.tsx     # Game layout wrapper (player auth, sign-out)
@@ -90,7 +94,13 @@ killer-guesser/
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
 │   │   │   ├── game/          # Player game API routes
-│   │   │   │   └── lobby/     # GET — active/scheduled/past games for current player
+│   │   │   │   ├── lobby/     # GET — active/scheduled/past games for current player
+│   │   │   │   ├── participants/ # GET — pre-game participant list (no role/dead)
+│   │   │   │   └── [id]/      # Per-game player API routes
+│   │   │   │       ├── board/route.ts              # GET — role-filtered board data
+│   │   │   │       └── players/[playerId]/
+│   │   │   │           ├── die/route.ts            # PATCH — self-report death
+│   │   │   │           └── revive/route.ts         # PATCH — Healer revives player
 │   │   │   ├── player/        # Player registration / session API
 │   │   │   └── upload/
 │   │   │       └── avatar/    # Vercel Blob avatar upload endpoint
@@ -102,6 +112,9 @@ killer-guesser/
 │   ├── components/
 │   │   ├── auth/
 │   │   │   └── LoginScreen.tsx    # Single-page avatar-picker login (client component)
+│   │   ├── game/                  # In-game components
+│   │   │   ├── PlayerCard.tsx     # Role-aware player card (dead overlay, killer border, revive button)
+│   │   │   └── VoteCountdown.tsx  # Live countdown to vote window end (hidden outside window)
 │   │   ├── ui/                    # Shared design-system components (Button, Card, Input)
 │   │   ├── AvatarUpload.tsx   # Avatar selection & upload UI
 │   │   └── PlayerLogin.tsx    # Player nickname + avatar onboarding
@@ -157,7 +170,9 @@ killer-guesser/
 | `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + randomize, step 3 roles/settings/murder item, step 4 summary + submit |
 | `src/app/(admin)/admin/games/[id]/page.tsx` | Game editor: server component — fetches game, settings, players (with role data), and all roles; renders GameEditorClient |
 | `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
-| `src/app/(game)/game/page.tsx` | Main game room page |
+| `src/app/(game)/game/page.tsx` | Main game room page (renders PlayerLogin for join flow) |
+| `src/app/(game)/game/[id]/page.tsx` | Game board: server wrapper — resolves `id` param and renders GameBoardClient |
+| `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown, murder item card, player grid, vote button, self-death modal |
 | `src/app/(game)/lobby/page.tsx` | Player lobby — client component: active games, upcoming games (with countdown), past games (win/loss); skeleton loading; empty state |
 | `src/app/(game)/participants/page.tsx` | Participants page — client component: avatar grid (3-col), team badges, player count, back button |
 | `src/hooks/useCountdown.ts` | `useCountdown(target: Date)` — returns `{ hours, minutes, seconds, isExpired }`, ticks every second, cleans up interval on unmount |
@@ -171,6 +186,8 @@ killer-guesser/
 | `src/components/ui/Button.tsx` | Accessible Button component |
 | `src/components/ui/Card.tsx` | Card layout component |
 | `src/components/ui/Input.tsx` | Accessible Input component |
+| `src/components/game/PlayerCard.tsx` | Role-aware player card: dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; border in role color |
+| `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
 | `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
@@ -236,6 +253,9 @@ killer-guesser/
 | `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
 | `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
 | `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
+| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller; `see_killer` → `killer_id`; `see_votes` → today's vote details |
+| `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }` |
+| `PATCH` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a player — requires `revive_dead` permission; sets `revived_at` |
 
 > This table will be expanded as new API routes are added.
 
