@@ -22,9 +22,8 @@
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
-    "@aws-sdk/client-s3": "^3.1004.0",
-    "@aws-sdk/s3-request-presigner": "^3.1004.0",
     "@libsql/client": "^0.17.0",
+    "@vercel/blob": "^2.3.1",
     "ably": "^2.19.0",
     "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
