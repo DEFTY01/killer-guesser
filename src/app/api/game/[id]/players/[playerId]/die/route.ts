@@ -4,6 +4,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { game_players } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Zod schema ────────────────────────────────────────────────────
 
@@ -92,6 +93,14 @@ export async function PATCH(
       { success: false, error: "Player record not found or access denied" },
       { status: 404 },
     );
+  }
+
+  // Publish real-time event after successful mutation.
+  if (process.env.ABLY_API_KEY) {
+    const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+    await channel.publish(ABLY_EVENTS.player_died, {
+      player_id: updated.user_id,
+    });
   }
 
   return NextResponse.json({ success: true, data: updated });

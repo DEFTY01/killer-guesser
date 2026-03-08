@@ -3,9 +3,12 @@
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { VoteCountdown } from "@/components/game/VoteCountdown";
 import { PlayerCard, type PlayerCardPlayer } from "@/components/game/PlayerCard";
 import type { RolePermission } from "@/lib/role-constants";
+import { useAbly } from "@/hooks/useAbly";
+import { ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -262,10 +265,12 @@ interface GameBoardClientProps {
 }
 
 export default function GameBoardClient({ gameId }: GameBoardClientProps) {
+  const router = useRouter();
   const [data, setData] = useState<BoardData | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showDeathModal, setShowDeathModal] = useState(false);
   const [voteActive, setVoteActive] = useState(false);
+  const [gameEnded, setGameEnded] = useState<string | null | false>(false);
 
   // ── Load board data ─────────────────────────────────────────
 
@@ -351,6 +356,44 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   const canRevive = data?.caller.permissions.includes("revive_dead") ?? false;
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
+
+  // ── Ably: PLAYER_DIED ───────────────────────────────────────
+
+  useAbly(
+    ABLY_CHANNELS.game(gameId),
+    ABLY_EVENTS.player_died,
+    useCallback((msg) => {
+      const { player_id } = msg.data as { player_id: number };
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          players: prev.players.map((p) =>
+            p.user_id === player_id
+              ? { ...p, is_dead: 1, revived_at: null }
+              : p,
+          ),
+        };
+      });
+    }, []),
+  );
+
+  // ── Ably: GAME_ENDED ────────────────────────────────────────
+
+  useAbly(
+    ABLY_CHANNELS.game(gameId),
+    ABLY_EVENTS.game_ended,
+    useCallback(
+      (msg) => {
+        const { winner_team } = msg.data as { winner_team: string | null };
+        setGameEnded(winner_team ?? null);
+        setTimeout(() => {
+          router.push("/");
+        }, 3000);
+      },
+      [router],
+    ),
+  );
 
   // ── Render ──────────────────────────────────────────────────
 
@@ -442,6 +485,37 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           onConfirmed={handleDeathConfirmed}
           onClose={() => setShowDeathModal(false)}
         />
+      )}
+
+      {/* ── Game-ended modal ─────────────────────────────────── */}
+      {gameEnded !== false && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="game-ended-title"
+        >
+          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-8 text-center space-y-4">
+            <div className="text-5xl">🏆</div>
+            <h2
+              id="game-ended-title"
+              className="text-xl font-bold text-gray-900"
+            >
+              Game Over!
+            </h2>
+            {gameEnded ? (
+              <p className="text-gray-600">
+                <span className="font-semibold text-gray-900">{gameEnded}</span>{" "}
+                wins!
+              </p>
+            ) : (
+              <p className="text-gray-600">The game has ended.</p>
+            )}
+            <p className="text-sm text-gray-400">
+              Redirecting to home in a moment…
+            </p>
+          </div>
+        </div>
       )}
     </div>
   );
