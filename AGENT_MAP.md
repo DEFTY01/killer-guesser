@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (live game editor: GET/PATCH /api/admin/games/[id], PATCH /api/admin/games/[id]/players/[playerId], POST /api/admin/games/[id]/reroll, /admin/games/[id] live editor with optimistic UI)
+> **Last Updated:** 2026-03-08 (game-logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame in src/lib/gameEnd.ts; Ably game_ended events; ABLY_API_KEY added to .env.example)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -110,6 +110,7 @@ killer-guesser/
 │   │   ├── auth.ts            # NextAuth.js configuration
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
 │   │   ├── blob.ts            # Vercel Blob upload helper (thin wrapper around @vercel/blob)
+│   │   ├── gameEnd.ts         # Game-end logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame
 │   │   └── validations.ts     # Zod schemas for shared validation
 │   ├── middleware.ts          # Route-protection middleware (admin/game/login)
 │   └── types/
@@ -169,6 +170,7 @@ killer-guesser/
 | `src/lib/auth-helpers.ts` | Shared auth utilities — `requireAdmin()` returns the session or null |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/blob.ts` | Thin wrapper around `@vercel/blob` — `uploadBlob(filename, buffer, mimeType)` → public URL |
+| `src/lib/gameEnd.ts` | Game-end scenarios: `handleKillerDefeated` (killer voted out → archive events, close, survivors win), `handleKillerWins` (killer wins → archive events, close, killer team wins), `deleteGame` (hard-delete all game data), `closeGame` (close without deletion); all publish Ably `game_ended` event |
 | `src/lib/role-constants.ts` | Shared role constants — `DEFAULT_ROLE_COLOR`, `ROLE_PERMISSIONS` tuple, `RolePermission` type |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
 | `src/app/api/admin/players/route.ts` | GET (all players, ordered by name) + POST (create player with Zod validation) — admin only |
@@ -186,6 +188,7 @@ killer-guesser/
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
+| `tests/unit/gameEnd.test.ts` | Unit tests for all four game-end functions (DB transaction, archiving, deletion, Ably publish) |
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
 | `tests/unit/Button.test.tsx` | Unit tests for Button UI component |
 | `tests/e2e/app.spec.ts` | Playwright smoke tests |
