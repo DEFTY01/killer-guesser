@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 06 — Full Database Schema)
+> **Last Updated:** 2026-03-08 (PROMPT 07 — Migrations & Seed Data)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -66,7 +66,9 @@ killer-guesser/
 │   │   └── PlayerLogin.tsx    # Player nickname + avatar onboarding
 │   ├── db/
 │   │   ├── index.ts           # Drizzle client (Turso connection)
-│   │   └── schema.ts          # Database schema definitions
+│   │   ├── migrations/        # Auto-generated Drizzle migration SQL files (do not edit manually)
+│   │   ├── schema.ts          # Database schema definitions
+│   │   └── seed.ts            # Idempotent seed script — inserts 6 default roles
 │   ├── lib/
 │   │   ├── auth.ts            # NextAuth.js configuration
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
@@ -109,6 +111,7 @@ killer-guesser/
 | `src/components/ui/Input.tsx` | Accessible Input component |
 | `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
+| `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
 | `src/lib/auth.ts` | NextAuth.js v5 config (JWT-only, no DrizzleAdapter; credentials matched against users.name + role) |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
