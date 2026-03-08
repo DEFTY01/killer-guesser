@@ -56,18 +56,20 @@ const DEFAULT_ROLES: (typeof schema.roles.$inferInsert)[] = [
 ];
 
 async function seed() {
-  const url = process.env.DATABASE_URL;
+  const url = process.env.DATABASE_URL ?? process.env.TURSO_DATABASE_URL;
+  const authToken =
+    process.env.DATABASE_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN;
 
   if (!url) {
     throw new Error(
-      "Missing required environment variable: DATABASE_URL. " +
-        "Set DATABASE_URL in your .env.local file.",
+      "Missing database URL. Set DATABASE_URL (preferred) or " +
+        "TURSO_DATABASE_URL in your .env.local file.",
     );
   }
 
   const client = createClient({
     url,
-    authToken: process.env.DATABASE_AUTH_TOKEN,
+    authToken,
   });
 
   const db = drizzle(client, { schema });
