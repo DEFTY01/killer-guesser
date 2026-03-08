@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (admin layout with role-check + sidebar/bottom-nav shell created; admin dashboard page with stats cards, quick actions, and recent games created)
+> **Last Updated:** 2026-03-08 (player CRUD admin pages + API routes; avatar upload via Vercel Blob; replaced AWS SDK with @vercel/blob)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -20,7 +20,7 @@
 | ORM | Drizzle ORM |
 | Auth | NextAuth.js v5 (Auth.js — `next-auth@beta`) |
 | Realtime | Ably |
-| Object Storage | Cloudflare R2 |
+| Object Storage | Vercel Blob |
 | Image Processing | Sharp |
 | Validation | Zod v4 |
 | Unit Testing | Vitest + Testing Library |
@@ -49,15 +49,25 @@ killer-guesser/
 │   │   │   ├── admin/
 │   │   │   │   ├── dashboard/ # Admin dashboard page
 │   │   │   │   ├── login/     # Admin login page
+│   │   │   │   ├── players/   # Player management pages
+│   │   │   │   │   ├── new/   # Create new player page
+│   │   │   │   │   ├── page.tsx              # Players list
+│   │   │   │   │   └── DeletePlayerButton.tsx # Client delete button
 │   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
 │   │   │   ├── game/          # Main game page
 │   │   │   └── layout.tsx     # Game layout wrapper
 │   │   ├── api/
+│   │   │   ├── admin/
+│   │   │   │   └── players/   # Admin player management API
+│   │   │   │       ├── route.ts         # GET (list players) + POST (create player)
+│   │   │   │       └── [id]/route.ts    # PATCH (update) + DELETE (soft-delete)
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
-│   │   │   └── player/        # Player registration / session API
+│   │   │   ├── player/        # Player registration / session API
+│   │   │   └── upload/
+│   │   │       └── avatar/    # Vercel Blob avatar upload endpoint
 │   │   ├── login/             # Player login page (single-page avatar picker)
 │   │   ├── globals.css        # Global styles (Tailwind v4 imports)
 │   │   ├── layout.tsx         # Root layout (fonts, metadata)
@@ -76,6 +86,7 @@ killer-guesser/
 │   ├── lib/
 │   │   ├── auth.ts            # NextAuth.js configuration
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
+│   │   ├── blob.ts            # Vercel Blob upload helper (thin wrapper around @vercel/blob)
 │   │   └── validations.ts     # Zod schemas for shared validation
 │   ├── middleware.ts          # Route-protection middleware (admin/game/login)
 │   └── types/
@@ -106,7 +117,9 @@ killer-guesser/
 | `src/app/(admin)/layout.tsx` | Admin shell: role-based auth, sidebar (desktop), bottom tab bar (mobile) |
 | `src/app/(admin)/admin/page.tsx` | Redirects to `/admin/dashboard` |
 | `src/app/(admin)/admin/dashboard/page.tsx` | Dashboard: stats cards, quick actions, recent games |
-| `src/app/(admin)/admin/login/page.tsx` | Admin login page — minimal client component; single password input; calls `signIn("admin", { password })`; on success redirects to `/admin/dashboard`; shows inline "Invalid password" on error |
+| `src/app/(admin)/admin/players/page.tsx` | Players list: avatar thumbnail, name, active status, edit/delete actions |
+| `src/app/(admin)/admin/players/DeletePlayerButton.tsx` | Client-side delete (soft-delete) button with confirmation |
+| `src/app/(admin)/admin/players/new/page.tsx` | New player form: name input, avatar upload with live preview |
 | `src/app/(game)/game/page.tsx` | Main game room page |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
@@ -123,8 +136,13 @@ killer-guesser/
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
 | `src/lib/auth.ts` | NextAuth.js v5 config — two Credentials providers: "player" (userId only, avatar-click) and "admin" (password-only, `timingSafeEqual`, hardcoded identity); JWT strategy; role + avatar_url + activeGameId in token & session |
+| `src/lib/auth-helpers.ts` | Shared auth utilities — `requireAdmin()` returns the session or null |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
+| `src/lib/blob.ts` | Thin wrapper around `@vercel/blob` — `uploadBlob(filename, buffer, mimeType)` → public URL |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
+| `src/app/api/admin/players/route.ts` | GET (all players, ordered by name) + POST (create player with Zod validation) — admin only |
+| `src/app/api/admin/players/[id]/route.ts` | PATCH (update player fields) + DELETE (soft-delete: sets is_active=0) — admin only |
+| `src/app/api/upload/avatar/route.ts` | POST: multipart form, validates webp/gif + 4 MB limit, uploads to Vercel Blob |
 | `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
@@ -149,7 +167,12 @@ killer-guesser/
 | `POST` | `/api/auth/callback/player` | `src/app/api/auth/[...nextauth]/route.ts` | Credentials callback for the "player" provider (userId, no password) |
 | `POST` | `/api/auth/callback/admin` | `src/app/api/auth/[...nextauth]/route.ts` | Credentials callback for the "admin" provider (password-only) |
 | `POST` | `/api/player` | `src/app/api/player/route.ts` | Register player nickname; create/return session |
-| `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Upload & resize player avatar (→ Cloudflare R2) |
+| `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Upload & resize player avatar (→ Vercel Blob) |
+| `GET` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | List all player accounts ordered by name — admin only |
+| `POST` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | Create new player account (Zod validation) — admin only |
+| `PATCH` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Update player fields — admin only |
+| `DELETE` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Soft-delete player (sets is_active=0) — admin only |
+| `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
 
 > This table will be expanded as new API routes are added.
 
@@ -170,8 +193,7 @@ killer-guesser/
 | `drizzle-orm` | `^0.45.1` | Type-safe SQL ORM |
 | `@libsql/client` | `^0.17.0` | Turso/libSQL database client |
 | `ably` | `^2.19.0` | Real-time pub/sub messaging |
-| `@aws-sdk/client-s3` | `^3.1004.0` | AWS / Cloudflare R2 S3-compatible object storage |
-| `@aws-sdk/s3-request-presigner` | `^3.1004.0` | Generate pre-signed S3/R2 URLs |
+| `@vercel/blob` | `^2.3.1` | Vercel Blob object storage |
 | `zustand` | `^5.0.11` | Lightweight React state management |
 | `date-fns` | `^4.1.0` | Date utility functions |
 | `zod` | `^4.3.6` | Schema validation and type inference |
