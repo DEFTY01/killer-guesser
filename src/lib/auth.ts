@@ -92,7 +92,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           // resolver used in this project.
           token["id"] = user.id;
           token["avatar_url"] = user.avatar_url ?? null;
-          token["role"] = user.role ?? "member";
+          token["role"] = user.role ?? "player";
           token["activeGameId"] = user.activeGameId ?? "";
       }
       return token;
@@ -102,7 +102,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         session.user.id = (token["id"] as string | undefined) ?? "";
         session.user.avatar_url =
           (token["avatar_url"] as string | null | undefined) ?? null;
-        session.user.role = (token["role"] as string | undefined) ?? "member";
+        session.user.role = (token["role"] as string | undefined) ?? "player";
         session.user.activeGameId =
           (token["activeGameId"] as string | undefined) ?? "";
       }

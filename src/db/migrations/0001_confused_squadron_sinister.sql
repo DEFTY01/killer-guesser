@@ -1,0 +1,1 @@
+ALTER TABLE `users` ALTER COLUMN "role" TO "role" text NOT NULL DEFAULT 'player';

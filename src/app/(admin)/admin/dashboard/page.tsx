@@ -124,9 +124,10 @@ function StatCard({ title, value }: { title: string; value: number }) {
 
 function StatusBadge({ status }: { status: GameStatus }) {
   const styles: Record<GameStatus, string> = {
-    waiting: "bg-yellow-50 text-yellow-700 border-yellow-200",
+    scheduled: "bg-yellow-50 text-yellow-700 border-yellow-200",
     active: "bg-green-50 text-green-700 border-green-200",
-    finished: "bg-gray-50 text-gray-600 border-gray-200",
+    closed: "bg-gray-50 text-gray-600 border-gray-200",
+    deleted: "bg-red-50 text-red-400 border-red-200",
   };
   return (
     <span

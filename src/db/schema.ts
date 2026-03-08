@@ -19,9 +19,9 @@ export const users = sqliteTable("users", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   name: text("name").notNull(),
   avatar_url: text("avatar_url"),
-  role: text("role", { enum: ["admin", "member"] })
+  role: text("role", { enum: ["player"] })
     .notNull()
-    .default("member"),
+    .default("player"),
   is_active: integer("is_active").notNull().default(1),
   created_at: integer("created_at")
     .notNull()
