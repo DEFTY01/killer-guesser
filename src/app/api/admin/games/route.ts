@@ -42,6 +42,12 @@ const createGameSchema = z.object({
   role_chances: z.string().optional().nullable(),
   murder_item_url: z.string().url().optional().nullable(),
   murder_item_name: z.string().optional().nullable(),
+  revive_cooldown_seconds: z
+    .number()
+    .int()
+    .nonnegative("revive_cooldown_seconds must be a non-negative integer")
+    .optional()
+    .nullable(),
 });
 
 // ── GET /api/admin/games ──────────────────────────────────────────
@@ -124,6 +130,7 @@ export async function POST(req: NextRequest) {
     role_chances,
     murder_item_url,
     murder_item_name,
+    revive_cooldown_seconds,
   } = parsed.data;
 
   const newGame = await db.transaction(async (tx) => {
@@ -145,6 +152,7 @@ export async function POST(req: NextRequest) {
       role_chances: role_chances ?? null,
       murder_item_url: murder_item_url ?? null,
       murder_item_name: murder_item_name ?? null,
+      revive_cooldown_seconds: revive_cooldown_seconds ?? null,
     });
 
     await tx.insert(game_players).values(

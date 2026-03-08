@@ -15,6 +15,13 @@
       "when": 1772972164105,
       "tag": "0001_confused_squadron_sinister",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1772999245281,
+      "tag": "0002_revive_cooldown",
+      "breakpoints": true
     }
   ]
 }

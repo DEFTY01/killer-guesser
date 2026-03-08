@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 21 — Wire Up Real-Time Events: publish player_died, player_revived, vote_cast, vote_closed, game_ended via Ably; add voting page with spy view and results view)
+> **Last Updated:** 2026-03-08 (PROMPT 22 — Healer Revival: POST revive route with is_dead check, is_dead=0 update, revive_cooldown_seconds in game_settings, Ably PLAYER_REVIVED broadcast with full payload; GameBoardClient subscribes to PLAYER_REVIVED and uses POST; optimistic is_dead=0 update)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -71,7 +71,7 @@ killer-guesser/
 │   │   │   │   ├── page.tsx   # Join-game page (renders PlayerLogin)
 │   │   │   │   └── [id]/      # Per-game board
 │   │   │   │       ├── page.tsx          # Server wrapper → GameBoardClient
-│   │   │   │       ├── GameBoardClient.tsx # Interactive game board (vote countdown, player grid, self-death modal, game-ended modal; subscribes to PLAYER_DIED, GAME_ENDED)
+│   │   │   │       ├── GameBoardClient.tsx # Interactive game board (vote countdown, player grid, self-death modal, game-ended modal; subscribes to PLAYER_DIED, PLAYER_REVIVED, GAME_ENDED)
 │   │   │   │       └── vote/[day]/       # Per-day voting page
 │   │   │   │           ├── page.tsx       # Server wrapper → VotePageClient
 │   │   │   │           └── VotePageClient.tsx # Voting UI: submit vote, spy view (VOTE_CAST), results (VOTE_CLOSED)
@@ -105,7 +105,7 @@ killer-guesser/
 │   │   │   │       ├── vote/[day]/close/route.ts   # POST — compute results, publish VOTE_CLOSED
 │   │   │   │       └── players/[playerId]/
 │   │   │   │           ├── die/route.ts            # PATCH — self-report death (publishes PLAYER_DIED)
-│   │   │   │           └── revive/route.ts         # PATCH — Healer revives player (publishes PLAYER_REVIVED)
+│   │   │   │           └── revive/route.ts         # POST — Healer revives player: checks is_dead=1, sets is_dead=0+revived_at, enforces revive_cooldown_seconds, publishes PLAYER_REVIVED
 │   │   │   ├── player/        # Player registration / session API
 │   │   │   └── upload/
 │   │   │       └── avatar/    # Vercel Blob avatar upload endpoint
@@ -179,7 +179,7 @@ killer-guesser/
 | `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
 | `src/app/(game)/game/page.tsx` | Main game room page (renders PlayerLogin for join flow) |
 | `src/app/(game)/game/[id]/page.tsx` | Game board: server wrapper — resolves `id` param and renders GameBoardClient |
-| `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown, murder item card, player grid, vote button, self-death modal; subscribes to PLAYER_DIED (instant grayscale) and GAME_ENDED (modal + 3s redirect) |
+| `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown, murder item card, player grid, vote button, self-death modal; subscribes to PLAYER_DIED (instant grayscale), PLAYER_REVIVED (remove grayscale+X, show Undead), and GAME_ENDED (modal + 3s redirect) |
 | `src/app/(game)/game/[id]/vote/[day]/page.tsx` | Voting page: server wrapper — resolves `id` + `day` params and renders VotePageClient |
 | `src/app/(game)/game/[id]/vote/[day]/VotePageClient.tsx` | Voting page (client): submit vote, "already voted" state, spy view (see_votes; subscribes to VOTE_CAST for live list), results view (subscribes to VOTE_CLOSED), vote-window timer triggers close call |
 | `src/app/(game)/lobby/page.tsx` | Player lobby — client component: active games, upcoming games (with countdown), past games (win/loss); skeleton loading; empty state |
@@ -197,7 +197,7 @@ killer-guesser/
 | `src/components/ui/Input.tsx` | Accessible Input component |
 | `src/components/game/PlayerCard.tsx` | Role-aware player card: dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; border in role color |
 | `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
-| `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations |
+| `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; game_settings includes revive_cooldown_seconds |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
@@ -224,6 +224,7 @@ killer-guesser/
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
+| `src/db/migrations/0002_revive_cooldown.sql` | Migration: add `revive_cooldown_seconds` integer column to `game_settings` |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
 | `tests/unit/gameEnd.test.ts` | Unit tests for all four game-end functions (DB transaction, archiving, deletion, Ably publish) |
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
@@ -255,7 +256,7 @@ killer-guesser/
 | `PATCH` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Update role fields — admin only |
 | `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") — admin only |
 | `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | List all games with per-game player counts ordered by created_at desc — admin only |
-| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Create game in a single DB transaction (games + game_settings + game_players) — admin only |
+| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Create game in a single DB transaction (games + game_settings + game_players); accepts optional `revive_cooldown_seconds` — admin only |
 | `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Get full game data (game + settings + players with role details) — admin only |
 | `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Update game player: is_dead (0/1) and/or role_id — admin only |
@@ -266,7 +267,7 @@ killer-guesser/
 | `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
 | `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller; `see_killer` → `killer_id`; `see_votes` → today's vote details |
 | `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
-| `PATCH` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a player — requires `revive_dead` permission; sets `revived_at`; publishes `PLAYER_REVIVED` to game channel |
+| `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
 | `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names |
 | `POST` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Submit vote — one per player per day; body: `{ target_id }`; publishes `VOTE_CAST` to vote channel with voter/target names |
 | `POST` | `/api/game/[id]/vote/[day]/close` | `src/app/api/game/[id]/vote/[day]/close/route.ts` | Close vote window — computes grouped results, publishes `VOTE_CLOSED` to game channel; idempotent |

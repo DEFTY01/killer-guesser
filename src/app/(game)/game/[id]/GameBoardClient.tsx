@@ -330,7 +330,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
     async (gamePlayerId: number) => {
       const res = await fetch(
         `/api/game/${gameId}/players/${gamePlayerId}/revive`,
-        { method: "PATCH" },
+        { method: "POST" },
       );
       const json = await res.json();
       if (json.success) {
@@ -340,7 +340,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
             ...prev,
             players: prev.players.map((p) =>
               p.id === gamePlayerId
-                ? { ...p, revived_at: Math.floor(Date.now() / 1000) }
+                ? { ...p, is_dead: 0, revived_at: Math.floor(Date.now() / 1000) }
                 : p,
             ),
           };
@@ -371,6 +371,31 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           players: prev.players.map((p) =>
             p.user_id === player_id
               ? { ...p, is_dead: 1, revived_at: null }
+              : p,
+          ),
+        };
+      });
+    }, []),
+  );
+
+  // ── Ably: PLAYER_REVIVED ────────────────────────────────────
+
+  useAbly(
+    ABLY_CHANNELS.game(gameId),
+    ABLY_EVENTS.player_revived,
+    useCallback((msg) => {
+      const { game_player_id, revived_at } = msg.data as {
+        player_id: number;
+        game_player_id: number;
+        revived_at: number;
+      };
+      setData((prev) => {
+        if (!prev) return prev;
+        return {
+          ...prev,
+          players: prev.players.map((p) =>
+            p.id === game_player_id
+              ? { ...p, is_dead: 0, revived_at }
               : p,
           ),
         };
