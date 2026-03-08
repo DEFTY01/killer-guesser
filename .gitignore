@@ -7,6 +7,8 @@
 
 # testing
 /coverage
+/playwright-report
+/test-results
 
 # next.js
 /.next/
@@ -34,3 +36,13 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# drizzle
+/drizzle/*.sql
+/drizzle/meta
+
+# local SQLite databases
+*.db
+*.db-journal
+*.db-shm
+*.db-wal
