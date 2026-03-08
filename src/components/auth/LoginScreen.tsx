@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useCallback } from "react";
-import { signIn, getSession } from "next-auth/react";
+import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -148,7 +148,7 @@ export default function LoginScreen({ players }: Props) {
     setError(null);
 
     try {
-      const result = await signIn("credentials", {
+      const result = await signIn("player", {
         userId: selectedId,
         redirect: false,
       });
@@ -159,14 +159,8 @@ export default function LoginScreen({ players }: Props) {
         return;
       }
 
-      // Determine redirect target from the session role
-      const session = await getSession();
-      const role = (session?.user as { role?: string } | null)?.role;
-      if (role === "admin" || role === "moderator") {
-        router.push("/admin/dashboard");
-      } else {
-        router.push("/");
-      }
+      // Always redirect to the home page after a successful player sign-in.
+      router.push("/");
     } catch {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
