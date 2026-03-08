@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 03 — deps install)
+> **Last Updated:** 2026-03-08 (PROMPT 05 — Turso DB connection & Drizzle client)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -108,11 +108,12 @@ killer-guesser/
 | `src/components/ui/Card.tsx` | Card layout component |
 | `src/components/ui/Input.tsx` | Accessible Input component |
 | `src/db/schema.ts` | Drizzle schema (players, sessions, games, …) |
-| `src/db/index.ts` | Drizzle + Turso client singleton |
+| `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
+| `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
 | `src/lib/auth.ts` | NextAuth.js v5 config (providers, adapter, callbacks) |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
-| `src/types/index.ts` | Shared TypeScript types |
+| `src/types/index.ts` | Shared TypeScript types; placeholder for schema-inferred types (exported later) |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
 | `tests/unit/Button.test.tsx` | Unit tests for Button UI component |
