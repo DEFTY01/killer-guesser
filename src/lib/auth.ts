@@ -1,68 +1,113 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { adminLoginSchema } from "@/lib/validations";
-import { eq } from "drizzle-orm";
+import { users, game_players, games } from "@/db/schema";
+import { and, eq, or } from "drizzle-orm";
+import type { DefaultSession } from "next-auth";
+
+// ── Module augmentation: extend NextAuth types ────────────────────
+
+declare module "next-auth" {
+  interface User {
+    avatar_url?: string | null;
+    role?: string;
+    activeGameId?: string;
+  }
+  interface Session {
+    user: {
+      id: string;
+      avatar_url: string | null;
+      role: string;
+      activeGameId: string;
+    } & DefaultSession["user"];
+  }
+}
 
 /**
  * Auth.js v5 configuration.
  *
- * Supports two flows:
- *  1. Admin session — credentials-based login (JWT strategy, no DB adapter).
- *  2. Player session — handled separately via avatar/session API routes.
- *
- * Note: DrizzleAdapter is not used here because the `users` table uses
- * integer primary keys and does not carry Auth.js OAuth columns. Admin
- * authentication is JWT-only.
+ * Single avatar-click login flow:
+ *  - The login page sends the player's userId (no password).
+ *  - The authorize function verifies the user is active and has an
+ *    active or scheduled game, then returns the full user object.
+ *  - JWT strategy — no DrizzleAdapter (users table uses integer PKs).
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
   session: { strategy: "jwt" },
   pages: {
-    signIn: "/admin/login",
-    error: "/admin/login",
+    signIn: "/login",
+    error: "/login",
   },
   providers: [
     Credentials({
-      name: "Admin credentials",
+      name: "Avatar login",
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
+        userId: { label: "User ID", type: "text" },
       },
       async authorize(credentials) {
-        const parsed = adminLoginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
+        const userId = Number(credentials?.userId);
+        if (!userId || isNaN(userId)) return null;
 
-        const { email } = parsed.data;
-
-        // Look up admin user by name. In production, verify a hashed
-        // password stored on the user record. The email field from the
-        // login form is matched against users.name for the initial scaffold.
+        // Verify user exists and is active.
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.name, email))
+          .where(and(eq(users.id, userId), eq(users.is_active, 1)))
           .limit(1);
 
-        if (!user || user.role !== "admin") return null;
+        if (!user) return null;
 
-        return { id: String(user.id), name: user.name };
+        // Find an active or scheduled game this player belongs to.
+        const [playerEntry] = await db
+          .select({ gameId: game_players.game_id })
+          .from(game_players)
+          .innerJoin(games, eq(game_players.game_id, games.id))
+          .where(
+            and(
+              eq(game_players.user_id, userId),
+              or(eq(games.status, "active"), eq(games.status, "scheduled")),
+            ),
+          )
+          .limit(1);
+
+        if (!playerEntry) {
+          throw new Error("No active game found. Ask your host!");
+        }
+
+        return {
+          id: String(user.id),
+          name: user.name,
+          avatar_url: user.avatar_url,
+          role: user.role,
+          activeGameId: playerEntry.gameId,
+        };
       },
     }),
   ],
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
+        // JWT extends Record<string, unknown>; bracket notation is required
+        // because @auth/core/jwt cannot be augmented with the bundler module
+        // resolver used in this project.
+        token["id"] = user.id;
+        token["avatar_url"] = user.avatar_url ?? null;
+        token["role"] = user.role ?? "member";
+        token["activeGameId"] = user.activeGameId ?? "";
       }
       return token;
     },
     session({ session, token }) {
-      if (token?.id && session.user) {
-        (session.user as typeof session.user & { id: string }).id =
-          token.id as string;
+      if (token && session.user) {
+        session.user.id = (token["id"] as string | undefined) ?? "";
+        session.user.avatar_url =
+          (token["avatar_url"] as string | null | undefined) ?? null;
+        session.user.role = (token["role"] as string | undefined) ?? "member";
+        session.user.activeGameId =
+          (token["activeGameId"] as string | undefined) ?? "";
       }
       return session;
     },
   },
 });
+
