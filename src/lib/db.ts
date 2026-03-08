@@ -13,7 +13,14 @@ const authToken =
   process.env.DATABASE_AUTH_TOKEN ?? process.env.TURSO_AUTH_TOKEN;
 
 // Vercel serverless functions cannot reliably use a local SQLite file.
-if (process.env.VERCEL === "1" && url.startsWith("file:")) {
+// Skip this check during `next build` (NEXT_PHASE === 'phase-production-build')
+// so the module can be statically analysed without DATABASE_URL being present.
+// The error will still be raised at runtime if the URL is not configured.
+if (
+  process.env.VERCEL === "1" &&
+  url.startsWith("file:") &&
+  process.env.NEXT_PHASE !== "phase-production-build"
+) {
   throw new Error(
     `Invalid DATABASE_URL on Vercel: ${url}. ` +
       "Use a remote libsql URL (libsql://...) and set DATABASE_AUTH_TOKEN.",
