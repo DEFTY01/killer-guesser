@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (game-logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame in src/lib/gameEnd.ts; Ably game_ended events; ABLY_API_KEY added to .env.example)
+> **Last Updated:** 2026-03-08 (game-lobby: useCountdown hook, game layout with player nav, /api/game/lobby API, lobby page with active/upcoming/past sections)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -68,7 +68,8 @@ killer-guesser/
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
 │   │   │   ├── game/          # Main game page
-│   │   │   └── layout.tsx     # Game layout wrapper
+│   │   │   ├── lobby/         # Player lobby (active/upcoming/past games)
+│   │   │   └── layout.tsx     # Game layout wrapper (player auth, sign-out)
 │   │   ├── api/
 │   │   │   ├── admin/
 │   │   │   │   └── players/   # Admin player management API
@@ -87,6 +88,8 @@ killer-guesser/
 │   │   │   │               └── route.ts # PATCH (mark dead / change role)
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
+│   │   │   ├── game/          # Player game API routes
+│   │   │   │   └── lobby/     # GET — active/scheduled/past games for current player
 │   │   │   ├── player/        # Player registration / session API
 │   │   │   └── upload/
 │   │   │       └── avatar/    # Vercel Blob avatar upload endpoint
@@ -112,6 +115,8 @@ killer-guesser/
 │   │   ├── blob.ts            # Vercel Blob upload helper (thin wrapper around @vercel/blob)
 │   │   ├── gameEnd.ts         # Game-end logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame
 │   │   └── validations.ts     # Zod schemas for shared validation
+│   ├── hooks/
+│   │   └── useCountdown.ts    # Countdown hook: remaining h/m/s + isExpired, ticking every second
 │   ├── middleware.ts          # Route-protection middleware (admin/game/login)
 │   └── types/
 │       └── index.ts           # Shared TypeScript types / interfaces
@@ -152,6 +157,8 @@ killer-guesser/
 | `src/app/(admin)/admin/games/[id]/page.tsx` | Game editor: server component — fetches game, settings, players (with role data), and all roles; renders GameEditorClient |
 | `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
 | `src/app/(game)/game/page.tsx` | Main game room page |
+| `src/app/(game)/lobby/page.tsx` | Player lobby — client component: active games, upcoming games (with countdown), past games (win/loss); skeleton loading; empty state |
+| `src/hooks/useCountdown.ts` | `useCountdown(target: Date)` — returns `{ hours, minutes, seconds, isExpired }`, ticks every second, cleans up interval on unmount |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
 | `src/app/api/player/route.ts` | Handles player registration / session (POST) |
@@ -225,6 +232,7 @@ killer-guesser/
 | `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) — admin only |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
 | `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
+| `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
 
 > This table will be expanded as new API routes are added.
 
