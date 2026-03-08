@@ -11,15 +11,22 @@
     "db:migrate": "drizzle-kit migrate",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
+    "db:seed": "tsx src/db/seed.ts",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "type-check": "tsc --noEmit",
+    "test:ci": "npm run lint && npm run type-check && npm run build",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
+    "@aws-sdk/client-s3": "^3.1004.0",
+    "@aws-sdk/s3-request-presigner": "^3.1004.0",
     "@libsql/client": "^0.17.0",
+    "ably": "^2.19.0",
+    "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.1",
     "geist": "^1.7.0",
     "next": "^16.1.6",
@@ -27,7 +34,8 @@
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "sharp": "^0.34.5",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "zustand": "^5.0.11"
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
@@ -43,6 +51,7 @@
     "jsdom": "^26.1.0",
     "postcss": "^8.5.8",
     "tailwindcss": "^4.2.1",
+    "tsx": "^4.21.0",
     "typescript": "^5.9.3",
     "vitest": "^4.0.18"
   }

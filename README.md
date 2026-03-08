@@ -26,7 +26,8 @@ npm install
 
 # 2. Copy environment variables
 cp .env.example .env.local
-# Edit .env.local and fill in TURSO_DATABASE_URL, TURSO_AUTH_TOKEN, AUTH_SECRET
+# Edit .env.local and fill in DATABASE_URL (or TURSO_DATABASE_URL),
+# DATABASE_AUTH_TOKEN (or TURSO_AUTH_TOKEN), AUTH_SECRET
 
 # 3. Push the schema to Turso
 npm run db:push

@@ -1,77 +1,85 @@
 import NextAuth from "next-auth";
-import { DrizzleAdapter } from "@auth/drizzle-adapter";
 import Credentials from "next-auth/providers/credentials";
 import { db } from "@/db";
-import { users, players } from "@/db/schema";
-import { adminLoginSchema } from "@/lib/validations";
-import { eq } from "drizzle-orm";
+import { users, game_players, games } from "@/db/schema";
+import { and, eq, or } from "drizzle-orm";
+import type { DefaultSession } from "next-auth";
+
+// ── Module augmentation: extend NextAuth types ────────────────────
+
+declare module "next-auth" {
+  interface User {
+    avatar_url?: string | null;
+    role?: string;
+    activeGameId?: string;
+  }
+  interface Session {
+    user: {
+      id: string;
+      avatar_url: string | null;
+      role: string;
+      activeGameId: string;
+    } & DefaultSession["user"];
+  }
+}
 
 /**
  * Auth.js v5 configuration.
  *
- * Supports two flows:
- *  1. Admin session — email/password credentials (or OAuth providers).
- *  2. Player session — userId credential from the avatar-picker login page.
- *
- * JWT session strategy is used; no session records are written to the database.
- * The synthetic email used for player sessions is stored only in the JWT and is
- * never exposed to users or used for any email-based auth flow.
+ * Single avatar-click login flow:
+ *  - The login page sends the player's userId (no password).
+ *  - The authorize function verifies the user is active and has an
+ *    active or scheduled game, then returns the full user object.
+ *  - JWT strategy — no DrizzleAdapter (users table uses integer PKs).
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
-  adapter: DrizzleAdapter(db),
   session: { strategy: "jwt" },
   pages: {
-    signIn: "/admin/login",
-    error: "/admin/login",
+    signIn: "/login",
+    error: "/login",
   },
   providers: [
     Credentials({
-      name: "Credentials",
+      name: "Avatar login",
       credentials: {
-        email: { label: "Email", type: "email" },
-        password: { label: "Password", type: "password" },
         userId: { label: "User ID", type: "text" },
       },
       async authorize(credentials) {
-        // Player login path — userId provided without email
-        if (credentials?.userId && !credentials?.email) {
-          const userId = credentials.userId as string;
-          const [player] = await db
-            .select()
-            .from(players)
-            .where(eq(players.id, userId))
-            .limit(1);
-          if (!player) return null;
-          return {
-            id: player.id,
-            name: player.nickname,
-            // NextAuth requires an email field; use a synthetic value
-            email: `player_${player.id}@killer.local`,
-            role: "member",
-          };
-        }
+        const userId = Number(credentials?.userId);
+        if (!userId || isNaN(userId)) return null;
 
-        // Admin login path — email + password
-        const parsed = adminLoginSchema.safeParse(credentials);
-        if (!parsed.success) return null;
-
-        const { email } = parsed.data;
-
-        // In production, verify the hashed password here.
-        // This scaffold checks only that the user record exists.
+        // Verify user exists and is active.
         const [user] = await db
           .select()
           .from(users)
-          .where(eq(users.email, email))
+          .where(and(eq(users.id, userId), eq(users.is_active, 1)))
           .limit(1);
 
         if (!user) return null;
 
+        // Find an active or scheduled game this player belongs to.
+        const [playerEntry] = await db
+          .select({ gameId: game_players.game_id })
+          .from(game_players)
+          .innerJoin(games, eq(game_players.game_id, games.id))
+          .where(
+            and(
+              eq(game_players.user_id, userId),
+              or(eq(games.status, "active"), eq(games.status, "scheduled")),
+            ),
+          )
+          .limit(1);
+
+        if (!playerEntry) {
+          throw new Error("No active game found. Ask your host!");
+        }
+
         return {
-          id: user.id,
-          email: user.email,
+          id: String(user.id),
           name: user.name,
-          role: user.role ?? "admin",
+          avatar_url: user.avatar_url,
+          role: user.role,
+          activeGameId: playerEntry.gameId,
         };
       },
     }),
@@ -79,21 +87,27 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     jwt({ token, user }) {
       if (user) {
-        token.id = user.id;
-        token.role = (user as typeof user & { role?: string }).role;
+          // JWT extends Record<string, unknown>; bracket notation is required
+          // because @auth/core/jwt cannot be augmented with the bundler module
+          // resolver used in this project.
+          token["id"] = user.id;
+          token["avatar_url"] = user.avatar_url ?? null;
+          token["role"] = user.role ?? "member";
+          token["activeGameId"] = user.activeGameId ?? "";
       }
       return token;
     },
     session({ session, token }) {
-      if (token?.id && session.user) {
-        const u = session.user as typeof session.user & {
-          id: string;
-          role?: string;
-        };
-        u.id = token.id as string;
-        u.role = token.role as string | undefined;
+      if (token && session.user) {
+        session.user.id = (token["id"] as string | undefined) ?? "";
+        session.user.avatar_url =
+          (token["avatar_url"] as string | null | undefined) ?? null;
+        session.user.role = (token["role"] as string | undefined) ?? "member";
+        session.user.activeGameId =
+          (token["activeGameId"] as string | undefined) ?? "";
       }
       return session;
     },
   },
 });
+
