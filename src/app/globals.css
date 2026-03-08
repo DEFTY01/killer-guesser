@@ -3,6 +3,7 @@
 :root {
   --background: #ffffff;
   --foreground: #171717;
+  --font-cinzel: "Cinzel";
 }
 
 @media (prefers-color-scheme: dark) {
@@ -16,4 +17,256 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+}
+
+/* ── Night background ───────────────────────────────────────────── */
+
+.night-bg {
+  background: linear-gradient(180deg, #02020d 0%, #05091a 55%, #0a1230 100%);
+  min-height: 100dvh;
+}
+
+/* Star field — box-shadow on a 1 × 1 px fixed element */
+.night-bg::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 1px;
+  height: 1px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow:
+    45px 32px 0 0 rgba(255, 255, 255, 0.9),
+    123px 15px 0 0 rgba(255, 255, 255, 0.7),
+    230px 55px 0 0 rgba(255, 255, 255, 0.8),
+    340px 20px 0 0 rgba(255, 255, 255, 0.6),
+    456px 45px 0 0 rgba(255, 255, 255, 0.9),
+    560px 30px 0 0 rgba(255, 255, 255, 0.7),
+    680px 65px 0 0 rgba(255, 255, 255, 0.8),
+    790px 10px 0 0 rgba(255, 255, 255, 0.9),
+    900px 48px 0 0 rgba(255, 255, 255, 0.6),
+    1020px 25px 0 0 rgba(255, 255, 255, 0.8),
+    1130px 70px 0 0 rgba(255, 255, 255, 0.7),
+    1250px 35px 0 0 rgba(255, 255, 255, 0.9),
+    1380px 15px 0 0 rgba(255, 255, 255, 0.6),
+    1490px 58px 0 0 rgba(255, 255, 255, 0.8),
+    1610px 40px 0 0 rgba(255, 255, 255, 0.7),
+    1740px 22px 0 0 rgba(255, 255, 255, 0.9),
+    1850px 55px 0 0 rgba(255, 255, 255, 0.6),
+    80px 150px 0 0 rgba(255, 255, 255, 0.7),
+    200px 180px 0 0 rgba(255, 255, 255, 0.8),
+    310px 120px 0 0 rgba(255, 255, 255, 0.9),
+    430px 200px 0 0 rgba(255, 255, 255, 0.6),
+    540px 145px 0 0 rgba(255, 255, 255, 0.7),
+    660px 175px 0 0 rgba(255, 255, 255, 0.8),
+    780px 110px 0 0 rgba(255, 255, 255, 0.9),
+    890px 195px 0 0 rgba(255, 255, 255, 0.6),
+    1010px 130px 0 0 rgba(255, 255, 255, 0.8),
+    1120px 165px 0 0 rgba(255, 255, 255, 0.7),
+    1240px 145px 0 0 rgba(255, 255, 255, 0.9),
+    1360px 185px 0 0 rgba(255, 255, 255, 0.6),
+    1480px 125px 0 0 rgba(255, 255, 255, 0.8),
+    1590px 170px 0 0 rgba(255, 255, 255, 0.7),
+    1710px 140px 0 0 rgba(255, 255, 255, 0.9),
+    1840px 180px 0 0 rgba(255, 255, 255, 0.6),
+    150px 280px 0 0 rgba(255, 255, 255, 0.7),
+    270px 310px 0 0 rgba(255, 255, 255, 0.8),
+    390px 260px 0 0 rgba(255, 255, 255, 0.9),
+    510px 340px 0 0 rgba(255, 255, 255, 0.6),
+    630px 295px 0 0 rgba(255, 255, 255, 0.7),
+    750px 325px 0 0 rgba(255, 255, 255, 0.8),
+    870px 280px 0 0 rgba(255, 255, 255, 0.9),
+    990px 350px 0 0 rgba(255, 255, 255, 0.6),
+    1110px 305px 0 0 rgba(255, 255, 255, 0.8),
+    1230px 335px 0 0 rgba(255, 255, 255, 0.7),
+    1350px 290px 0 0 rgba(255, 255, 255, 0.9),
+    1470px 360px 0 0 rgba(255, 255, 255, 0.6),
+    1590px 315px 0 0 rgba(255, 255, 255, 0.8),
+    1700px 345px 0 0 rgba(255, 255, 255, 0.7),
+    1820px 300px 0 0 rgba(255, 255, 255, 0.9),
+    60px 430px 0 0 rgba(255, 255, 255, 0.6),
+    180px 460px 0 0 rgba(255, 255, 255, 0.7),
+    300px 410px 0 0 rgba(255, 255, 255, 0.8),
+    420px 490px 0 0 rgba(255, 255, 255, 0.5),
+    540px 445px 0 0 rgba(255, 255, 255, 0.7),
+    660px 475px 0 0 rgba(255, 255, 255, 0.6),
+    780px 455px 0 0 rgba(255, 255, 255, 0.8),
+    900px 510px 0 0 rgba(255, 255, 255, 0.5),
+    1020px 470px 0 0 rgba(255, 255, 255, 0.6),
+    1140px 500px 0 0 rgba(255, 255, 255, 0.7),
+    1260px 465px 0 0 rgba(255, 255, 255, 0.8),
+    1380px 495px 0 0 rgba(255, 255, 255, 0.5);
+  z-index: 0;
+  pointer-events: none;
+}
+
+/* Mountain silhouette */
+.night-bg::after {
+  content: "";
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 42vh;
+  background: #030510;
+  clip-path: polygon(
+    0% 100%,
+    0% 88%,
+    6% 72%,
+    12% 82%,
+    20% 52%,
+    27% 66%,
+    34% 35%,
+    40% 52%,
+    47% 28%,
+    53% 44%,
+    60% 18%,
+    66% 38%,
+    73% 55%,
+    80% 26%,
+    87% 48%,
+    92% 62%,
+    96% 50%,
+    100% 58%,
+    100% 100%
+  );
+  z-index: 1;
+  pointer-events: none;
+}
+
+/* ── Animations ─────────────────────────────────────────────────── */
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* ── Login panel (bottom-sheet on mobile, modal on desktop) ─────── */
+
+.login-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  max-height: 82vh;
+  border-radius: 20px 20px 0 0;
+  background: rgba(8, 8, 28, 0.96);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  transform: translateY(100%);
+  transition: transform 0.45s cubic-bezier(0.32, 0, 0.17, 1);
+  z-index: 50;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  will-change: transform;
+}
+
+.login-panel.panel-open {
+  transform: translateY(0);
+}
+
+@media (min-width: 640px) {
+  .login-panel {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    width: 520px;
+    max-width: 92vw;
+    max-height: 88vh;
+    border-radius: 20px;
+    transform: translate(-50%, calc(-50% + 28px));
+    opacity: 0;
+    transition:
+      transform 0.45s cubic-bezier(0.32, 0, 0.17, 1),
+      opacity 0.4s ease;
+  }
+
+  .login-panel.panel-open {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+  }
+}
+
+/* ── Backdrop ────────────────────────────────────────────────────── */
+
+.login-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.55);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  z-index: 40;
+  pointer-events: none;
+}
+
+.login-backdrop.backdrop-open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Avatar card ─────────────────────────────────────────────────── */
+
+.avatar-card {
+  cursor: pointer;
+  border: 2px solid transparent;
+  border-radius: 12px;
+  padding: 8px 4px 6px;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.05);
+  transition:
+    border-color 0.2s,
+    box-shadow 0.2s;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.avatar-card:hover {
+  background: rgba(255, 255, 255, 0.09);
+}
+
+.avatar-card.selected {
+  border-color: #7c3aed;
+  box-shadow:
+    0 0 0 2px rgba(124, 58, 237, 0.3),
+    0 0 18px rgba(124, 58, 237, 0.35);
+}
+
+/* ── Sign-in button state ────────────────────────────────────────── */
+
+.sign-in-btn {
+  transition:
+    opacity 0.25s,
+    box-shadow 0.25s;
+}
+
+.sign-in-btn:disabled {
+  opacity: 0.38;
+  box-shadow: none;
+  cursor: not-allowed;
+}
+
+.sign-in-btn:not(:disabled) {
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.45);
 }

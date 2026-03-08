@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08
+> **Last Updated:** 2026-03-08 (PROMPT 09)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -57,11 +57,14 @@ killer-guesser/
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
 │   │   │   └── player/        # Player registration / session API
+│   │   ├── login/             # Player login page (single-page avatar picker)
 │   │   ├── globals.css        # Global styles (Tailwind v4 imports)
 │   │   ├── layout.tsx         # Root layout (fonts, metadata)
 │   │   └── page.tsx           # Home / landing page
 │   ├── components/
-│   │   ├── ui/                # Shared design-system components (Button, Card, Input)
+│   │   ├── auth/
+│   │   │   └── LoginScreen.tsx    # Single-page avatar-picker login (client component)
+│   │   ├── ui/                    # Shared design-system components (Button, Card, Input)
 │   │   ├── AvatarUpload.tsx   # Avatar selection & upload UI
 │   │   └── PlayerLogin.tsx    # Player nickname + avatar onboarding
 │   ├── db/
@@ -93,8 +96,9 @@ killer-guesser/
 
 | File | Purpose |
 |---|---|
-| `src/app/layout.tsx` | Root layout: applies Geist font, global metadata, global CSS |
+| `src/app/layout.tsx` | Root layout: applies Geist + Cinzel fonts, global metadata, global CSS, night-bg class |
 | `src/app/page.tsx` | Landing / home page |
+| `src/app/login/page.tsx` | Player login page — fetches players and renders `LoginScreen` |
 | `src/app/(admin)/admin/login/page.tsx` | Admin login UI |
 | `src/app/(admin)/admin/page.tsx` | Admin dashboard |
 | `src/app/(game)/game/page.tsx` | Main game room page |
@@ -102,6 +106,7 @@ killer-guesser/
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
 | `src/app/api/player/route.ts` | Handles player registration / session (POST) |
 | `src/app/globals.css` | Tailwind v4 CSS-first entry point |
+| `src/components/auth/LoginScreen.tsx` | Single-page animated login: landing view + avatar-picker bottom sheet/modal |
 | `src/components/PlayerLogin.tsx` | Nickname + avatar onboarding component |
 | `src/components/AvatarUpload.tsx` | Avatar upload widget |
 | `src/components/ui/Button.tsx` | Accessible Button component |
