@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (player CRUD admin pages + API routes; avatar upload via Vercel Blob; replaced AWS SDK with @vercel/blob)
+> **Last Updated:** 2026-03-08 (role management: GET/POST /api/admin/roles, PATCH/DELETE /api/admin/roles/[id], /admin/roles page with interactive chance sliders and permission checkboxes)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -53,6 +53,9 @@ killer-guesser/
 │   │   │   │   │   ├── new/   # Create new player page
 │   │   │   │   │   ├── page.tsx              # Players list
 │   │   │   │   │   └── DeletePlayerButton.tsx # Client delete button
+│   │   │   │   ├── roles/     # Role management pages
+│   │   │   │   │   ├── page.tsx              # Roles list (server component)
+│   │   │   │   │   └── RolesClient.tsx       # Interactive table + add/edit panels (client)
 │   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
@@ -63,6 +66,9 @@ killer-guesser/
 │   │   │   │   └── players/   # Admin player management API
 │   │   │   │       ├── route.ts         # GET (list players) + POST (create player)
 │   │   │   │       └── [id]/route.ts    # PATCH (update) + DELETE (soft-delete)
+│   │   │   │   └── roles/     # Admin role management API
+│   │   │   │       ├── route.ts         # GET (list roles) + POST (create role)
+│   │   │   │       └── [id]/route.ts    # PATCH (update) + DELETE (forbidden if is_default=1)
 │   │   │   ├── auth/          # NextAuth.js catch-all route handler
 │   │   │   ├── avatar/        # Avatar upload API
 │   │   │   ├── player/        # Player registration / session API
@@ -120,6 +126,8 @@ killer-guesser/
 | `src/app/(admin)/admin/players/page.tsx` | Players list: avatar thumbnail, name, active status, edit/delete actions |
 | `src/app/(admin)/admin/players/DeletePlayerButton.tsx` | Client-side delete (soft-delete) button with confirmation |
 | `src/app/(admin)/admin/players/new/page.tsx` | New player form: name input, avatar upload with live preview |
+| `src/app/(admin)/admin/roles/page.tsx` | Roles list: server component — fetches roles from DB, passes to RolesClient |
+| `src/app/(admin)/admin/roles/RolesClient.tsx` | Interactive roles table: color swatch, inline chance slider (optimistic), add/edit panels, permission checkboxes, team-total warning |
 | `src/app/(game)/game/page.tsx` | Main game room page |
 | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js route handler |
 | `src/app/api/avatar/route.ts` | Handles avatar image upload (POST) |
@@ -139,9 +147,12 @@ killer-guesser/
 | `src/lib/auth-helpers.ts` | Shared auth utilities — `requireAdmin()` returns the session or null |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/blob.ts` | Thin wrapper around `@vercel/blob` — `uploadBlob(filename, buffer, mimeType)` → public URL |
+| `src/lib/role-constants.ts` | Shared role constants — `DEFAULT_ROLE_COLOR`, `ROLE_PERMISSIONS` tuple, `RolePermission` type |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
 | `src/app/api/admin/players/route.ts` | GET (all players, ordered by name) + POST (create player with Zod validation) — admin only |
 | `src/app/api/admin/players/[id]/route.ts` | PATCH (update player fields) + DELETE (soft-delete: sets is_active=0) — admin only |
+| `src/app/api/admin/roles/route.ts` | GET (all roles, ordered by name) + POST (create role with Zod validation) — admin only |
+| `src/app/api/admin/roles/[id]/route.ts` | PATCH (update role fields) + DELETE (forbidden if is_default=1; otherwise hard-delete) — admin only |
 | `src/app/api/upload/avatar/route.ts` | POST: multipart form, validates webp/gif + 4 MB limit, uploads to Vercel Blob |
 | `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
@@ -172,6 +183,10 @@ killer-guesser/
 | `POST` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | Create new player account (Zod validation) — admin only |
 | `PATCH` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Update player fields — admin only |
 | `DELETE` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Soft-delete player (sets is_active=0) — admin only |
+| `GET` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | List all roles ordered by name — admin only |
+| `POST` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | Create new role (Zod validation: name, team, chance_percent required; description, color_hex, permissions optional) — admin only |
+| `PATCH` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Update role fields — admin only |
+| `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") — admin only |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
 
 > This table will be expanded as new API routes are added.
