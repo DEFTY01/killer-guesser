@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 22 — Healer Revival: POST revive route with is_dead check, is_dead=0 update, revive_cooldown_seconds in game_settings, Ably PLAYER_REVIVED broadcast with full payload; GameBoardClient subscribes to PLAYER_REVIVED and uses POST; optimistic is_dead=0 update)
+> **Last Updated:** 2026-03-08 (PROMPT 23 — Spy Vote View: vote GET endpoint enriched with voter/target avatar_url for see_votes callers; vote POST Ably VOTE_CAST payload extended with voter_avatar_url + target_avatar_url; VotePageClient collapsible "Secret Info 🕵️" section with avatar+name rows, real-time via Ably VOTE_CAST, hidden for non-spy roles)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -181,7 +181,7 @@ killer-guesser/
 | `src/app/(game)/game/[id]/page.tsx` | Game board: server wrapper — resolves `id` param and renders GameBoardClient |
 | `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown, murder item card, player grid, vote button, self-death modal; subscribes to PLAYER_DIED (instant grayscale), PLAYER_REVIVED (remove grayscale+X, show Undead), and GAME_ENDED (modal + 3s redirect) |
 | `src/app/(game)/game/[id]/vote/[day]/page.tsx` | Voting page: server wrapper — resolves `id` + `day` params and renders VotePageClient |
-| `src/app/(game)/game/[id]/vote/[day]/VotePageClient.tsx` | Voting page (client): submit vote, "already voted" state, spy view (see_votes; subscribes to VOTE_CAST for live list), results view (subscribes to VOTE_CLOSED), vote-window timer triggers close call |
+| `src/app/(game)/game/[id]/vote/[day]/VotePageClient.tsx` | Voting page (client): submit vote, "already voted" state, collapsible "Secret Info 🕵️" spy view (see_votes only; shows voter/target avatars+names, "No votes yet", subscribes to VOTE_CAST for real-time live list), results view (subscribes to VOTE_CLOSED), vote-window timer triggers close call |
 | `src/app/(game)/lobby/page.tsx` | Player lobby — client component: active games, upcoming games (with countdown), past games (win/loss); skeleton loading; empty state |
 | `src/app/(game)/participants/page.tsx` | Participants page — client component: avatar grid (3-col), team badges, player count, back button |
 | `src/hooks/useCountdown.ts` | `useCountdown(target: Date)` — returns `{ hours, minutes, seconds, isExpired }`, ticks every second, cleans up interval on unmount |
@@ -268,8 +268,8 @@ killer-guesser/
 | `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller; `see_killer` → `killer_id`; `see_votes` → today's vote details |
 | `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
 | `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
-| `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names |
-| `POST` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Submit vote — one per player per day; body: `{ target_id }`; publishes `VOTE_CAST` to vote channel with voter/target names |
+| `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names and avatar_url |
+| `POST` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Submit vote — one per player per day; body: `{ target_id }`; publishes `VOTE_CAST` to vote channel with voter/target names and avatar_url |
 | `POST` | `/api/game/[id]/vote/[day]/close` | `src/app/api/game/[id]/vote/[day]/close/route.ts` | Close vote window — computes grouped results, publishes `VOTE_CLOSED` to game channel; idempotent |
 
 > This table will be expanded as new API routes are added.
