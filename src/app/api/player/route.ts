@@ -1,15 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { players } from "@/db/schema";
+import { users } from "@/db/schema";
 import { playerRegisterSchema } from "@/lib/validations";
 import { eq } from "drizzle-orm";
 
-const SESSION_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours
+const SESSION_TTL_S = 24 * 60 * 60; // 24 hours in seconds
 
 /**
  * POST /api/player
  *
- * Create a new player and issue a session token.
+ * Create a new player user and issue a session token.
  * Body: { nickname: string }
  */
 export async function POST(req: NextRequest) {
@@ -24,14 +24,13 @@ export async function POST(req: NextRequest) {
   }
 
   const sessionToken = crypto.randomUUID();
-  const sessionExpiresAt = new Date(Date.now() + SESSION_TTL_MS);
+  const expiresAt = Math.floor(Date.now() / 1000) + SESSION_TTL_S;
 
   const [player] = await db
-    .insert(players)
+    .insert(users)
     .values({
-      nickname: parsed.data.nickname,
-      sessionToken,
-      sessionExpiresAt,
+      name: parsed.data.nickname,
+      role: "member",
     })
     .returning();
 
@@ -40,9 +39,9 @@ export async function POST(req: NextRequest) {
       success: true,
       data: {
         playerId: player.id,
-        nickname: player.nickname,
-        sessionToken: player.sessionToken,
-        expiresAt: player.sessionExpiresAt?.getTime() ?? null,
+        name: player.name,
+        sessionToken,
+        expiresAt,
       },
     },
     { status: 201 }
@@ -50,29 +49,29 @@ export async function POST(req: NextRequest) {
 }
 
 /**
- * GET /api/player?token=<sessionToken>
+ * GET /api/player?id=<userId>
  *
- * Retrieve the player for the given session token.
+ * Retrieve the player for the given user ID.
  */
 export async function GET(req: NextRequest) {
-  const token = req.nextUrl.searchParams.get("token");
-  if (!token) {
+  const id = req.nextUrl.searchParams.get("id");
+  if (!id) {
     return NextResponse.json(
-      { success: false, error: "Missing token" },
+      { success: false, error: "Missing id" },
       { status: 400 }
     );
   }
 
   const [player] = await db
     .select()
-    .from(players)
-    .where(eq(players.sessionToken, token))
+    .from(users)
+    .where(eq(users.id, Number(id)))
     .limit(1);
 
-  if (!player || (player.sessionExpiresAt && player.sessionExpiresAt.getTime() < Date.now())) {
+  if (!player) {
     return NextResponse.json(
-      { success: false, error: "Invalid or expired session" },
-      { status: 401 }
+      { success: false, error: "Player not found" },
+      { status: 404 }
     );
   }
 
@@ -80,8 +79,8 @@ export async function GET(req: NextRequest) {
     success: true,
     data: {
       playerId: player.id,
-      nickname: player.nickname,
-      avatarUrl: player.avatarUrl,
+      name: player.name,
+      avatarUrl: player.avatar_url,
     },
   });
 }

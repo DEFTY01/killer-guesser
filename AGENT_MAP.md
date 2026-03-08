@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 05 — Turso DB connection & Drizzle client)
+> **Last Updated:** 2026-03-08 (PROMPT 06 — Full Database Schema)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -107,13 +107,14 @@ killer-guesser/
 | `src/components/ui/Button.tsx` | Accessible Button component |
 | `src/components/ui/Card.tsx` | Card layout component |
 | `src/components/ui/Input.tsx` | Accessible Input component |
-| `src/db/schema.ts` | Drizzle schema (players, sessions, games, …) |
+| `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
-| `src/lib/auth.ts` | NextAuth.js v5 config (providers, adapter, callbacks) |
+| `src/lib/auth.ts` | NextAuth.js v5 config (JWT-only, no DrizzleAdapter; credentials matched against users.name + role) |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
-| `src/types/index.ts` | Shared TypeScript types; placeholder for schema-inferred types (exported later) |
+| `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
+| `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
 | `tests/unit/Button.test.tsx` | Unit tests for Button UI component |

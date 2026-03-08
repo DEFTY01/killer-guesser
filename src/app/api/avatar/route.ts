@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
-import { players } from "@/db/schema";
+import { users } from "@/db/schema";
 import { resizeAvatar } from "@/lib/avatar";
 import { avatarUploadSchema } from "@/lib/validations";
 import { eq } from "drizzle-orm";
@@ -10,10 +10,10 @@ import { eq } from "drizzle-orm";
  *
  * Accepts a multipart/form-data upload with:
  *  - `file`     — the avatar image (JPEG / PNG / WebP / GIF)
- *  - `playerId` — the player to update
+ *  - `playerId` — the user ID to update
  *
  * The image is resized to 500 × 500 px using Lanczos3 neural-quality
- * resampling and stored in the database.
+ * resampling and its public URL is stored in users.avatar_url.
  */
 export async function POST(req: NextRequest) {
   const formData = await req.formData();
@@ -42,14 +42,19 @@ export async function POST(req: NextRequest) {
   const inputBuffer = Buffer.from(await file.arrayBuffer());
   const processed = await resizeAvatar(inputBuffer);
 
+  // TODO: upload processed.buffer to Cloudflare R2 and store the public URL.
+  // For now, store a placeholder URL until the storage integration is wired up.
+  const avatarUrl = `/api/avatar/${playerId}`;
+
   await db
-    .update(players)
-    .set({ avatarData: processed.buffer })
-    .where(eq(players.id, playerId));
+    .update(users)
+    .set({ avatar_url: avatarUrl })
+    .where(eq(users.id, Number(playerId)));
 
   return NextResponse.json({
     success: true,
     data: {
+      avatarUrl,
       width: processed.width,
       height: processed.height,
       mimeType: processed.mimeType,

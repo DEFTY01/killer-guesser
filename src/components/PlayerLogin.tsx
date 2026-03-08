@@ -37,7 +37,7 @@ export function PlayerLogin() {
       const { playerId, sessionToken, expiresAt } = json.data;
       const playerSession: PlayerSession = {
         playerId,
-        nickname,
+        name: nickname,
         avatarUrl: null,
         sessionToken,
         expiresAt,
@@ -84,12 +84,12 @@ export function PlayerLogin() {
   if (step === "avatar" && session) {
     return (
       <Card
-        title={`Hi, ${session.nickname}! 👋`}
+        title={`Hi, ${session.name}! 👋`}
         description="Upload an avatar (optional)."
         className="w-full max-w-sm"
       >
         <AvatarUpload
-          playerId={session.playerId}
+          playerId={String(session.playerId)}
           onSuccess={(url) =>
             setSession((s) => (s ? { ...s, avatarUrl: url } : s))
           }
@@ -110,7 +110,7 @@ export function PlayerLogin() {
       description="Waiting for the game to start…"
       className="w-full max-w-sm text-center"
     >
-      <p className="text-2xl font-bold mt-2">{session?.nickname}</p>
+      <p className="text-2xl font-bold mt-2">{session?.name}</p>
       <p className="mt-2 text-gray-500">You&apos;re in! Good luck 🎉</p>
     </Card>
   );
