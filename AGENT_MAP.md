@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 26 — Murder item display: GameBoardClient `MurderItemCard` shows "The killer's weapon:" header, thumbnail, bold name, and fullscreen image modal with backdrop blur on tap; hidden when no murder item set)
+> **Last Updated:** 2026-03-08 (PROMPT 28 — Background image upload & dark/light mode: `app_settings` singleton table, `ThemeProvider` (next-themes), `/api/admin/settings` GET/PATCH, `/api/game/theme` GET, `/api/upload/background` POST, `ThemeSettingsClient` upload zones on admin dashboard, root layout reads bg URLs and sets `--bg-light-image`/`--bg-dark-image` CSS vars)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -110,13 +110,15 @@ killer-guesser/
 │   │   │   └── upload/
 │   │   │       └── avatar/    # Vercel Blob avatar upload endpoint
 │   │   │       └── murder-item/ # Vercel Blob murder item upload endpoint
+│   │   │       └── background/ # Vercel Blob background image upload endpoint
 │   │   ├── login/             # Player login page (single-page avatar picker)
 │   │   ├── globals.css        # Global styles (Tailwind v4 imports)
-│   │   ├── layout.tsx         # Root layout (fonts, metadata)
+│   │   ├── layout.tsx         # Root layout (fonts, metadata, ThemeProvider, bg CSS vars)
 │   │   └── page.tsx           # Home / landing page
 │   ├── components/
 │   │   ├── auth/
 │   │   │   └── LoginScreen.tsx    # Single-page avatar-picker login (client component)
+│   │   ├── ThemeProvider.tsx  # Client wrapper for next-themes ThemeProvider
 │   │   ├── game/                  # In-game components
 │   │   │   ├── PlayerCard.tsx     # Role-aware player card (dead overlay, killer border, revive button)
 │   │   │   └── VoteCountdown.tsx  # Live countdown to vote window end (hidden outside window)
@@ -168,7 +170,8 @@ killer-guesser/
 | `src/app/login/page.tsx` | Player login page — fetches players and renders `LoginScreen` |
 | `src/app/(admin)/layout.tsx` | Admin shell: role-based auth, sidebar (desktop), bottom tab bar (mobile) |
 | `src/app/(admin)/admin/page.tsx` | Redirects to `/admin/dashboard` |
-| `src/app/(admin)/admin/dashboard/page.tsx` | Dashboard: stats cards, quick actions, recent games |
+| `src/app/(admin)/admin/dashboard/page.tsx` | Dashboard: stats cards, quick actions, theme settings (bg upload), recent games |
+| `src/app/(admin)/admin/dashboard/ThemeSettingsClient.tsx` | Client component: two upload zones (light/dark) with image preview, file input → `/api/upload/background`, Reset button |
 | `src/app/(admin)/admin/players/page.tsx` | Players list: avatar thumbnail, name, active status, edit/delete actions |
 | `src/app/(admin)/admin/players/DeletePlayerButton.tsx` | Client-side delete (soft-delete) button with confirmation |
 | `src/app/(admin)/admin/players/new/page.tsx` | New player form: name input, avatar upload with live preview |
@@ -221,13 +224,16 @@ killer-guesser/
 | `src/app/api/admin/games/[id]/route.ts` | GET (full game with settings + players including role data) + PATCH (action: close_voting / close / delete) — admin only |
 | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | PATCH (mark player dead / change role assignment) — admin only |
 | `src/app/api/admin/games/[id]/reroll/route.ts` | POST ?type=teams (random 50/50 split) or ?type=roles (weighted random by chance_percent) — admin only |
+| `src/app/api/admin/settings/route.ts` | GET (bg_light_url + bg_dark_url from app_settings singleton) + PATCH (update URLs) — admin only |
 | `src/app/api/upload/avatar/route.ts` | POST: multipart form, validates webp/gif + 4 MB limit, uploads to Vercel Blob |
 | `src/app/api/upload/murder-item/route.ts` | POST: multipart form, validates jpeg/png/webp/gif + 4 MB limit, uploads to Vercel Blob with unique filename |
+| `src/app/api/upload/background/route.ts` | POST: multipart form, validates jpeg/png/webp + 8 MB limit, uploads to Vercel Blob under `backgrounds/` prefix |
 | `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
 | `src/db/migrations/0002_revive_cooldown.sql` | Migration: add `revive_cooldown_seconds` integer column to `game_settings` |
+| `src/db/migrations/0003_stormy_cyclops.sql` | Migration: create `app_settings` singleton table (id=1, bg_light_url, bg_dark_url) |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
 | `tests/unit/roleUtils.test.ts` | Unit tests for `isKiller` helper |
 | `tests/unit/gameEnd.test.ts` | Unit tests for all four game-end functions (DB transaction, archiving, deletion, Ably publish) |
@@ -265,10 +271,14 @@ killer-guesser/
 | `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Update game player: is_dead (0/1) and/or role_id — admin only |
 | `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) — admin only |
+| `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Get global bg_light_url + bg_dark_url from app_settings singleton — admin only |
+| `PATCH` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Upsert bg_light_url and/or bg_dark_url (pass null to clear) — admin only |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
 | `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
+| `POST` | `/api/upload/background` | `src/app/api/upload/background/route.ts` | Upload background image to Vercel Blob under `backgrounds/` prefix (jpeg/png/webp, max 8 MB) |
 | `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
 | `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
+| `GET` | `/api/game/theme` | `src/app/api/game/theme/route.ts` | Returns bg_light_url + bg_dark_url from app_settings for the client layout — public |
 | `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`); `see_killer` → `killer_id`; `see_votes` → today's vote details; **Mayor**: player objects stripped to `{id, user_id, name, avatar_url, is_dead, revived_at}` only (no `role_color`, no `team`) |
 | `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
 | `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
