@@ -1,25 +1,33 @@
 import type { Metadata } from "next";
 import { db } from "@/db";
-import { players } from "@/db/schema";
+import { users } from "@/db/schema";
+import { eq } from "drizzle-orm";
 import LoginScreen from "@/components/auth/LoginScreen";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = { title: "Enter the Game" };
 
 /**
- * Thin server component: fetches all players and passes them to the
- * client-side LoginScreen for the single-page avatar-picker login flow.
- *
- * The schema has no `is_active` flag; all player records are shown.
+ * Thin server component: fetches all active players from the users table
+ * and passes them to the client-side LoginScreen for the single-page
+ * avatar-picker login flow.
  */
 export default async function LoginPage() {
   const allPlayers = await db
     .select({
-      id: players.id,
-      nickname: players.nickname,
-      avatarUrl: players.avatarUrl,
+      id: users.id,
+      name: users.name,
+      avatar_url: users.avatar_url,
     })
-    .from(players);
+    .from(users)
+    .where(eq(users.is_active, 1));
 
-  return <LoginScreen players={allPlayers} />;
+  // Map to the shape LoginScreen expects
+  const players = allPlayers.map((u) => ({
+    id: String(u.id),
+    nickname: u.name,
+    avatarUrl: u.avatar_url,
+  }));
+
+  return <LoginScreen players={players} />;
 }
