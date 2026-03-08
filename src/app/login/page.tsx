@@ -1,6 +1,6 @@
 import type { Metadata } from "next";
 import { db } from "@/db";
-import { players } from "@/db/schema";
+import { users } from "@/db/schema";
 import LoginScreen from "@/components/auth/LoginScreen";
 
 export const dynamic = "force-dynamic";
@@ -15,11 +15,12 @@ export const metadata: Metadata = { title: "Enter the Game" };
 export default async function LoginPage() {
   const allPlayers = await db
     .select({
-      id: players.id,
-      nickname: players.nickname,
-      avatarUrl: players.avatarUrl,
+      id: users.id,
+      nickname: users.name,
+      avatarUrl: users.avatar_url,
     })
-    .from(players);
+    .from(users)
+    .then((rows) => rows.map((r) => ({ ...r, id: String(r.id) })));
 
   return <LoginScreen players={allPlayers} />;
 }

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/db";
-import { games, players } from "@/db/schema";
+import { games, users } from "@/db/schema";
 import { sql, eq, desc } from "drizzle-orm";
 import type { GameStatus } from "@/types";
 
@@ -12,7 +12,7 @@ export default async function AdminDashboard() {
     await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
-        .from(players)
+        .from(users)
         .then((r) => r[0]?.count ?? 0),
       db
         .select({ count: sql<number>`count(*)` })
@@ -23,7 +23,7 @@ export default async function AdminDashboard() {
         .select({ count: sql<number>`count(*)` })
         .from(games)
         .then((r) => r[0]?.count ?? 0),
-      db.select().from(games).orderBy(desc(games.createdAt)).limit(5),
+      db.select().from(games).orderBy(desc(games.created_at)).limit(5),
     ]);
 
   return (
@@ -100,7 +100,7 @@ export default async function AdminDashboard() {
                       <StatusBadge status={game.status} />
                     </td>
                     <td className="px-4 py-3 text-gray-500">
-                      {new Date(game.createdAt).toLocaleDateString()}
+                      {new Date(game.created_at * 1000).toLocaleDateString()}
                     </td>
                   </tr>
                 ))}
