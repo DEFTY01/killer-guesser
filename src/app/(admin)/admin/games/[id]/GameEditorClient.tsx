@@ -358,21 +358,25 @@ export default function GameEditorClient({
           Vote Window (UTC, HH:MM)
         </h2>
         <div className="flex flex-wrap items-end gap-3">
-          <label className="flex flex-col gap-1">
+          <label htmlFor="vote-window-start" className="flex flex-col gap-1">
             <span className="text-xs text-gray-500">Start</span>
             <input
+              id="vote-window-start"
               type="time"
               value={voteStart}
               onChange={(e) => setVoteStart(e.target.value)}
+              aria-label="Vote window start time (UTC)"
               className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>
-          <label className="flex flex-col gap-1">
+          <label htmlFor="vote-window-end" className="flex flex-col gap-1">
             <span className="text-xs text-gray-500">End</span>
             <input
+              id="vote-window-end"
               type="time"
               value={voteEnd}
               onChange={(e) => setVoteEnd(e.target.value)}
+              aria-label="Vote window end time (UTC)"
               className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>

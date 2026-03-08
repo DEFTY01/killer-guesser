@@ -877,7 +877,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
           aria-label="Guess the killer"
         >
-          🔍 Guess the killer!
+          <span aria-hidden="true">🔍</span> Guess the killer!
         </button>
       )}
 

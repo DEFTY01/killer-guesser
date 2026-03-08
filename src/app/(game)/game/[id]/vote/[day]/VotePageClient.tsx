@@ -48,6 +48,7 @@ interface ClosedState {
   callerUserId: number;
   vote_window_start: string | null;
   vote_window_end: string | null;
+  eliminated?: { id: number; name: string } | null;
   results: VoteResult[];
   votes?: VoteEntry[];
 }
@@ -187,6 +188,10 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         if (d.votes) setLiveVotes(d.votes);
         if (!d.windowOpen) {
           setResults(d.results);
+          // Populate eliminated from the GET response (covers late-joiners)
+          if (d.eliminated !== undefined) {
+            setEliminated(d.eliminated ?? null);
+          }
         }
       })
       .catch((err: Error) => setError(err.message));

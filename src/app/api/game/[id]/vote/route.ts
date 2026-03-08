@@ -279,10 +279,29 @@ export async function GET(
       voteCount: r.vote_count,
     }));
 
+    // Find who (if anyone) was eliminated in the evening for today's day.
+    // This covers both the first-caller and subsequent GET calls after close.
+    const eveningDead = await db
+      .select({ user_id: game_players.user_id, name: users.name })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(
+        and(
+          eq(game_players.game_id, gameId),
+          eq(game_players.is_dead, 1),
+          eq(game_players.died_time_of_day, "evening"),
+        ),
+      )
+      .limit(1);
+    const eliminatedFromDb = eveningDead[0]
+      ? { id: eveningDead[0].user_id, name: eveningDead[0].name }
+      : null;
+
     const responseData: Record<string, unknown> = {
       windowOpen: false,
       day,
       callerUserId: userId,
+      eliminated: eliminatedFromDb,
       results,
       vote_window_start: reloaded?.vote_window_start ?? null,
       vote_window_end: reloaded?.vote_window_end ?? null,
@@ -397,7 +416,7 @@ export async function GET(
       responseData.votes = enriched.map((v) => ({
         voterId: v.voter_id,
         voterName: v.voter_name,
-        voterAvatarUrl: null as string | null,
+        voterAvatarUrl: playerMap.get(v.voter_id)?.avatarUrl ?? null,
         targetId: v.target_id,
         targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
         targetAvatarUrl: playerMap.get(v.target_id)?.avatarUrl ?? null,
