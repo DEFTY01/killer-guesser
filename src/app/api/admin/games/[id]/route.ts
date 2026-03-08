@@ -7,9 +7,11 @@ import {
   game_settings,
   roles,
   users,
+  votes,
 } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { and, count, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Zod schema ────────────────────────────────────────────────────
 
@@ -153,11 +155,45 @@ export async function PATCH(
   }
 
   if (action === "close_voting") {
+    const [existing_game] = await db
+      .select({ vote_window_start: games.vote_window_start })
+      .from(games)
+      .where(eq(games.id, id))
+      .limit(1);
+
     const [updated] = await db
       .update(games)
       .set({ vote_window_start: null, vote_window_end: null })
       .where(eq(games.id, id))
       .returning();
+
+    // Publish VOTE_CLOSED with vote results on the game channel.
+    if (process.env.ABLY_API_KEY && existing_game?.vote_window_start) {
+      const nowUnix = Math.floor(Date.now() / 1000);
+      const currentDay = await db
+        .select({ start_time: games.start_time })
+        .from(games)
+        .where(eq(games.id, id))
+        .limit(1)
+        .then(([g]) =>
+          g ? Math.max(1, Math.floor((nowUnix - g.start_time) / 86400) + 1) : 1,
+        );
+
+      const voteResults = await db
+        .select({
+          target_id: votes.target_id,
+          target_name: users.name,
+          vote_count: count(votes.id),
+        })
+        .from(votes)
+        .innerJoin(users, eq(votes.target_id, users.id))
+        .where(and(eq(votes.game_id, id), eq(votes.day, currentDay)))
+        .groupBy(votes.target_id, users.name);
+
+      const channel = ablyServer.channels.get(ABLY_CHANNELS.game(id));
+      await channel.publish(ABLY_EVENTS.vote_closed, { results: voteResults });
+    }
+
     return NextResponse.json({ success: true, data: updated });
   }
 

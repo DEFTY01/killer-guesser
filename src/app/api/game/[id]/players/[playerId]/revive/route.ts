@@ -4,6 +4,7 @@ import { db } from "@/db";
 import { game_players, roles } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
+import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -99,6 +100,14 @@ export async function PATCH(
       { success: false, error: "Player record not found" },
       { status: 404 },
     );
+  }
+
+  // Publish real-time event after successful mutation.
+  if (process.env.ABLY_API_KEY) {
+    const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+    await channel.publish(ABLY_EVENTS.player_revived, {
+      player_id: updated.user_id,
+    });
   }
 
   return NextResponse.json({ success: true, data: updated });
