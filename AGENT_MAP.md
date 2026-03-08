@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (auth: two separate Credentials providers — avatar-based player login and password-only admin login; middleware updated; admin login page rebuilt)
+> **Last Updated:** 2026-03-08 (admin layout with role-check + sidebar/bottom-nav shell created; admin dashboard page with stats cards, quick actions, and recent games created)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
