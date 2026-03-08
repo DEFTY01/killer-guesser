@@ -139,6 +139,14 @@ export const game_settings = sqliteTable("game_settings", {
   revive_cooldown_seconds: integer("revive_cooldown_seconds"),
 });
 
+// ── app_settings (singleton — id is always 1) ────────────────────
+
+export const app_settings = sqliteTable("app_settings", {
+  id: integer("id").primaryKey().default(1),
+  bg_light_url: text("bg_light_url"),
+  bg_dark_url: text("bg_dark_url"),
+});
+
 // ── Relations ─────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many }) => ({

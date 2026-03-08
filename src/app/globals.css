@@ -22,8 +22,33 @@ body {
 /* ── Night background ───────────────────────────────────────────── */
 
 .night-bg {
-  background: linear-gradient(180deg, #02020d 0%, #05091a 55%, #0a1230 100%);
+  background-color: #0D1B2A;
+  background-image: linear-gradient(180deg, #02020d 0%, #05091a 55%, #0a1230 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
   min-height: 100dvh;
+}
+
+/* Light mode: snowy white default, or custom image via CSS variable */
+.light .night-bg,
+:root[class~="light"] .night-bg {
+  background-color: #F7FBFF;
+  background-image: var(--bg-light-image);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+/* Dark mode: dark blue default, or custom image via CSS variable */
+.dark .night-bg,
+:root[class~="dark"] .night-bg {
+  background-color: #0D1B2A;
+  background-image: var(--bg-dark-image),
+    linear-gradient(180deg, #02020d 0%, #05091a 55%, #0a1230 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
 }
 
 /* Star field — box-shadow on a 1 × 1 px fixed element */

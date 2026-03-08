@@ -2,6 +2,10 @@ import type { Metadata } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
+import { ThemeProvider } from "@/components/ThemeProvider";
+import { db } from "@/db";
+import { app_settings } from "@/db/schema";
+import { eq } from "drizzle-orm";
 
 export const metadata: Metadata = {
   title: {
@@ -11,13 +15,38 @@ export const metadata: Metadata = {
   description: "A real-time social deduction guessing game",
 };
 
-export default function RootLayout({
+export default async function RootLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  // Fetch global theme background URLs — gracefully fall back to null on error.
+  let bgLightUrl: string | null = null;
+  let bgDarkUrl: string | null = null;
+  try {
+    const [row] = await db
+      .select()
+      .from(app_settings)
+      .where(eq(app_settings.id, 1))
+      .limit(1);
+    // Validate URLs to prevent CSS injection via malicious database values.
+    const validateUrl = (u: string | null | undefined): string | null => {
+      if (!u) return null;
+      try {
+        const parsed = new URL(u);
+        return parsed.protocol === "https:" ? u : null;
+      } catch {
+        return null;
+      }
+    };
+    bgLightUrl = validateUrl(row?.bg_light_url);
+    bgDarkUrl = validateUrl(row?.bg_dark_url);
+  } catch {
+    // Non-fatal: fall back to CSS defaults.
+  }
+
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <head>
         {/* Cinzel display font for headings — loaded at runtime from Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -34,8 +63,25 @@ export default function RootLayout({
       </head>
       <body
         className={`${GeistSans.variable} ${GeistMono.variable} antialiased night-bg`}
+        style={
+          {
+            ...(bgLightUrl
+              ? { "--bg-light-image": `url(${bgLightUrl})` }
+              : {}),
+            ...(bgDarkUrl
+              ? { "--bg-dark-image": `url(${bgDarkUrl})` }
+              : {}),
+          } as React.CSSProperties
+        }
       >
-        {children}
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="dark"
+          enableSystem
+          disableTransitionOnChange
+        >
+          {children}
+        </ThemeProvider>
       </body>
     </html>
   );

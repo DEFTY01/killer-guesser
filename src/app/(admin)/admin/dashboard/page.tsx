@@ -1,14 +1,15 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/db";
-import { games, users } from "@/db/schema";
+import { games, users, app_settings } from "@/db/schema";
 import { sql, eq, desc } from "drizzle-orm";
 import type { GameStatus } from "@/types";
+import ThemeSettingsClient from "./ThemeSettingsClient";
 
 export const metadata: Metadata = { title: "Dashboard" };
 
 export default async function AdminDashboard() {
-  const [totalPlayers, activeGames, totalGames, recentGames] =
+  const [totalPlayers, activeGames, totalGames, recentGames, themeSettings] =
     await Promise.all([
       db
         .select({ count: sql<number>`count(*)` })
@@ -24,6 +25,12 @@ export default async function AdminDashboard() {
         .from(games)
         .then((r) => r[0]?.count ?? 0),
       db.select().from(games).orderBy(desc(games.created_at)).limit(5),
+      db
+        .select()
+        .from(app_settings)
+        .where(eq(app_settings.id, 1))
+        .limit(1)
+        .then((r) => r[0] ?? null),
     ]);
 
   return (
@@ -60,6 +67,12 @@ export default async function AdminDashboard() {
           </Link>
         </div>
       </section>
+
+      {/* Theme Settings */}
+      <ThemeSettingsClient
+        initialLightUrl={themeSettings?.bg_light_url ?? null}
+        initialDarkUrl={themeSettings?.bg_dark_url ?? null}
+      />
 
       {/* Recent games */}
       <section aria-labelledby="recent-games-heading">
