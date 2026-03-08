@@ -332,18 +332,3 @@ killer-guesser/
 | `postcss` | `^8.5.8` | CSS transformation tool |
 
 ---
-
-## DO NOT OPEN
-
-The following config files are managed by the scaffolding or tooling and must
-**not** be opened or modified without explicit permission:
-
-- `next.config.ts`
-- `tailwind.config.ts` *(not present — Tailwind v4 is CSS-first)*
-- `tsconfig.json`
-- `postcss.config.mjs`
-- `drizzle.config.ts`
-- `vitest.config.ts`
-- `playwright.config.ts`
-- `package-lock.json`
-- `.gitignore`
