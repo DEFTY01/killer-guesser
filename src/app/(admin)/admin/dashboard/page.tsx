@@ -94,7 +94,7 @@ export default async function AdminDashboard() {
                     className="border-b last:border-0 hover:bg-gray-50"
                   >
                     <td className="px-4 py-3 font-mono font-medium">
-                      {game.code}
+                      {game.id}
                     </td>
                     <td className="px-4 py-3">
                       <StatusBadge status={game.status} />
