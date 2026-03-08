@@ -22,8 +22,10 @@ interface VotePlayer {
 interface VoteEntry {
   voter_id: number;
   voter_name: string;
+  voter_avatar_url: string | null;
   target_id: number;
   target_name: string;
+  target_avatar_url: string | null;
 }
 
 interface VoteResult {
@@ -87,6 +89,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   // Real-time spy list of votes (see_votes permission)
   const [liveVotes, setLiveVotes] = useState<VoteEntry[]>([]);
+  const [spyPanelOpen, setSpyPanelOpen] = useState(true);
 
   // Results view state (shown after VOTE_CLOSED)
   const [results, setResults] = useState<VoteResult[] | null>(null);
@@ -412,24 +415,71 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         </div>
       )}
 
-      {/* ── Spy view: live vote list ─────────────────────────── */}
+      {/* ── Spy view: collapsible live vote list ────────────── */}
       {canSeeVotes && (
-        <div className="rounded-xl border border-gray-200 bg-gray-50 p-4 space-y-2">
-          <h2 className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            Live votes (secret view)
-          </h2>
-          {liveVotes.length === 0 ? (
-            <p className="text-sm text-gray-400">No votes yet.</p>
-          ) : (
-            <ul className="space-y-1">
-              {liveVotes.map((v, i) => (
-                <li key={i} className="text-sm text-gray-700">
-                  <span className="font-semibold">{v.voter_name}</span>
-                  {" → "}
-                  <span className="font-semibold">{v.target_name}</span>
-                </li>
-              ))}
-            </ul>
+        <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+          <button
+            type="button"
+            onClick={() => setSpyPanelOpen((o) => !o)}
+            className="w-full flex items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+            aria-expanded={spyPanelOpen}
+          >
+            <span className="text-sm font-semibold text-gray-700">
+              Secret Info 🕵️
+            </span>
+            <span
+              className={`text-gray-400 text-xs transition-transform duration-200 inline-block${spyPanelOpen ? " rotate-180" : ""}`}
+              aria-hidden="true"
+            >
+              ▼
+            </span>
+          </button>
+          {spyPanelOpen && (
+            <div className="px-4 pb-4 space-y-2">
+              {liveVotes.length === 0 ? (
+                <p className="text-sm text-gray-400">No votes yet.</p>
+              ) : (
+                <ul className="space-y-2">
+                  {liveVotes.map((v) => (
+                    <li key={`${v.voter_id}-${v.target_id}`} className="flex items-center gap-2 text-sm text-gray-700">
+                      <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
+                        {v.voter_avatar_url ? (
+                          <Image
+                            src={v.voter_avatar_url}
+                            alt={v.voter_name}
+                            fill
+                            sizes="32px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
+                            {v.voter_name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-semibold truncate">{v.voter_name}</span>
+                      <span className="text-gray-400" aria-hidden="true">→</span>
+                      <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
+                        {v.target_avatar_url ? (
+                          <Image
+                            src={v.target_avatar_url}
+                            alt={v.target_name}
+                            fill
+                            sizes="32px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
+                            {v.target_name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="font-semibold truncate">{v.target_name}</span>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
           )}
         </div>
       )}

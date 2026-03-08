@@ -167,7 +167,14 @@ export async function GET(
     };
     players: typeof normalizedPlayers;
     has_voted: boolean;
-    votes?: Array<{ voter_id: number; voter_name: string; target_id: number; target_name: string }>;
+    votes?: Array<{
+      voter_id: number;
+      voter_name: string;
+      voter_avatar_url: string | null;
+      target_id: number;
+      target_name: string;
+      target_avatar_url: string | null;
+    }>;
   } = {
     game: {
       id: game.id,
@@ -199,13 +206,19 @@ export async function GET(
       .innerJoin(users, eq(votes.voter_id, users.id))
       .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
 
+    // Build a lookup map for O(1) access instead of repeated O(n) find calls
+    const playerByUserId = new Map(
+      normalizedPlayers.map((p) => [p.user_id, p]),
+    );
+
     // Enrich with target names using the players list we already loaded
     data.votes = enrichedVotes.map((v) => ({
       voter_id: v.voter_id,
       voter_name: v.voter_name,
+      voter_avatar_url: playerByUserId.get(v.voter_id)?.avatar_url ?? null,
       target_id: v.target_id,
-      target_name:
-        normalizedPlayers.find((p) => p.user_id === v.target_id)?.name ?? "Unknown",
+      target_name: playerByUserId.get(v.target_id)?.name ?? "Unknown",
+      target_avatar_url: playerByUserId.get(v.target_id)?.avatar_url ?? null,
     }));
   }
 
@@ -318,15 +331,15 @@ export async function POST(
     .values({ game_id: gameId, day, voter_id: userId, target_id })
     .returning();
 
-  // ── Load voter and target names for the Ably payload ─────────
+  // ── Load voter and target names + avatars for the Ably payload ─────────
   const [voterUser] = await db
-    .select({ name: users.name })
+    .select({ name: users.name, avatar_url: users.avatar_url })
     .from(users)
     .where(eq(users.id, userId))
     .limit(1);
 
   const [targetUser] = await db
-    .select({ name: users.name })
+    .select({ name: users.name, avatar_url: users.avatar_url })
     .from(users)
     .where(eq(users.id, target_id))
     .limit(1);
@@ -337,8 +350,10 @@ export async function POST(
     await channel.publish(ABLY_EVENTS.vote_cast, {
       voter_id: userId,
       voter_name: voterUser?.name ?? "Unknown",
+      voter_avatar_url: voterUser?.avatar_url ?? null,
       target_id,
       target_name: targetUser?.name ?? "Unknown",
+      target_avatar_url: targetUser?.avatar_url ?? null,
     });
   }
 
