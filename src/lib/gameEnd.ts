@@ -1,7 +1,7 @@
 import { db } from "@/db";
 import { events, game_players, games, roles } from "@/db/schema";
 import { and, eq, gt, lte, sql } from "drizzle-orm";
-import Ably from "ably";
+import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 /** Type of the transaction object passed by Drizzle to `db.transaction()`. */
 type DbTx = Parameters<Parameters<(typeof db)["transaction"]>[0]>[0];
@@ -24,9 +24,8 @@ async function publishGameEnded(
   const apiKey = process.env.ABLY_API_KEY;
   if (!apiKey) return;
 
-  const ably = new Ably.Rest({ key: apiKey });
-  const channel = ably.channels.get(`game-${gameId}`);
-  await channel.publish("game_ended", { winner_team: winnerTeam });
+  const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+  await channel.publish(ABLY_EVENTS.game_ended, { winner_team: winnerTeam });
 }
 
 /**

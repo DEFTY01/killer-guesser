@@ -33,12 +33,18 @@ const { mockPublish, mockChannelGet, txMock, mockTransaction } = vi.hoisted(() =
 
 vi.mock("@/db", () => ({ db: { transaction: mockTransaction } }));
 
-vi.mock("ably", () => ({
-  default: {
-    // Must use a regular function (not arrow) so `new Ably.Rest()` works.
-    Rest: vi.fn(function () {
-      return { channels: { get: mockChannelGet } };
-    }),
+vi.mock("@/lib/ably", () => ({
+  ablyServer: { channels: { get: mockChannelGet } },
+  ABLY_CHANNELS: {
+    game: (id: string) => `game-${id}`,
+    vote: (id: string, day: number) => `vote-${id}-${day}`,
+  },
+  ABLY_EVENTS: {
+    player_died: "player_died",
+    vote_cast: "vote_cast",
+    vote_closed: "vote_closed",
+    game_ended: "game_ended",
+    player_revived: "player_revived",
   },
 }));
 

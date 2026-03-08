@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 18 — game board with role-based views, dead overlay, self-death reporting)
+> **Last Updated:** 2026-03-08 (PROMPT 20 — Ably configuration, channel constants, and useAbly React hook)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -124,12 +124,14 @@ killer-guesser/
 │   │   ├── schema.ts          # Database schema definitions
 │   │   └── seed.ts            # Idempotent seed script — inserts 6 default roles
 │   ├── lib/
+│   │   ├── ably.ts            # Ably server client + ABLY_CHANNELS + ABLY_EVENTS constants
 │   │   ├── auth.ts            # NextAuth.js configuration
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
 │   │   ├── blob.ts            # Vercel Blob upload helper (thin wrapper around @vercel/blob)
 │   │   ├── gameEnd.ts         # Game-end logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame
 │   │   └── validations.ts     # Zod schemas for shared validation
 │   ├── hooks/
+│   │   ├── useAbly.ts         # React hook: subscribe to an Ably channel/event with singleton client
 │   │   └── useCountdown.ts    # Countdown hook: remaining h/m/s + isExpired, ticking every second
 │   ├── middleware.ts          # Route-protection middleware (admin/game/login)
 │   └── types/
@@ -193,6 +195,8 @@ killer-guesser/
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
 | `src/lib/auth.ts` | NextAuth.js v5 config — two Credentials providers: "player" (userId only, avatar-click) and "admin" (password-only, `timingSafeEqual`, hardcoded identity); JWT strategy; role + avatar_url + activeGameId in token & session |
+| `src/lib/ably.ts` | Ably server-side REST client (`ablyServer`); `ABLY_CHANNELS` helpers (`game(id)`, `vote(id, day)`); `ABLY_EVENTS` constants (`player_died`, `vote_cast`, `vote_closed`, `game_ended`, `player_revived`) |
+| `src/hooks/useAbly.ts` | `useAbly(channelName, eventName, onMessage)` — singleton Realtime client, subscribes on mount, unsubscribes on unmount, memoizes callback with `useCallback` |
 | `src/lib/auth-helpers.ts` | Shared auth utilities — `requireAdmin()` returns the session or null |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/blob.ts` | Thin wrapper around `@vercel/blob` — `uploadBlob(filename, buffer, mimeType)` → public URL |
