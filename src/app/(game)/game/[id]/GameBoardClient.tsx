@@ -32,6 +32,7 @@ interface CallerInfo {
   game_player_id: number;
   user_id: number;
   permissions: RolePermission[];
+  role_name: string | null;
 }
 
 interface BoardData {
@@ -495,6 +496,9 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               isOwnCard={player.user_id === data.caller.user_id}
               isKiller={canSeeKiller && isKiller(player.user_id, data.killer_id ?? undefined)}
               canRevive={canRevive}
+              viewerRole={data.caller.role_name}
+              team1Name={data.game.team1_name}
+              team2Name={data.game.team2_name}
               onSelfTap={() => setShowDeathModal(true)}
               onRevive={handleRevive}
             />
