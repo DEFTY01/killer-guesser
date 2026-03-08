@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 07 — Migrations & Seed Data)
+> **Last Updated:** 2026-03-08 (PROMPT 08 — NextAuth.js v5 Configuration)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -73,6 +73,7 @@ killer-guesser/
 │   │   ├── auth.ts            # NextAuth.js configuration
 │   │   ├── avatar.ts          # Avatar resize helpers (Sharp → 500×500 PNG)
 │   │   └── validations.ts     # Zod schemas for shared validation
+│   ├── middleware.ts          # Route-protection middleware (admin/game/login)
 │   └── types/
 │       └── index.ts           # Shared TypeScript types / interfaces
 ├── tests/
@@ -113,9 +114,10 @@ killer-guesser/
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
-| `src/lib/auth.ts` | NextAuth.js v5 config (JWT-only, no DrizzleAdapter; credentials matched against users.name + role) |
+| `src/lib/auth.ts` | NextAuth.js v5 config — avatar-click Credentials provider; JWT strategy; role + activeGameId in token & session |
 | `src/lib/avatar.ts` | Sharp-based avatar resize → 500×500 PNG |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
+| `src/middleware.ts` | Route-protection middleware: /admin/* → admin role; /game/* → auth; /login → redirect if authed |
 | `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
