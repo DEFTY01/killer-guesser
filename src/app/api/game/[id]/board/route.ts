@@ -33,11 +33,16 @@ function parsePermissions(raw: string | null | undefined): RolePermission[] {
  * role permissions.
  *
  * All callers receive:
- *  - players[]: id (game_player id), user_id, name, avatar_url, team,
+ *  - players[]: id (game_player id), user_id, name, avatar_url,
  *               is_dead, revived_at, role_color
+ *               NOTE: `team` is intentionally omitted from player objects —
+ *               team membership is private and must never be revealed to
+ *               other participants during an active game.
  *  - game metadata: name, team1_name, team2_name, vote windows, current_day
  *  - settings: murder_item_url, murder_item_name
- *  - caller: game_player_id, user_id, permissions[]
+ *  - caller: game_player_id, user_id, permissions[], role_name, role_color,
+ *            role_description, team (caller's own team only), is_dead,
+ *            revived_at, has_tipped
  *
  * If the caller has `see_killer` permission:
  *  - killer_id: the user_id of the player with role name "Killer"
@@ -53,10 +58,10 @@ function parsePermissions(raw: string | null | undefined): RolePermission[] {
  *
  * **Mayor anonymisation:** When the caller's role is "Mayor", every player
  * object is stripped down to `{ id, user_id, name, avatar_url, is_dead,
- * revived_at }` only.  The `role_color` and `team` fields are omitted so
- * that the Mayor cannot infer any faction or role information from the
- * response.  The Mayor cannot revive, cannot see the killer, and cannot see
- * votes — their only action is to vote like everyone else.
+ * revived_at }` only.  The `role_color` field is omitted so that the Mayor
+ * cannot infer role information from the response.  The Mayor cannot revive,
+ * cannot see the killer, and cannot see votes — their only action is to vote
+ * like everyone else.
  */
 export async function GET(
   _req: NextRequest,
@@ -122,6 +127,9 @@ export async function GET(
       game_player_id: game_players.id,
       permissions: roles.permissions,
       role_name: roles.name,
+      role_color: roles.color_hex,
+      role_description: roles.description,
+      team: game_players.team,
       is_dead: game_players.is_dead,
       revived_at: game_players.revived_at,
       has_tipped: game_players.has_tipped,
@@ -143,13 +151,14 @@ export async function GET(
   const callerPermissions = parsePermissions(callerRow.permissions);
 
   // ── Load all players ──────────────────────────────────────────
+  // Team membership is intentionally omitted from the player list — it is
+  // private and must not be visible to any participant during an active game.
   const players = await db
     .select({
       id: game_players.id,
       user_id: game_players.user_id,
       name: users.name,
       avatar_url: users.avatar_url,
-      team: game_players.team,
       is_dead: game_players.is_dead,
       revived_at: game_players.revived_at,
       role_color: roles.color_hex,
@@ -166,10 +175,9 @@ export async function GET(
     role_color: p.role_color ?? DEFAULT_ROLE_COLOR,
   }));
 
-  // ── Mayor anonymisation: strip role/team data ─────────────────
-  // The Mayor's view is deliberately equalized — they cannot see role colours
-  // or team badges.  Strip every field except the bare minimum needed to
-  // render a face-and-name card.
+  // ── Mayor anonymisation: strip role_color data ────────────────
+  // The Mayor's view is deliberately equalized — they cannot see role colours.
+  // Strip every field except the bare minimum needed to render a face-and-name card.
   const isMayor = callerRow.role_name === "Mayor";
   const responsePlayers = isMayor
     ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, revived_at }) => ({
@@ -209,6 +217,9 @@ export async function GET(
       user_id: number;
       permissions: RolePermission[];
       role_name: string | null;
+      role_color: string | null;
+      role_description: string | null;
+      team: "team1" | "team2" | null;
       is_dead: number;
       revived_at: number | null;
       has_tipped: number;
@@ -235,6 +246,9 @@ export async function GET(
       user_id: userId,
       permissions: callerPermissions,
       role_name: callerRow.role_name ?? null,
+      role_color: callerRow.role_color ?? null,
+      role_description: callerRow.role_description ?? null,
+      team: callerRow.team ?? null,
       is_dead: callerRow.is_dead,
       revived_at: callerRow.revived_at ?? null,
       has_tipped: callerRow.has_tipped,

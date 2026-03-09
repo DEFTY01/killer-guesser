@@ -38,7 +38,7 @@ vi.mock("@/db", () => {
 
 vi.mock("@/db/schema", () => ({
   users: { id: "id", name: "name", avatar_url: "avatar_url" },
-  roles: { id: "id", name: "name", color_hex: "color_hex", permissions: "permissions" },
+  roles: { id: "id", name: "name", color_hex: "color_hex", permissions: "permissions", description: "description" },
   games: { id: "id", name: "name", status: "status", start_time: "start_time", team1_name: "t1", team2_name: "t2", vote_window_start: "vws", vote_window_end: "vwe" },
   game_players: { id: "id", game_id: "game_id", user_id: "user_id", team: "team", is_dead: "is_dead", revived_at: "revived_at", role_id: "role_id", has_tipped: "has_tipped" },
   game_settings: { game_id: "game_id", murder_item_url: "miu", murder_item_name: "min" },
@@ -103,9 +103,9 @@ describe("GET /api/game/[id]/board", () => {
       // 2. Settings lookup
       [{ murder_item_url: null, murder_item_name: null }],
       // 3. Caller row (no permissions)
-      [{ game_player_id: 1, permissions: null, role_name: "Villager", is_dead: 0, revived_at: null, has_tipped: 0 }],
-      // 4. All players
-      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, team: "team1", is_dead: 0, revived_at: null, role_color: "#2E6DA4" }],
+      [{ game_player_id: 1, permissions: null, role_name: "Villager", role_color: null, role_description: null, team: "team1", is_dead: 0, revived_at: null, has_tipped: 0 }],
+      // 4. All players (no team field — team membership is private)
+      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, is_dead: 0, revived_at: null, role_color: "#2E6DA4" }],
     ]);
 
     const req = new NextRequest("http://localhost/api/game/G1/board");
@@ -114,6 +114,12 @@ describe("GET /api/game/[id]/board", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.killer_id).toBeUndefined();
+    // Caller should include their own team
+    expect(data.data.caller.team).toBe("team1");
+    // Players should NOT expose team
+    for (const player of data.data.players) {
+      expect(player.team).toBeUndefined();
+    }
   });
 
   it("Seer (see_killer) → response contains killerId", async () => {
@@ -127,9 +133,9 @@ describe("GET /api/game/[id]/board", () => {
       // 2. Settings
       [{ murder_item_url: null, murder_item_name: null }],
       // 3. Caller row (Seer with see_killer)
-      [{ game_player_id: 1, permissions: '["see_killer"]', role_name: "Seer", is_dead: 0, revived_at: null, has_tipped: 0 }],
+      [{ game_player_id: 1, permissions: '["see_killer"]', role_name: "Seer", role_color: "#9B59B6", role_description: null, team: "team2", is_dead: 0, revived_at: null, has_tipped: 0 }],
       // 4. All players
-      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, team: "team1", is_dead: 0, revived_at: null, role_color: "#2E6DA4" }],
+      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, is_dead: 0, revived_at: null, role_color: "#2E6DA4" }],
       // 5. Killer lookup
       [{ user_id: 20 }],
     ]);
@@ -140,6 +146,8 @@ describe("GET /api/game/[id]/board", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.killer_id).toBe(20);
+    expect(data.data.caller.role_color).toBe("#9B59B6");
+    expect(data.data.caller.team).toBe("team2");
   });
 
   it("Spy (see_votes) → response contains today's vote details", async () => {
@@ -153,9 +161,9 @@ describe("GET /api/game/[id]/board", () => {
       // 2. Settings
       [{ murder_item_url: null, murder_item_name: null }],
       // 3. Caller row (Spy with see_votes)
-      [{ game_player_id: 1, permissions: '["see_votes"]', role_name: "Spy", is_dead: 0, revived_at: null, has_tipped: 0 }],
+      [{ game_player_id: 1, permissions: '["see_votes"]', role_name: "Spy", role_color: null, role_description: null, team: "team2", is_dead: 0, revived_at: null, has_tipped: 0 }],
       // 4. All players
-      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, team: "team1", is_dead: 0, revived_at: null, role_color: "#2E6DA4" }],
+      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, is_dead: 0, revived_at: null, role_color: "#2E6DA4" }],
       // 5. Votes lookup
       [{ voter_id: 10, target_id: 20 }],
     ]);
@@ -169,7 +177,7 @@ describe("GET /api/game/[id]/board", () => {
     expect(Array.isArray(data.data.votes)).toBe(true);
   });
 
-  it("Mayor → response does NOT contain role_color or team for any player", async () => {
+  it("Mayor → response does NOT contain role_color for any player", async () => {
     mockAuth.mockResolvedValue({
       user: { id: "10", role: "player" },
     });
@@ -180,11 +188,11 @@ describe("GET /api/game/[id]/board", () => {
       // 2. Settings
       [{ murder_item_url: null, murder_item_name: null }],
       // 3. Caller row (Mayor)
-      [{ game_player_id: 1, permissions: null, role_name: "Mayor", is_dead: 0, revived_at: null, has_tipped: 0 }],
+      [{ game_player_id: 1, permissions: null, role_name: "Mayor", role_color: null, role_description: null, team: "team1", is_dead: 0, revived_at: null, has_tipped: 0 }],
       // 4. All players
       [
-        { id: 1, user_id: 10, name: "Alice", avatar_url: null, team: "team1", is_dead: 0, revived_at: null, role_color: "#FF0000" },
-        { id: 2, user_id: 20, name: "Bob", avatar_url: null, team: "team2", is_dead: 0, revived_at: null, role_color: "#00FF00" },
+        { id: 1, user_id: 10, name: "Alice", avatar_url: null, is_dead: 0, revived_at: null, role_color: "#FF0000" },
+        { id: 2, user_id: 20, name: "Bob", avatar_url: null, is_dead: 0, revived_at: null, role_color: "#00FF00" },
       ],
     ]);
 
@@ -193,7 +201,7 @@ describe("GET /api/game/[id]/board", () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    // Mayor view should strip role_color and team
+    // Mayor view should strip role_color; team is already absent for all views
     for (const player of data.data.players) {
       expect(player.role_color).toBeUndefined();
       expect(player.team).toBeUndefined();
@@ -211,9 +219,9 @@ describe("GET /api/game/[id]/board", () => {
       // 2. Settings
       [{ murder_item_url: null, murder_item_name: null }],
       // 3. Caller row (dead player)
-      [{ game_player_id: 1, permissions: null, role_name: "Villager", is_dead: 1, revived_at: null, has_tipped: 0 }],
+      [{ game_player_id: 1, permissions: null, role_name: "Villager", role_color: null, role_description: null, team: "team1", is_dead: 1, revived_at: null, has_tipped: 0 }],
       // 4. All players
-      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, team: "team1", is_dead: 1, revived_at: null, role_color: "#2E6DA4" }],
+      [{ id: 1, user_id: 10, name: "Alice", avatar_url: null, is_dead: 1, revived_at: null, role_color: "#2E6DA4" }],
     ]);
 
     const req = new NextRequest("http://localhost/api/game/G1/board");
