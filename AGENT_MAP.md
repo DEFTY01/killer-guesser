@@ -157,6 +157,32 @@ killer-guesser/
 ├── tests/
 │   ├── e2e/                   # Playwright end-to-end tests
 │   └── unit/                  # Vitest unit tests + setup
+├── src/test/
+│   ├── setup.ts               # Test setup (jest-dom imports)
+│   ├── unit/
+│   │   ├── auth.test.ts       # Auth provider logic tests
+│   │   ├── gameEnd.test.ts    # Game end function tests
+│   │   ├── roleUtils.test.ts  # isKiller utility tests
+│   │   └── useCountdown.test.ts # Countdown hook tests
+│   ├── api/
+│   │   ├── auth-admin.test.ts # Admin auth flow tests
+│   │   ├── board.test.ts      # GET /api/game/[id]/board tests
+│   │   ├── games.test.ts      # POST/PATCH /api/admin/games tests
+│   │   ├── players.test.ts    # CRUD /api/admin/players + roles tests
+│   │   ├── revive.test.ts     # POST /api/game/[id]/players/[playerId]/revive tests
+│   │   ├── tip.test.ts        # POST /api/game/[id]/tip tests
+│   │   ├── tip-and-vote-isolation.test.ts # Tip/vote independence tests
+│   │   └── vote.test.ts       # GET/POST /api/game/[id]/vote tests
+│   ├── ui/
+│   │   ├── AdminLogin.test.tsx # Admin login page tests
+│   │   ├── LoginScreen.test.tsx # Player login screen tests
+│   │   ├── PlayerCard.test.tsx # PlayerCard component tests
+│   │   └── VoteCountdown.test.tsx # VoteCountdown component tests
+│   └── e2e/
+│       ├── admin-login-flow.test.tsx # Admin login flow tests
+│       ├── full-game-flow.test.ts   # Full game lifecycle tests
+│       ├── killer-tip-flow.test.ts  # Killer tip flow tests
+│       └── player-login-flow.test.tsx # Player login flow tests
 ├── .env.example               # Required environment variable template
 ├── .env.local.example         # Local-only environment variable template
 ├── agents.md                  # Agent responsibility map (legacy — see AGENT_MAP.md)
@@ -252,6 +278,27 @@ killer-guesser/
 | `tests/unit/avatar.test.ts` | Unit tests for avatar resize logic |
 | `tests/unit/Button.test.tsx` | Unit tests for Button UI component |
 | `tests/e2e/app.spec.ts` | Playwright smoke tests |
+| `src/test/setup.ts` | Test setup — imports @testing-library/jest-dom |
+| `src/test/unit/auth.test.ts` | Auth provider logic: player valid/inactive/unknown, admin correct/wrong/empty password |
+| `src/test/unit/gameEnd.test.ts` | Game end functions: handleKillerDefeated, handleKillerWins, deleteGame, closeGame |
+| `src/test/unit/roleUtils.test.ts` | isKiller utility: matching, non-matching, and undefined killerId |
+| `src/test/unit/useCountdown.test.ts` | Countdown hook: future/past dates, interval cleanup, time ticking |
+| `src/test/api/auth-admin.test.ts` | Admin auth: correct/wrong/missing/empty password, timing-safe comparison |
+| `src/test/api/board.test.ts` | GET /api/game/[id]/board: no perms, Seer (killerId), Spy (votes), Mayor (stripped), dead player |
+| `src/test/api/games.test.ts` | POST/PATCH /api/admin/games: create, validate, update vote window, close, delete |
+| `src/test/api/players.test.ts` | CRUD /api/admin/players + DELETE /api/admin/roles/[id]: auth, validation, soft-delete |
+| `src/test/api/revive.test.ts` | POST revive: no permission, alive target, valid revive, cooldown, Ably publish |
+| `src/test/api/tip.test.ts` | POST tip: dead caller, already tipped, killer tries, wrong/correct guess |
+| `src/test/api/vote.test.ts` | GET/POST vote: window open/closed, Spy votes, lazy-close, dead player, upsert, Ably |
+| `src/test/api/tip-and-vote-isolation.test.ts` | Verifies tipping and voting are independent actions |
+| `src/test/ui/AdminLogin.test.tsx` | Admin login page: password input, submit, success redirect, error display |
+| `src/test/ui/LoginScreen.test.tsx` | Player login: Play Now, avatar picker, selection, Sign In, error handling |
+| `src/test/ui/PlayerCard.test.tsx` | PlayerCard: dead/revived/killer/healer/mayor/default views |
+| `src/test/ui/VoteCountdown.test.tsx` | VoteCountdown: visible in window, hidden outside window |
+| `src/test/e2e/player-login-flow.test.tsx` | E2E flow: Play Now → select player → Sign In → redirect |
+| `src/test/e2e/admin-login-flow.test.tsx` | E2E flow: admin login → success redirect / error display |
+| `src/test/e2e/full-game-flow.test.ts` | E2E flow: board access by role, voting, game close, post-close board |
+| `src/test/e2e/killer-tip-flow.test.ts` | E2E flow: wrong tip → caller dies, already used, correct tip → game ends |
 | `docs/architecture.md` | High-level architecture overview |
 | `docs/auth.md` | Auth flow documentation |
 | `docs/avatar.md` | Avatar pipeline documentation |
