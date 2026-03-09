@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-09 (PROMPT 29 — Game History & Archive Viewer: new `GET /api/admin/games/[id]/history` (full closed-game data: metadata, players with fate/location/time-of-day, archived events, anonymous vote tallies by day), updated `/admin/games` page with Active/Scheduled/Closed/Deleted tabs + winning team column, new read-only `/admin/games/[id]/history` page with header card, day-by-day timeline, player fates table, and voting history with bar charts)
+> **Last Updated:** 2026-03-09 (PROMPT 31 — Loading States & Error Boundaries: new `src/components/ui/Skeleton.tsx` (Skeleton base, SkeletonCard for player avatar cards, SkeletonTable for admin tables), new `src/components/ui/ErrorBoundary.tsx` (class-based React error boundary with "Something went wrong" fallback + Retry button), new `loading.tsx` files for game board route (SkeletonCard grid) and admin games routes (SkeletonTable), game board and voting pages wrapped with ErrorBoundary, empty states added: "No players found", "No active game" in lobby, "No votes yet")
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -58,11 +58,13 @@ killer-guesser/
 │   │   │   │   │   └── RolesClient.tsx       # Interactive table + add/edit panels (client)
 │   │   │   │   ├── games/     # Game management pages
 │   │   │   │   │   ├── page.tsx              # Games list with tabs (Active/Scheduled/Closed/Deleted)
+│   │   │   │   │   ├── loading.tsx           # Suspense fallback: SkeletonTable
 │   │   │   │   │   ├── new/                  # 4-step game creation wizard
 │   │   │   │   │   │   ├── page.tsx          # Server wrapper (fetches players + roles)
 │   │   │   │   │   │   └── NewGameWizard.tsx # 4-step client wizard component
 │   │   │   │   │   └── [id]/                 # Game detail / live editor
 │   │   │   │   │       ├── page.tsx          # Server wrapper (fetches game, settings, players, roles)
+│   │   │   │   │       ├── loading.tsx       # Suspense fallback: SkeletonTable
 │   │   │   │   │       ├── GameEditorClient.tsx # Live editor: status bar, players panel, actions panel
 │   │   │   │   │       └── history/          # Read-only post-game archive
 │   │   │   │   │           └── page.tsx      # History viewer: header, timeline, players, votes
@@ -72,10 +74,11 @@ killer-guesser/
 │   │   │   ├── game/          # Main game page
 │   │   │   │   ├── page.tsx   # Join-game page (renders PlayerLogin)
 │   │   │   │   └── [id]/      # Per-game board
-│   │   │   │       ├── page.tsx          # Server wrapper → GameBoardClient
+│   │   │   │       ├── page.tsx          # Server wrapper → GameBoardClient (wrapped in ErrorBoundary)
+│   │   │   │       ├── loading.tsx       # Suspense fallback: SkeletonCard grid
 │   │   │   │       ├── GameBoardClient.tsx # Interactive game board (murder item card with fullscreen modal, vote countdown hidden for Mayor, player grid, self-death modal, game-ended modal; Mayor ⚖️ banner; Seer 👁️ banner; subscribes to PLAYER_DIED, PLAYER_REVIVED, GAME_ENDED)
 │   │   │   │       └── vote/[day]/       # Per-day voting page
-│   │   │   │           ├── page.tsx       # Server wrapper → VotePageClient
+│   │   │   │           ├── page.tsx       # Server wrapper → VotePageClient (wrapped in ErrorBoundary)
 │   │   │   │           └── VotePageClient.tsx # Voting UI: submit vote, spy view (VOTE_CAST), results (VOTE_CLOSED)
 │   │   │   ├── lobby/         # Player lobby (active/upcoming/past games)
 │   │   │   ├── participants/  # Pre-game participants page (avatar grid + team badges)
@@ -207,6 +210,8 @@ killer-guesser/
 | `src/components/ui/Button.tsx` | Accessible Button component |
 | `src/components/ui/Card.tsx` | Card layout component |
 | `src/components/ui/Input.tsx` | Accessible Input component |
+| `src/components/ui/Skeleton.tsx` | Pulse-animation skeleton loaders: `Skeleton` (base), `SkeletonCard` (player avatar card), `SkeletonTable` (admin data table) |
+| `src/components/ui/ErrorBoundary.tsx` | Class-based React ErrorBoundary (client component): catches render errors, shows "Something went wrong. Please reload the page." + Retry button |
 | `src/components/game/PlayerCard.tsx` | Role-aware player card: Mayor view=flat grid (only avatar+name, no border/badge/labels); dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; default=role color border+team badge; accepts `viewerRole`, `team1Name`, `team2Name`; `team` and `role_color` are optional (stripped server-side for Mayor) |
 | `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
 | `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; game_settings includes revive_cooldown_seconds |

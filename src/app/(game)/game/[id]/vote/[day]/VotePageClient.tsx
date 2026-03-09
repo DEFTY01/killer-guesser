@@ -379,7 +379,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         )}
 
         {sorted.length === 0 ? (
-          <p className="text-center text-gray-400 py-8">No votes were cast.</p>
+          <p className="text-center text-gray-400 py-8">No votes yet</p>
         ) : (
           <ul className="space-y-3">
             {sorted.map((r) => {

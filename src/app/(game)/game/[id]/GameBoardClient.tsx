@@ -812,9 +812,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       )}
 
       {data && data.players.length === 0 && (
-        <p className="text-center text-gray-400 py-12">
-          No players yet — check back soon!
-        </p>
+        <p className="text-center text-gray-400 py-12">No players found</p>
       )}
 
       {data && data.players.length > 0 && (

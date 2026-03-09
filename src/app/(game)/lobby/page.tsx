@@ -307,11 +307,20 @@ export default function LobbyPage() {
       {!isLoading && !isEmpty && (
         <div className="flex flex-col gap-8">
           {/* ── Section 1: Active games ──────────────────────── */}
-          <Section title="Active" visible={hasActive}>
-            {data!.active.map((g) => (
-              <ActiveCard key={g.id} game={g} />
-            ))}
-          </Section>
+          {hasActive ? (
+            <Section title="Active" visible>
+              {data!.active.map((g) => (
+                <ActiveCard key={g.id} game={g} />
+              ))}
+            </Section>
+          ) : (
+            <div>
+              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
+                Active
+              </h2>
+              <p className="text-sm text-gray-400 px-1">No active game</p>
+            </div>
+          )}
 
           {/* ── Section 2: Upcoming games ────────────────────── */}
           <Section title="Upcoming" visible={hasScheduled}>
