@@ -3,13 +3,13 @@ import { uploadBlob } from "@/lib/blob";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
-const ALLOWED_MIME_TYPES = ["image/webp", "image/gif"] as const;
+const ALLOWED_MIME_TYPES = ["image/webp", "image/gif", "image/png", "image/jpeg"] as const;
 
 /**
  * POST /api/upload/avatar
  *
  * Accepts a multipart/form-data request with a `file` field.
- * Only `image/webp` and `image/gif` formats are accepted.
+ * Only `image/webp`, `image/gif`, `image/png`, and `image/jpeg` formats are accepted.
  * Files larger than 4 MB are rejected with a 400 error.
  *
  * On success returns `{ url: string }` containing the Vercel Blob public URL.
@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // Validate MIME type — only webp and gif are accepted.
+  // Validate MIME type — webp, gif, png, and jpeg are accepted.
   const isAllowedType = (ALLOWED_MIME_TYPES as readonly string[]).includes(
     file.type,
   );
@@ -51,7 +51,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json(
       {
         success: false,
-        error: "Only image/webp and image/gif formats are accepted",
+        error: "Only image/webp, image/gif, image/png, and image/jpeg formats are accepted",
       },
       { status: 400 },
     );
@@ -66,7 +66,13 @@ export async function POST(req: NextRequest) {
   }
 
   const buffer = Buffer.from(await file.arrayBuffer());
-  const ext = file.type === "image/webp" ? "webp" : "gif";
+  const extMap: Record<string, string> = {
+    "image/webp": "webp",
+    "image/gif": "gif",
+    "image/png": "png",
+    "image/jpeg": "jpg",
+  };
+  const ext = extMap[file.type] || "webp";
   const filename = `avatars/avatar.${ext}`;
 
   const url = await uploadBlob(filename, buffer, file.type);

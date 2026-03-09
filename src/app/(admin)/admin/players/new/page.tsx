@@ -116,7 +116,7 @@ export default function NewPlayerPage() {
             htmlFor="avatar"
             className="block text-sm font-medium text-gray-700 mb-1"
           >
-            Avatar <span className="text-gray-400">(webp or gif, max 4 MB)</span>
+            Avatar <span className="text-gray-400">(webp, gif, png or jpg, max 4 MB)</span>
           </label>
 
           {previewUrl && (
@@ -136,7 +136,7 @@ export default function NewPlayerPage() {
             ref={fileInputRef}
             id="avatar"
             type="file"
-            accept="image/webp,image/gif"
+            accept="image/webp,image/gif,image/png,image/jpeg"
             onChange={handleFileChange}
             className="block text-sm text-gray-600 file:mr-3 file:rounded-lg file:border file:border-gray-200 file:bg-gray-50 file:px-3 file:py-1.5 file:text-xs file:font-medium file:text-gray-700 hover:file:bg-gray-100"
           />
