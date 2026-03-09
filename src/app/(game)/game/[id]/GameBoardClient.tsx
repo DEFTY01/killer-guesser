@@ -949,7 +949,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const canVote = callerIsAlive && !canSeeKiller;
 
   return (
-    <div className={`max-w-2xl mx-auto px-4 py-6 space-y-6${voteActive ? " pb-28" : ""}`}>
+    <div className={`max-w-2xl mx-auto px-4 py-6 space-y-6${data ? " pb-28" : ""}`}>
       {/* ── Vote countdown (hidden for Mayor) ───────────────── */}
       {data && !isMayor && (
         <VoteCountdown
@@ -1221,7 +1221,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           onClick={() => setShowGuessModal(true)}
           className="fixed right-6 z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           style={{
-            bottom: voteActive
+            bottom: data
               ? "calc(5rem + var(--safe-bottom, 0px))"
               : "calc(1.5rem + var(--safe-bottom, 0px))",
           }}
@@ -1232,40 +1232,69 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       )}
 
       {/* ── Vote sticky bottom bar ────────────────────────────── */}
-      {data && voteActive && (
+      {data && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-100 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)]"
-          style={{ paddingBottom: "var(--safe-bottom, 0px)" }}
+          className="fixed bottom-0 left-0 right-0 z-40 border-t bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)]"
+          style={{
+            borderColor: voteActive ? "#a5b4fc" : "#e5e7eb",
+            paddingBottom: "var(--safe-bottom, 0px)",
+          }}
           role="status"
-          aria-label={canVote ? "Daily vote is open" : "Voting in progress"}
+          aria-label={voteActive ? (canVote ? "Daily vote is open" : "Voting in progress") : "Voting not open yet"}
         >
           <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
+            {/* Pulsing dot indicator */}
+            <span
+              className={`shrink-0 w-2.5 h-2.5 rounded-full ${
+                voteActive ? "bg-indigo-500 animate-pulse" : "bg-gray-300"
+              }`}
+              aria-hidden="true"
+            />
             <div className="flex-1 min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                {canVote ? "Daily Vote" : "Voting in progress"}
-              </p>
-              <p className="text-sm text-gray-700 truncate">
-                Day {data.game.current_day}{" "}
-                {data.game.vote_window_end && (
-                  <span className="text-gray-500">
-                    · closes at{" "}
-                    <span className="font-semibold text-gray-800">
-                      {data.game.vote_window_end} UTC
-                    </span>
-                  </span>
-                )}
-              </p>
+              {voteActive ? (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
+                    {canVote ? "Daily Vote Open" : "Voting in progress"}
+                  </p>
+                  <p className="text-sm text-gray-700 truncate">
+                    Day {data.game.current_day}
+                    {data.game.vote_window_end && (
+                      <span className="text-gray-500">
+                        {" "}· closes at{" "}
+                        <span className="font-semibold text-gray-800">
+                          {data.game.vote_window_end} UTC
+                        </span>
+                      </span>
+                    )}
+                  </p>
+                </>
+              ) : (
+                <>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                    Daily Vote
+                  </p>
+                  <p className="text-sm text-gray-500 truncate">
+                    {data.game.vote_window_start
+                      ? `Opens at ${data.game.vote_window_start} UTC`
+                      : "No vote window set"}
+                  </p>
+                </>
+              )}
             </div>
             <Link
               href={`/game/${gameId}/vote/${data.game.current_day}`}
-              className={`shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                canVote
-                  ? "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
-                  : "bg-violet-600 hover:bg-violet-700 focus:ring-violet-500"
+              className={`shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                voteActive && canVote
+                  ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500"
+                  : voteActive && !canVote
+                    ? "bg-violet-600 text-white hover:bg-violet-700 focus:ring-violet-500"
+                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 focus:ring-gray-400"
               }`}
             >
-              <span aria-hidden="true">{canVote ? "🗳" : "👁"}</span>
-              {canVote ? "Vote" : "Watch"}
+              <span aria-hidden="true">
+                {voteActive ? (canVote ? "🗳" : "👁") : "📊"}
+              </span>
+              {voteActive ? (canVote ? "Vote" : "Watch") : "Results"}
             </Link>
           </div>
         </div>
