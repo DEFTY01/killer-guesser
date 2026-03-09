@@ -174,6 +174,7 @@ describe("PlayerCard", () => {
         isOwnCard={false}
         isKiller={false}
         canRevive={false}
+        showRoleBorder={true}
       />
     );
 
