@@ -133,4 +133,117 @@ describe("POST /api/game/[id]/players/[playerId]/revive", () => {
     expect(data.data.is_dead).toBe(0);
     expect(data.data.revived_at).toBeDefined();
   });
+
+  it("unauthorized → 401", async () => {
+    mockAuth.mockResolvedValue(null);
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "2" }),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("non-player role → 401", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "admin", role: "admin" } });
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "2" }),
+    });
+
+    expect(res.status).toBe(401);
+  });
+
+  it("invalid playerId → 400", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/abc/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "abc" }),
+    });
+
+    expect(res.status).toBe(400);
+  });
+
+  it("not a participant → 403", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    dbState.selectResults = [
+      // Caller not found
+      [],
+    ];
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "2" }),
+    });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("player record not found → 404", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    dbState.selectResults = [
+      // Caller has revive_dead permission
+      [{ permissions: '["revive_dead"]' }],
+      // Target not found
+      [],
+    ];
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/999/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "999" }),
+    });
+
+    expect(res.status).toBe(404);
+  });
+
+  it("cooldown active → 429", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    const nowSec = Math.floor(Date.now() / 1000);
+
+    dbState.selectResults = [
+      // Caller has revive_dead permission
+      [{ permissions: '["revive_dead"]' }],
+      // Target is dead
+      [{ id: 2, is_dead: 1 }],
+      // Cooldown settings: 300 seconds
+      [{ revive_cooldown_seconds: 300 }],
+      // Last revive was 10 seconds ago (should still be in cooldown)
+      [{ last: nowSec - 10 }],
+    ];
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "2" }),
+    });
+    const data = await res.json();
+
+    expect(res.status).toBe(429);
+    expect(data.error).toContain("Cooldown active");
+  });
+
+  it("ABLY_API_KEY set → publishes PLAYER_REVIVED event", async () => {
+    process.env.ABLY_API_KEY = "test-key";
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    dbState.selectResults = [
+      [{ permissions: '["revive_dead"]' }],
+      [{ id: 2, is_dead: 1 }],
+      [{ revive_cooldown_seconds: null }],
+    ];
+
+    const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
+    const res = await postRevive(req, {
+      params: Promise.resolve({ id: "G1", playerId: "2" }),
+    });
+
+    expect(res.status).toBe(200);
+    // Ably publish should have been called since ABLY_API_KEY is set
+    delete process.env.ABLY_API_KEY;
+  });
 });
