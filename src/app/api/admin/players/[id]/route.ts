@@ -13,6 +13,49 @@ const updatePlayerSchema = z.object({
 });
 
 /**
+ * GET /api/admin/players/[id]
+ *
+ * Returns the player record identified by `id`.
+ * Requires an admin session — returns 403 if not authenticated as admin.
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await requireAdmin();
+  if (!session) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
+
+  const { id } = await params;
+  const numericId = Number(id);
+  if (isNaN(numericId)) {
+    return NextResponse.json(
+      { success: false, error: "Invalid player id" },
+      { status: 400 },
+    );
+  }
+
+  const [player] = await db
+    .select()
+    .from(users)
+    .where(eq(users.id, numericId))
+    .limit(1);
+
+  if (!player) {
+    return NextResponse.json(
+      { success: false, error: "Player not found" },
+      { status: 404 },
+    );
+  }
+
+  return NextResponse.json({ success: true, data: player });
+}
+
+/**
  * PATCH /api/admin/players/[id]
  *
  * Updates one or more fields on the player record identified by `id`.
