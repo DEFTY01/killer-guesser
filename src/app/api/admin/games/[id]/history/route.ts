@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { games, game_players, users, roles, events, votes } from "@/db/schema";
-import { asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 // ── GET /api/admin/games/[id]/history ─────────────────────────────
@@ -96,7 +96,7 @@ export async function GET(
         created_at: events.created_at,
       })
       .from(events)
-      .where(eq(events.game_id, id))
+      .where(and(eq(events.game_id, id), eq(events.is_archived, 1)))
       .orderBy(asc(events.created_at)),
 
     // Vote tallies per target per day (anonymous — no voter identities).
