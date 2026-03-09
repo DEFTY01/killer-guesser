@@ -104,7 +104,8 @@ function CountdownDisplay({ startTime }: { startTime: number }) {
 
 function ScheduledCard({ game }: { game: LobbyGame }) {
   const router = useRouter();
-  const isPast = game.start_time * 1000 < Date.now();
+  const [now] = useState(() => Date.now());
+  const isPast = game.start_time * 1000 < now;
 
   function handleTap() {
     router.push(`/game/${game.id}/lobby`);
