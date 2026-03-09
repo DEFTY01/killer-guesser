@@ -68,6 +68,10 @@ vi.mock("@/lib/gameEnd", () => ({
   deleteGame: vi.fn(),
 }));
 
+vi.mock("@/lib/activateGame", () => ({
+  activateGameIfReady: vi.fn(),
+}));
+
 vi.mock("@/lib/assignTeamsAndRoles", () => ({
   assignTeamsAndRoles: vi.fn(() => [
     { userId: 1, team: "team1", roleId: null },
@@ -188,6 +192,43 @@ describe("PATCH /api/admin/games/[id]", () => {
     const res = await patchGame(req, { params: Promise.resolve({ id: "G1" }) });
 
     expect(res.status).toBe(422);
+  });
+
+  it("action='start' → game status becomes 'active'", async () => {
+    mockRequireAdmin.mockResolvedValue(true);
+
+    const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "scheduled" }]);
+    const whereFn = vi.fn(() => ({ limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn }));
+    mockDbSelect.mockReturnValue({ from: fromFn });
+
+    const returningFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
+    const updateWhereFn = vi.fn(() => ({ returning: returningFn }));
+    const setFn = vi.fn(() => ({ where: updateWhereFn }));
+    mockDbUpdate.mockReturnValue({ set: setFn });
+
+    const req = makeRequest("PATCH", { action: "start" });
+    const res = await patchGame(req, { params: Promise.resolve({ id: "G1" }) });
+    const data = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(data.data.status).toBe("active");
+  });
+
+  it("action='start' on non-scheduled game → 422", async () => {
+    mockRequireAdmin.mockResolvedValue(true);
+
+    const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
+    const whereFn = vi.fn(() => ({ limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn }));
+    mockDbSelect.mockReturnValue({ from: fromFn });
+
+    const req = makeRequest("PATCH", { action: "start" });
+    const res = await patchGame(req, { params: Promise.resolve({ id: "G1" }) });
+    const data = await res.json();
+
+    expect(res.status).toBe(422);
+    expect(data.error).toContain("Only scheduled games can be started");
   });
 
   it("action='close' → game status becomes 'closed'", async () => {

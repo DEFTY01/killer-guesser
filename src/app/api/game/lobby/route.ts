@@ -3,6 +3,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { games, game_players } from "@/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
+import { activateScheduledGames } from "@/lib/activateGame";
 
 // ── Shared select shape ───────────────────────────────────────────
 
@@ -54,6 +55,9 @@ export async function GET() {
       { status: 401 },
     );
   }
+
+  // Auto-activate games whose start_time has passed
+  await activateScheduledGames();
 
   const sel = buildSelect();
 

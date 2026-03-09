@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { activateGameIfReady } from "@/lib/activateGame";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Zod schema ────────────────────────────────────────────────────
@@ -30,6 +31,7 @@ const patchGameSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("close_voting"),
   }),
+  z.object({ action: z.literal("start") }),
   z.object({
     action: z.literal("close"),
     winner_team: z.enum(["team1", "team2"]).optional().nullable(),
@@ -62,6 +64,9 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  // Auto-activate if start_time has passed
+  await activateGameIfReady(id);
 
   const [game] = await db.select().from(games).where(eq(games.id, id)).limit(1);
   if (!game) {
@@ -114,6 +119,7 @@ export async function GET(
  *
  * Updates the game state based on the `action` field in the request body:
  *
+ * - `"start"` — Activates a scheduled game by setting its status to `"active"`.
  * - `"close_voting"` — Closes the active vote window by nulling both
  *   `vote_window_start` and `vote_window_end` on the game record.
  * - `"close"` — Ends the game by setting its status to `"closed"`.
@@ -164,6 +170,21 @@ export async function PATCH(
   }
 
   const { action } = parsed.data;
+
+  if (action === "start") {
+    if (existing.status !== "scheduled") {
+      return NextResponse.json(
+        { success: false, error: "Only scheduled games can be started" },
+        { status: 422 },
+      );
+    }
+    const [updated] = await db
+      .update(games)
+      .set({ status: "active" })
+      .where(eq(games.id, id))
+      .returning();
+    return NextResponse.json({ success: true, data: updated });
+  }
 
   if (action === "delete") {
     // Hard-delete the game; related records cascade automatically.

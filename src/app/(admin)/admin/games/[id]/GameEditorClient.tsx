@@ -113,7 +113,7 @@ export default function GameEditorClient({
   // ── Game-level actions ─────────────────────────────────────────
 
   const gameAction = useCallback(
-    async (action: "close_voting" | "close" | "delete") => {
+    async (action: "start" | "close_voting" | "close" | "delete") => {
       if (
         action === "delete" &&
         !window.confirm(
@@ -126,7 +126,9 @@ export default function GameEditorClient({
       setActionError(null);
 
       // Optimistic update
-      if (action === "close") {
+      if (action === "start") {
+        setGame((g) => ({ ...g, status: "active" }));
+      } else if (action === "close") {
         setGame((g) => ({ ...g, status: "closed" }));
       } else if (action === "close_voting") {
         setGame((g) => ({
@@ -608,6 +610,15 @@ export default function GameEditorClient({
             aria-label="Re-roll role assignments"
           >
             🎲 Re-roll Roles
+          </Button>
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={game.status !== "scheduled"}
+            onClick={() => gameAction("start")}
+            aria-label="Start this game"
+          >
+            ▶️ Start Game
           </Button>
           <Button
             variant="secondary"

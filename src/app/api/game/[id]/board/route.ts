@@ -10,6 +10,7 @@ import {
   votes,
 } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { activateGameIfReady } from "@/lib/activateGame";
 import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 import type { RolePermission } from "@/lib/role-constants";
 
@@ -78,6 +79,9 @@ export async function GET(
   }
 
   const { id: gameId } = await params;
+
+  // Auto-activate if start_time has passed
+  await activateGameIfReady(gameId);
 
   // ── Load game ─────────────────────────────────────────────────
   const [game] = await db

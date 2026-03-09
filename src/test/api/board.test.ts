@@ -57,6 +57,10 @@ vi.mock("@/lib/role-constants", () => ({
   ROLE_PERMISSIONS: ["see_killer", "revive_dead", "see_votes", "extra_vote", "immunity_once"],
 }));
 
+vi.mock("@/lib/activateGame", () => ({
+  activateGameIfReady: vi.fn(),
+}));
+
 // Re-import with actual mock
 import { db } from "@/db";
 
