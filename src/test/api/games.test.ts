@@ -68,6 +68,10 @@ vi.mock("@/lib/gameEnd", () => ({
   deleteGame: vi.fn(),
 }));
 
+vi.mock("@/lib/activateGame", () => ({
+  activateGameIfReady: vi.fn(),
+}));
+
 vi.mock("@/lib/assignTeamsAndRoles", () => ({
   assignTeamsAndRoles: vi.fn(() => [
     { userId: 1, team: "team1", roleId: null },

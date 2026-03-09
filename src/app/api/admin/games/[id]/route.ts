@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { activateGameIfReady } from "@/lib/activateGame";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Zod schema ────────────────────────────────────────────────────
@@ -63,6 +64,9 @@ export async function GET(
   }
 
   const { id } = await params;
+
+  // Auto-activate if start_time has passed
+  await activateGameIfReady(id);
 
   const [game] = await db.select().from(games).where(eq(games.id, id)).limit(1);
   if (!game) {

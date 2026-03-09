@@ -5,6 +5,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { games, game_players } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
+import { activateGameIfReady } from "@/lib/activateGame";
 
 export const metadata: Metadata = { title: "Game Lobby" };
 
@@ -49,6 +50,21 @@ export default async function GameLobbyStatusPage({
         message="Ez a jatek nem letezik, vagy nem vagy a resztvevoje."
       />
     );
+  }
+
+  // Auto-activate if start_time has passed
+  await activateGameIfReady(joinedGame.id);
+
+  if (joinedGame.status === "scheduled") {
+    // Re-read status after potential activation
+    const [fresh] = await db
+      .select({ status: games.status })
+      .from(games)
+      .where(eq(games.id, joinedGame.id))
+      .limit(1);
+    if (fresh?.status === "active") {
+      redirect(`/game/${joinedGame.id}`);
+    }
   }
 
   if (joinedGame.status === "active") {
