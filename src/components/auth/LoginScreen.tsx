@@ -3,6 +3,7 @@
 import { useState, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -247,6 +248,29 @@ export default function LoginScreen({ players }: Props) {
         >
           Play Now
         </button>
+
+        <Link
+          href="/admin"
+          style={{
+            marginTop: "16px",
+            fontSize: "0.82rem",
+            color: "rgba(200, 190, 240, 0.5)",
+            textDecoration: "none",
+            letterSpacing: "0.06em",
+            animation: "fadeInUp 0.7s ease both",
+            animationDelay: "0.55s",
+          }}
+          onMouseEnter={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.color =
+              "rgba(200, 190, 240, 0.85)";
+          }}
+          onMouseLeave={(e) => {
+            (e.currentTarget as HTMLAnchorElement).style.color =
+              "rgba(200, 190, 240, 0.5)";
+          }}
+        >
+          Admin Panel
+        </Link>
       </div>
 
       {/* ── Backdrop ────────────────────────────────────────────────── */}
