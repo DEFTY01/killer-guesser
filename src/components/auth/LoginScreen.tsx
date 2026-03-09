@@ -159,8 +159,8 @@ export default function LoginScreen({ players }: Props) {
         return;
       }
 
-      // Always redirect to the home page after a successful player sign-in.
-      router.push("/");
+      // Redirect to the lobby after a successful player sign-in.
+      router.push("/lobby");
     } catch {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
@@ -245,7 +245,7 @@ export default function LoginScreen({ players }: Props) {
               "0 4px 24px rgba(124, 58, 237, 0.45)";
           }}
         >
-          Enter the Game
+          Play Now
         </button>
       </div>
 
