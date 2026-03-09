@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import GameBoardClient from "./GameBoardClient";
+import { ErrorBoundary } from "@/components/ui/ErrorBoundary";
 
 export const metadata: Metadata = { title: "Game Board" };
 
@@ -9,5 +10,9 @@ export default async function GameBoardPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  return <GameBoardClient gameId={id} />;
+  return (
+    <ErrorBoundary>
+      <GameBoardClient gameId={id} />
+    </ErrorBoundary>
+  );
 }
