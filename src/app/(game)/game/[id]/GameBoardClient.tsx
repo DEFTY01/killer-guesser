@@ -67,6 +67,17 @@ interface VoteLogEntry {
 
 // ── Helpers ────────────────────────────────────────────────────────
 
+/**
+ * Converts a stored UTC "HH:MM" string to the browser's local time string
+ * (e.g. "22:45" for a user in UTC+1 when the UTC value is "21:45").
+ */
+function utcHhmmToLocal(hhmm: string): string {
+  const [h, m] = hhmm.split(":").map(Number);
+  const d = new Date();
+  d.setUTCHours(h, m, 0, 0);
+  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 function isVoteWindowActive(
   start: string | null,
   end: string | null,
@@ -1255,9 +1266,9 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               </p>
               <p className="text-sm text-gray-500 truncate">
                 {voteActive
-                  ? `Day ${data.game.current_day}${data.game.vote_window_end ? ` · closes ${data.game.vote_window_end} UTC` : ""}`
+                  ? `Day ${data.game.current_day}${data.game.vote_window_end ? ` · closes ${utcHhmmToLocal(data.game.vote_window_end)}` : ""}`
                   : data.game.vote_window_start
-                    ? `Opens at ${data.game.vote_window_start} UTC`
+                    ? `Opens at ${utcHhmmToLocal(data.game.vote_window_start)}`
                     : `Day ${data.game.current_day}`}
               </p>
             </div>

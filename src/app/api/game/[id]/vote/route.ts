@@ -170,19 +170,6 @@ export async function GET(
 
     // Only the first caller that cleared the window performs close logic.
     if (cleared) {
-      // Load alive players for majority calculation.
-      const alivePlayers = await db
-        .select({ user_id: game_players.user_id })
-        .from(game_players)
-        .where(
-          and(
-            eq(game_players.game_id, gameId),
-            eq(game_players.is_dead, 0),
-          ),
-        );
-
-      const aliveCount = alivePlayers.length;
-
       // Tally votes for the current day.
       const tally = await db
         .select({
@@ -195,10 +182,12 @@ export async function GET(
         .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
         .groupBy(votes.target_id, users.name);
 
-      // Find a simple majority (> 50 % of alive voters).
-      const majority = tally.find(
-        (r) => r.vote_count > aliveCount / 2,
-      );
+      // Find the plurality winner: the player with the most votes.
+      // If two or more players are tied for the top spot, no one is eliminated.
+      const sorted = [...tally].sort((a, b) => b.vote_count - a.vote_count);
+      const top = sorted[0];
+      const hasTie = sorted.length >= 2 && sorted[1].vote_count === top?.vote_count;
+      const majority = top && !hasTie && top.vote_count > 0 ? top : undefined;
 
       let eliminated: { id: number; name: string } | null = null;
 

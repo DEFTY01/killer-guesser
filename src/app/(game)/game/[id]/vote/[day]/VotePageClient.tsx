@@ -67,6 +67,11 @@ function todayAt(hhmm: string): Date {
   return d;
 }
 
+/** Converts a stored UTC "HH:MM" string to the browser's local time string. */
+function utcHhmmToLocal(hhmm: string): string {
+  return todayAt(hhmm).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+}
+
 // ── PlayerTile ────────────────────────────────────────────────────
 
 function PlayerTile({
@@ -375,7 +380,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         ) : (
           !hasMajority && (
             <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-center text-amber-700 font-semibold">
-              No majority — no one was eliminated.
+              It&apos;s a tie — no one was eliminated.
             </div>
           )
         )}

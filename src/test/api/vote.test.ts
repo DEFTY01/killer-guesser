@@ -335,9 +335,7 @@ describe("GET /api/game/[id]/vote", () => {
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // Lazy close: update().set().where().returning() returns the cleared game ID
       // This is handled by the db.update mock
-      // Alive players for majority calculation
-      [{ user_id: 10 }, { user_id: 20 }],
-      // Tally for lazy close
+      // Tally for lazy close (no votes = tie = no elimination)
       [],
       // Reloaded game
       [{ vote_window_start: null, vote_window_end: null }],
@@ -355,7 +353,7 @@ describe("GET /api/game/[id]/vote", () => {
     expect(data.data.windowOpen).toBe(false);
   });
 
-  it("lazy close: window ended + majority elimination → updates game", async () => {
+  it("lazy close: window ended + plurality elimination → updates game", async () => {
     process.env.ABLY_API_KEY = "test-key";
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
 
@@ -370,10 +368,8 @@ describe("GET /api/game/[id]/vote", () => {
       [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
       // Caller row
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // Alive players for majority calculation (2 alive)
-      [{ user_id: 10 }, { user_id: 20 }],
-      // Tally: player 20 has 2 votes (> 50% of 2 alive = majority)
-      [{ target_id: 20, target_name: "Bob", vote_count: 2 }],
+      // Tally: player 20 has 2 votes, player 10 has 1 vote → plurality winner is 20
+      [{ target_id: 20, target_name: "Bob", vote_count: 2 }, { target_id: 10, target_name: "Alice", vote_count: 1 }],
       // Killer check: target is NOT the killer
       [],
       // Reloaded game
