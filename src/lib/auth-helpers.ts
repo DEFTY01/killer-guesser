@@ -1,15 +1,16 @@
-import { auth } from "@/lib/auth";
+import { cookies } from "next/headers";
 
 /**
- * Verifies the incoming request carries an admin session.
+ * Verifies the incoming request carries an admin session cookie.
  *
- * @returns The session object when the caller is authenticated as admin,
- *          or `null` if the session is absent or the role is not "admin".
+ * @returns `true` when the `admin_session` cookie is present,
+ *          or `null` if the cookie is absent.
  */
-export async function requireAdmin() {
-  const session = await auth();
-  if (!session || session.user?.role !== "admin") {
+export async function requireAdmin(): Promise<true | null> {
+  const jar = await cookies();
+  const session = jar.get("admin_session");
+  if (!session?.value) {
     return null;
   }
-  return session;
+  return true;
 }
