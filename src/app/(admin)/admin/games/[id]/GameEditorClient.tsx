@@ -440,6 +440,7 @@ export default function GameEditorClient({
                 : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
             }`}
             aria-pressed={showSpoilers}
+            aria-label={showSpoilers ? "Hide team and role assignments" : "Show team and role assignments"}
           >
             {showSpoilers ? "Hide Spoilers 🙈" : "Show Spoilers 👁"}
           </button>
