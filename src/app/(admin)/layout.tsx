@@ -30,7 +30,10 @@ export default async function AdminLayout({
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* ── Top header ─────────────────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-40 border-b bg-white shadow-sm">
+      <header
+        className="fixed top-0 inset-x-0 z-40 border-b bg-white shadow-sm"
+        style={{ paddingTop: "var(--safe-top)" }}
+      >
         <div className="flex h-16 items-center justify-between px-4 md:px-6">
           <span className="font-bold text-lg text-gray-900 tracking-tight">
             Mountain Killer — Admin
@@ -43,7 +46,7 @@ export default async function AdminLayout({
             <form action={handleSignOut}>
               <button
                 type="submit"
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+                className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
               >
                 Sign out
               </button>
@@ -52,7 +55,10 @@ export default async function AdminLayout({
         </div>
       </header>
 
-      <div className="flex flex-1 pt-16">
+      <div
+        className="flex flex-1 pt-16"
+        style={{ paddingTop: "calc(4rem + var(--safe-top))" }}
+      >
         {/* ── Sidebar — desktop only ──────────────────────────────── */}
         <aside
           className="hidden md:flex w-56 shrink-0 flex-col border-r bg-white fixed top-16 bottom-0 left-0 overflow-y-auto"
@@ -80,6 +86,7 @@ export default async function AdminLayout({
       {/* ── Bottom tab bar — mobile only ───────────────────────────── */}
       <nav
         className="fixed bottom-0 inset-x-0 z-40 border-t bg-white md:hidden"
+        style={{ paddingBottom: "var(--safe-bottom)" }}
         aria-label="Mobile navigation"
       >
         <div className="grid grid-cols-4">
@@ -87,7 +94,7 @@ export default async function AdminLayout({
             <Link
               key={item.href}
               href={item.href}
-              className="flex flex-col items-center justify-center py-3 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
+              className="flex flex-col items-center justify-center min-h-[44px] py-3 text-xs font-medium text-gray-600 hover:text-gray-900 transition-colors"
             >
               {item.label}
             </Link>
