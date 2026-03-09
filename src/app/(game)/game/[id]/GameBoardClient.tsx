@@ -51,6 +51,13 @@ interface BoardData {
   votes?: Array<{ voter_id: number; target_id: number }>;
 }
 
+interface VoteLogEntry {
+  voter_id: number;
+  voter_name: string;
+  target_id: number;
+  target_name: string;
+}
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 function isVoteWindowActive(
@@ -573,6 +580,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const [showGuessModal, setShowGuessModal] = useState(false);
   const [showRoleReveal, setShowRoleReveal] = useState(false);
   const [roleCardOpen, setRoleCardOpen] = useState(false);
+  const [liveVotes, setLiveVotes] = useState<VoteLogEntry[]>([]);
 
   // ── Load board data ─────────────────────────────────────────
 
@@ -584,7 +592,21 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       })
       .then((json) => {
         if (json.success) {
-          setData(json.data as BoardData);
+          const boardData = json.data as BoardData;
+          setData(boardData);
+          if (boardData.votes) {
+            const playerMap = new Map(
+              boardData.players.map((p) => [p.user_id, p.name]),
+            );
+            setLiveVotes(
+              boardData.votes.map((v) => ({
+                voter_id: v.voter_id,
+                voter_name: playerMap.get(v.voter_id) ?? "Unknown",
+                target_id: v.target_id,
+                target_name: playerMap.get(v.target_id) ?? "Unknown",
+              })),
+            );
+          }
         } else {
           setError((json.error as string) ?? "Unknown error");
         }
@@ -672,6 +694,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   const canRevive = data?.caller.permissions.includes("revive_dead") ?? false;
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
+  const canSeeVotes = data?.caller.permissions.includes("see_votes") ?? false;
   const isMayor = data?.caller.role_name === "Mayor";
   // Only players with at least one special permission see role-color borders.
   const canSeeColors = (data?.caller.permissions.length ?? 0) > 0;
@@ -764,6 +787,30 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       },
       [router],
     ),
+  );
+
+  // ── Ably: VOTE_CAST (see_votes permission) ──────────────────
+
+  useAbly(
+    ABLY_CHANNELS.vote(gameId, data?.game.current_day ?? 1),
+    ABLY_EVENTS.vote_cast,
+    useCallback((msg) => {
+      const { voter_id, voter_name, target_id, target_name } = msg.data as {
+        voter_id: number;
+        voter_name: string;
+        target_id: number;
+        target_name: string;
+      };
+      setLiveVotes((prev) => {
+        const idx = prev.findIndex((v) => v.voter_id === voter_id);
+        if (idx !== -1) {
+          const updated = [...prev];
+          updated[idx] = { voter_id, voter_name, target_id, target_name };
+          return updated;
+        }
+        return [...prev, { voter_id, voter_name, target_id, target_name }];
+      });
+    }, []),
   );
 
   // ── Render ──────────────────────────────────────────────────
@@ -911,6 +958,46 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
                 </p>
               )}
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Spy: Today's Votes ───────────────────────────────── */}
+      {data && canSeeVotes && (
+        <div className="rounded-2xl border border-violet-200 bg-violet-50/70 px-4 py-4 space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-violet-700 uppercase tracking-wide">
+            <span aria-hidden="true">🕵️</span> Votes Today
+          </h2>
+          {liveVotes.length === 0 ? (
+            <p className="text-sm text-violet-400 italic">No votes cast yet today.</p>
+          ) : (
+            <ul className="space-y-2" role="list">
+              {liveVotes.map((entry) => {
+                const voterPlayer = data.players.find(
+                  (p) => p.user_id === entry.voter_id,
+                );
+                const isDead = voterPlayer?.is_dead === 1;
+                return (
+                  <li
+                    key={entry.voter_id}
+                    className="flex flex-wrap items-center gap-1.5 text-sm"
+                  >
+                    <span
+                      className={`font-semibold ${isDead ? "line-through text-gray-400" : "text-gray-900"}`}
+                    >
+                      {entry.voter_name}
+                    </span>
+                    {isDead && (
+                      <span aria-label="eliminated" title="Eliminated">☠️</span>
+                    )}
+                    <span className="text-violet-500">accused</span>
+                    <span className="font-semibold text-gray-900">
+                      {entry.target_name}
+                    </span>
+                  </li>
+                );
+              })}
+            </ul>
           )}
         </div>
       )}
