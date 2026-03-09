@@ -12,7 +12,7 @@ export default function HomePage() {
 
       <div className="flex flex-col gap-4 sm:flex-row">
         <Link
-          href="/game"
+          href="/login"
           className="rounded-xl bg-indigo-600 px-8 py-3 text-center text-lg font-semibold text-white shadow hover:bg-indigo-700 transition-colors"
         >
           Play Now

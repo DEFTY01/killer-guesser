@@ -11,7 +11,8 @@ const { auth } = NextAuth(authConfig);
  *  - /admin/login  → redirect to /admin/dashboard if admin_session cookie present.
  *  - /admin/*      → require admin_session cookie; redirect to /admin/login otherwise.
  *  - /game/*       → require NextAuth player session; redirect to /login otherwise.
- *  - /login        → redirect to / if the user already has an active player session.
+ *  - /login        → redirect to /lobby if the user already has an active player session.
+ *  - /lobby        → require NextAuth player session; redirect to /login otherwise.
  */
 export default auth((req) => {
   const { pathname } = req.nextUrl;
@@ -44,11 +45,17 @@ export default auth((req) => {
 
   if (pathname === "/login") {
     if (role === "player") {
-      return NextResponse.redirect(new URL("/", req.url));
+      return NextResponse.redirect(new URL("/lobby", req.url));
+    }
+  }
+
+  if (pathname === "/lobby") {
+    if (role !== "player") {
+      return NextResponse.redirect(new URL("/login", req.url));
     }
   }
 });
 
 export const config = {
-  matcher: ["/admin/:path*", "/game/:path*", "/login"],
+  matcher: ["/admin/:path*", "/game/:path*", "/login", "/lobby"],
 };
