@@ -54,6 +54,7 @@ export default async function GameDetailPage({
         name: roles.name,
         color_hex: roles.color_hex,
         team: roles.team,
+        is_evil: roles.is_evil,
       })
       .from(roles)
       .orderBy(asc(roles.name)),

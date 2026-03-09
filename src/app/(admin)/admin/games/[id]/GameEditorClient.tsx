@@ -19,6 +19,8 @@ interface GameRow {
   team2_name: string;
   winner_team: string | null;
   created_at: number;
+  /** 1 = team1 is the Evil team; 0 = team2 is the Evil team */
+  evil_team_is_team1: number;
 }
 
 type SettingsRow = {
@@ -55,6 +57,7 @@ interface RoleOption {
   name: string;
   color_hex: string;
   team: string;
+  is_evil: number;
 }
 
 interface GameEditorClientProps {
@@ -539,7 +542,17 @@ export default function GameEditorClient({
                             className="rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                           >
                             <option value="">— No role —</option>
-                            {allRoles.map((r) => (
+                            {allRoles
+                              .filter((r) => {
+                                // Determine if this player is on the evil team
+                                const isEvilTeamPlayer =
+                                  (p.team === "team1" && game.evil_team_is_team1 === 1) ||
+                                  (p.team === "team2" && game.evil_team_is_team1 === 0);
+                                // Exclude evil roles (e.g. Killer) for non-evil team players
+                                if (r.is_evil === 1 && !isEvilTeamPlayer) return false;
+                                return true;
+                              })
+                              .map((r) => (
                               <option key={r.id} value={r.id}>
                                 {r.name}
                               </option>
