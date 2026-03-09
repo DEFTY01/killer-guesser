@@ -1,11 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { games, game_settings, game_players } from "@/db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { games, game_settings, game_players, roles } from "@/db/schema";
+import { desc, eq, sql, inArray } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { assignTeamsAndRoles } from "@/lib/assignTeamsAndRoles";
 
 // ── Zod schema ────────────────────────────────────────────────────
+
+const roleEntrySchema = z.object({
+  roleId: z.number().int().positive(),
+  chancePercent: z.number().min(0).max(100),
+});
 
 const createGameSchema = z.object({
   name: z.string().min(1, "Name is required"),
@@ -25,21 +31,15 @@ const createGameSchema = z.object({
     .nullable(),
   team1_name: z.string().min(1, "team1_name is required").default("Good"),
   team2_name: z.string().min(1, "team2_name is required").default("Evil"),
-  players: z
-    .array(
-      z.object({
-        user_id: z.number().int().positive(),
-        team: z.enum(["team1", "team2"]).nullable().optional(),
-      }),
-    )
+  player_ids: z
+    .array(z.number().int().positive())
     .min(1, "At least one player is required"),
-  special_role_count: z
-    .number()
-    .int()
-    .nonnegative()
-    .optional()
-    .nullable(),
-  role_chances: z.string().optional().nullable(),
+  team1_max_players: z.number().int().min(1).default(1),
+  team2_max_players: z.number().int().min(1).default(1),
+  team1Roles: z.array(roleEntrySchema).default([]),
+  team1SpecialCount: z.number().int().nonnegative().default(0),
+  team2Roles: z.array(roleEntrySchema).default([]),
+  team2SpecialCount: z.number().int().nonnegative().default(0),
   murder_item_url: z.string().url().optional().nullable(),
   murder_item_name: z.string().optional().nullable(),
   revive_cooldown_seconds: z
@@ -94,8 +94,11 @@ export async function GET() {
  * Creates a new game in a single database transaction:
  *   1. INSERT into `games`
  *   2. INSERT into `game_settings`
- *   3. INSERT one row per player into `game_players`
+ *   3. Server-side team & role assignment via `assignTeamsAndRoles`
+ *   4. INSERT one row per player into `game_players`
  *
+ * The server performs all team and role assignment — the client never
+ * sends which player goes to which team or which role they receive.
  * If any insert fails the transaction rolls back entirely.
  * Requires an admin session.
  */
@@ -125,13 +128,82 @@ export async function POST(req: NextRequest) {
     vote_window_end,
     team1_name,
     team2_name,
-    players,
-    special_role_count,
-    role_chances,
+    player_ids,
+    team1_max_players,
+    team2_max_players,
+    team1Roles,
+    team1SpecialCount,
+    team2Roles,
+    team2SpecialCount,
     murder_item_url,
     murder_item_name,
     revive_cooldown_seconds,
   } = parsed.data;
+
+  // ── Resolve Killer & Survivor role IDs from the database ──────
+  const allRoleIds = [
+    ...team1Roles.map((r) => r.roleId),
+    ...team2Roles.map((r) => r.roleId),
+  ];
+
+  let killerRoleId: number | null = null;
+  let survivorRoleId: number | null = null;
+
+  if (allRoleIds.length > 0) {
+    const dbRoles = await db
+      .select({ id: roles.id, name: roles.name, is_default: roles.is_default })
+      .from(roles)
+      .where(inArray(roles.id, allRoleIds));
+
+    const killerRole = dbRoles.find(
+      (r) => r.name.toLowerCase() === "killer",
+    );
+    killerRoleId = killerRole?.id ?? null;
+
+    const survivorRole = dbRoles.find(
+      (r) => r.name.toLowerCase() === "survivor" || r.is_default === 1,
+    );
+    survivorRoleId = survivorRole?.id ?? null;
+  }
+
+  // If no killer role was found, return an error
+  if (killerRoleId === null && team1Roles.length > 0) {
+    return NextResponse.json(
+      { success: false, error: "No Killer role found in the database. Please create one first." },
+      { status: 422 },
+    );
+  }
+
+  // If no survivor role was found, try to find one globally
+  if (survivorRoleId === null) {
+    const [survivorRow] = await db
+      .select({ id: roles.id })
+      .from(roles)
+      .where(eq(roles.name, "Survivor"))
+      .limit(1);
+    survivorRoleId = survivorRow?.id ?? null;
+  }
+
+  // ── Assign teams & roles server-side ─────────────────────────
+  const playerAssignments = assignTeamsAndRoles({
+    playerIds: player_ids,
+    team1MaxPlayers: team1_max_players,
+    team2MaxPlayers: team2_max_players,
+    team1Roles,
+    team1SpecialCount,
+    killerRoleId: killerRoleId ?? 0,
+    team2Roles,
+    team2SpecialCount,
+    survivorRoleId,
+  });
+
+  // ── Role config stored as JSON for reference ──────────────────
+  const roleChancesJson = JSON.stringify({
+    team1Roles,
+    team1SpecialCount,
+    team2Roles,
+    team2SpecialCount,
+  });
 
   const newGame = await db.transaction(async (tx) => {
     const [game] = await tx
@@ -148,20 +220,24 @@ export async function POST(req: NextRequest) {
 
     await tx.insert(game_settings).values({
       game_id: game.id,
-      special_role_count: special_role_count ?? null,
-      role_chances: role_chances ?? null,
+      // Combined total of both teams' special role counts
+      special_role_count: team1SpecialCount + team2SpecialCount,
+      role_chances: roleChancesJson,
       murder_item_url: murder_item_url ?? null,
       murder_item_name: murder_item_name ?? null,
       revive_cooldown_seconds: revive_cooldown_seconds ?? null,
     });
 
-    await tx.insert(game_players).values(
-      players.map((p) => ({
-        game_id: game.id,
-        user_id: p.user_id,
-        team: p.team ?? null,
-      })),
-    );
+    if (playerAssignments.length > 0) {
+      await tx.insert(game_players).values(
+        playerAssignments.map((p) => ({
+          game_id: game.id,
+          user_id: p.userId,
+          team: p.team,
+          role_id: p.roleId,
+        })),
+      );
+    }
 
     return game;
   });

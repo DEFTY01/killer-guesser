@@ -40,7 +40,7 @@ vi.mock("@/db", () => ({
 
 vi.mock("@/db/schema", () => ({
   users: { id: "id", name: "name" },
-  roles: { id: "id", name: "name" },
+  roles: { id: "id", name: "name", is_default: "is_default" },
   games: { id: "id", status: "status", vote_window_start: "vws", vote_window_end: "vwe", start_time: "st", created_at: "ca" },
   game_players: { id: "id", game_id: "game_id", user_id: "user_id" },
   game_settings: { game_id: "game_id" },
@@ -54,6 +54,7 @@ vi.mock("drizzle-orm", () => ({
   desc: vi.fn(),
   sql: vi.fn(),
   count: vi.fn(),
+  inArray: vi.fn(),
 }));
 
 vi.mock("@/lib/ably", () => ({
@@ -65,6 +66,13 @@ vi.mock("@/lib/ably", () => ({
 vi.mock("@/lib/gameEnd", () => ({
   closeGame: vi.fn(),
   deleteGame: vi.fn(),
+}));
+
+vi.mock("@/lib/assignTeamsAndRoles", () => ({
+  assignTeamsAndRoles: vi.fn(() => [
+    { userId: 1, team: "team1", roleId: null },
+    { userId: 2, team: "team2", roleId: null },
+  ]),
 }));
 
 import { POST as createGame } from "@/app/api/admin/games/route";
@@ -95,10 +103,16 @@ describe("POST /api/admin/games", () => {
   it("valid payload → 201, game created via transaction", async () => {
     mockRequireAdmin.mockResolvedValue(true);
 
+    // Mock db.select for role lookups (Killer + Survivor)
+    const limitFn = vi.fn().mockResolvedValue([]);
+    const whereFn = vi.fn(() => ({ limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn }));
+    mockDbSelect.mockReturnValue({ from: fromFn });
+
     const req = makeRequest("POST", {
       name: "Test Game",
       start_time: 1700000000,
-      players: [{ user_id: 1 }, { user_id: 2 }],
+      player_ids: [1, 2],
     });
     const res = await createGame(req);
     const data = await res.json();
@@ -112,10 +126,16 @@ describe("POST /api/admin/games", () => {
     mockRequireAdmin.mockResolvedValue(true);
     mockTransaction.mockRejectedValue(new Error("DB insert failed"));
 
+    // Mock db.select for role lookups
+    const limitFn = vi.fn().mockResolvedValue([]);
+    const whereFn = vi.fn(() => ({ limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn }));
+    mockDbSelect.mockReturnValue({ from: fromFn });
+
     const req = makeRequest("POST", {
       name: "Failing Game",
       start_time: 1700000000,
-      players: [{ user_id: 1 }],
+      player_ids: [1],
     });
 
     await expect(createGame(req)).rejects.toThrow("DB insert failed");
