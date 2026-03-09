@@ -9,13 +9,13 @@ import { NextRequest } from "next/server";
  */
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockHandleKillerDefeated } = vi.hoisted(() => ({
+const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
-  mockHandleKillerDefeated: vi.fn(),
+  mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/gameEnd", () => ({ handleKillerDefeated: mockHandleKillerDefeated }));
+vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },

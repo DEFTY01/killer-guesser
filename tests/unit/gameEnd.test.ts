@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── vi.hoisted: hoist shared mock variables so vi.mock factories can use them
 
-const { mockPublish, mockChannelGet, txMock, mockTransaction } = vi.hoisted(() => {
+const { mockPublish, mockChannelGet, txMock, mockTransaction, mockSelect } = vi.hoisted(() => {
   const publish = vi.fn().mockResolvedValue(undefined);
   const get = vi.fn(() => ({ publish }));
 
@@ -21,17 +21,21 @@ const { mockPublish, mockChannelGet, txMock, mockTransaction } = vi.hoisted(() =
     async (fn: (arg: typeof tx) => Promise<unknown>) => fn(tx),
   );
 
+  // Top-level db.select mock (used by checkGameOver).
+  const sel = vi.fn();
+
   return {
     mockPublish: publish,
     mockChannelGet: get,
     txMock: tx,
     mockTransaction: transaction,
+    mockSelect: sel,
   };
 });
 
 // ── Module mocks ──────────────────────────────────────────────────
 
-vi.mock("@/db", () => ({ db: { transaction: mockTransaction } }));
+vi.mock("@/db", () => ({ db: { transaction: mockTransaction, select: mockSelect } }));
 
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: mockChannelGet } },
@@ -51,8 +55,9 @@ vi.mock("@/lib/ably", () => ({
 // ── Imports (after mocks are registered) ─────────────────────────
 
 import {
-  handleKillerDefeated,
-  handleKillerWins,
+  checkGameOver,
+  handleGoodWins,
+  handleEvilWins,
   deleteGame,
   closeGame,
 } from "@/lib/gameEnd";
@@ -92,34 +97,47 @@ beforeEach(() => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// handleKillerDefeated
+// handleGoodWins
 // ─────────────────────────────────────────────────────────────────
 
-describe("handleKillerDefeated", () => {
+describe("handleGoodWins", () => {
   it("runs inside a database transaction", async () => {
-    await handleKillerDefeated("game123");
+    await handleGoodWins("game123");
     expect(mockTransaction).toHaveBeenCalledOnce();
   });
 
   it("archives past events (set is_archived = 1)", async () => {
-    await handleKillerDefeated("game123");
+    await handleGoodWins("game123");
     const call = findSetCall((a) => a.is_archived === 1);
     expect(call).toBeDefined();
   });
 
   it("closes the game (set status = 'closed')", async () => {
-    await handleKillerDefeated("game123");
+    await handleGoodWins("game123");
     const call = findSetCall((a) => a.status === "closed");
     expect(call).toBeDefined();
+  });
+
+  it("sets winner_team to the goodTeamId ('team2' by default)", async () => {
+    await handleGoodWins("game123");
+    const closeCall = findSetCall((a) => a.status === "closed");
+    expect(closeCall).toBeDefined();
+    expect(closeCall![0].winner_team).toBe("team2");
+  });
+
+  it("sets winner_team to the provided goodTeamId", async () => {
+    await handleGoodWins("game123", "team1");
+    const closeCall = findSetCall((a) => a.status === "closed");
+    expect(closeCall).toBeDefined();
+    expect(closeCall![0].winner_team).toBe("team1");
   });
 
   it("publishes game_ended to the correct Ably channel", async () => {
     process.env.ABLY_API_KEY = "test-key";
     try {
-      await handleKillerDefeated("game123");
+      await handleGoodWins("game123");
       expect(mockChannelGet).toHaveBeenCalledWith("game-game123");
-      const [, payload] = mockPublish.mock.calls[0] as [string, { winner_team: unknown }];
-      expect(["string", "object"].includes(typeof payload.winner_team) || payload.winner_team === null).toBe(true);
+      expect(mockPublish).toHaveBeenCalledWith("game_ended", { winner_team: "team2" });
     } finally {
       delete process.env.ABLY_API_KEY;
     }
@@ -127,23 +145,53 @@ describe("handleKillerDefeated", () => {
 
   it("skips Ably publish when ABLY_API_KEY is absent", async () => {
     delete process.env.ABLY_API_KEY;
-    await handleKillerDefeated("game123");
+    await handleGoodWins("game123");
     expect(mockPublish).not.toHaveBeenCalled();
   });
+});
 
-  it("sets winner_team to the survivors team (team2_name) when killer is on team1", async () => {
+// ─────────────────────────────────────────────────────────────────
+// handleEvilWins
+// ─────────────────────────────────────────────────────────────────
+
+describe("handleEvilWins", () => {
+  it("runs inside a database transaction", async () => {
+    await handleEvilWins("game456");
+    expect(mockTransaction).toHaveBeenCalledOnce();
+  });
+
+  it("archives past events (set is_archived = 1)", async () => {
+    await handleEvilWins("game456");
+    const call = findSetCall((a) => a.is_archived === 1);
+    expect(call).toBeDefined();
+  });
+
+  it("closes the game (set status = 'closed')", async () => {
+    await handleEvilWins("game456");
+    const call = findSetCall((a) => a.status === "closed");
+    expect(call).toBeDefined();
+  });
+
+  it("sets winner_team to the evilTeamId ('team1' by default)", async () => {
+    await handleEvilWins("game456");
+    const closeCall = findSetCall((a) => a.status === "closed");
+    expect(closeCall).toBeDefined();
+    expect(closeCall![0].winner_team).toBe("team1");
+  });
+
+  it("sets winner_team to the provided evilTeamId", async () => {
+    await handleEvilWins("game456", "team2");
+    const closeCall = findSetCall((a) => a.status === "closed");
+    expect(closeCall).toBeDefined();
+    expect(closeCall![0].winner_team).toBe("team2");
+  });
+
+  it("publishes game_ended to the correct Ably channel", async () => {
     process.env.ABLY_API_KEY = "test-key";
     try {
-      // First limit() call → game record; second → killer player on team1.
-      txMock.limit = vi.fn()
-        .mockResolvedValueOnce([{ team1_name: "Good", team2_name: "Evil" }])
-        .mockResolvedValueOnce([{ team: "team1" }]);
-
-      await handleKillerDefeated("game123");
-
-      const closeCall = findSetCall((a) => a.status === "closed");
-      expect(closeCall).toBeDefined();
-      expect(closeCall![0].winner_team).toBe("Evil");
+      await handleEvilWins("game456");
+      expect(mockChannelGet).toHaveBeenCalledWith("game-game456");
+      expect(mockPublish).toHaveBeenCalledWith("game_ended", { winner_team: "team1" });
     } finally {
       delete process.env.ABLY_API_KEY;
     }
@@ -151,51 +199,111 @@ describe("handleKillerDefeated", () => {
 });
 
 // ─────────────────────────────────────────────────────────────────
-// handleKillerWins
+// checkGameOver
 // ─────────────────────────────────────────────────────────────────
 
-describe("handleKillerWins", () => {
-  it("runs inside a database transaction", async () => {
-    await handleKillerWins("game456");
-    expect(mockTransaction).toHaveBeenCalledOnce();
-  });
+describe("checkGameOver", () => {
+  function setupCheckGameOver(
+    evil_team_is_team1: number,
+    players: Array<{ team: string; is_dead: number }>,
+  ) {
+    let callCount = 0;
+    mockSelect.mockImplementation(() => {
+      callCount++;
+      if (callCount === 1) {
+        return {
+          from: () => ({
+            where: () => ({
+              limit: vi.fn().mockResolvedValue([{ evil_team_is_team1 }]),
+            }),
+          }),
+        };
+      }
+      return {
+        from: () => ({
+          where: vi.fn().mockResolvedValue(players),
+        }),
+      };
+    });
+  }
 
-  it("archives past events (set is_archived = 1)", async () => {
-    await handleKillerWins("game456");
-    const call = findSetCall((a) => a.is_archived === 1);
-    expect(call).toBeDefined();
-  });
-
-  it("closes the game (set status = 'closed')", async () => {
-    await handleKillerWins("game456");
-    const call = findSetCall((a) => a.status === "closed");
-    expect(call).toBeDefined();
-  });
-
-  it("sets winner_team to the killer's team (team1_name) when killer is on team1", async () => {
+  it("good wins when all evil players are dead (team1=evil)", async () => {
     process.env.ABLY_API_KEY = "test-key";
     try {
-      // First limit() call → game record; second → killer player on team1.
-      txMock.limit = vi.fn()
-        .mockResolvedValueOnce([{ team1_name: "Good", team2_name: "Evil" }])
-        .mockResolvedValueOnce([{ team: "team1" }]);
-
-      await handleKillerWins("game456");
-
+      setupCheckGameOver(1, [
+        { team: "team1", is_dead: 1 },
+        { team: "team2", is_dead: 0 },
+      ]);
+      await checkGameOver("game-good-wins");
       const closeCall = findSetCall((a) => a.status === "closed");
       expect(closeCall).toBeDefined();
-      expect(closeCall![0].winner_team).toBe("Good");
+      expect(closeCall![0].winner_team).toBe("team2");
     } finally {
       delete process.env.ABLY_API_KEY;
     }
   });
 
-  it("publishes game_ended to the correct Ably channel", async () => {
+  it("evil wins when all good players are dead (team1=evil)", async () => {
     process.env.ABLY_API_KEY = "test-key";
     try {
-      await handleKillerWins("game456");
-      expect(mockChannelGet).toHaveBeenCalledWith("game-game456");
-      expect(mockPublish).toHaveBeenCalledWith("game_ended", expect.any(Object));
+      setupCheckGameOver(1, [
+        { team: "team1", is_dead: 0 },
+        { team: "team2", is_dead: 1 },
+      ]);
+      await checkGameOver("game-evil-wins");
+      const closeCall = findSetCall((a) => a.status === "closed");
+      expect(closeCall).toBeDefined();
+      expect(closeCall![0].winner_team).toBe("team1");
+    } finally {
+      delete process.env.ABLY_API_KEY;
+    }
+  });
+
+  it("does not close game when both teams have alive players", async () => {
+    setupCheckGameOver(1, [
+      { team: "team1", is_dead: 0 },
+      { team: "team2", is_dead: 0 },
+    ]);
+    await checkGameOver("game-ongoing");
+    const closeCall = findSetCall((a) => a.status === "closed");
+    expect(closeCall).toBeUndefined();
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it("multi-killer: good wins only when ALL evil players are dead", async () => {
+    setupCheckGameOver(1, [
+      { team: "team1", is_dead: 1 },
+      { team: "team1", is_dead: 0 }, // second killer still alive
+      { team: "team2", is_dead: 0 },
+    ]);
+    await checkGameOver("game-multi-killer");
+    const closeCall = findSetCall((a) => a.status === "closed");
+    expect(closeCall).toBeUndefined();
+  });
+
+  it("returns early if game not found", async () => {
+    mockSelect.mockImplementation(() => ({
+      from: () => ({
+        where: () => ({
+          limit: vi.fn().mockResolvedValue([]),
+        }),
+      }),
+    }));
+    await checkGameOver("no-game");
+    expect(mockTransaction).not.toHaveBeenCalled();
+  });
+
+  it("respects evil_team_is_team1=0 (team2=evil)", async () => {
+    process.env.ABLY_API_KEY = "test-key";
+    try {
+      setupCheckGameOver(0, [
+        { team: "team2", is_dead: 1 }, // evil (team2), dead
+        { team: "team1", is_dead: 0 }, // good (team1), alive
+      ]);
+      await checkGameOver("game-inverted");
+      const closeCall = findSetCall((a) => a.status === "closed");
+      expect(closeCall).toBeDefined();
+      expect(closeCall![0].winner_team).toBe("team1");
     } finally {
       delete process.env.ABLY_API_KEY;
     }
@@ -274,3 +382,4 @@ describe("closeGame", () => {
     }
   });
 });
+

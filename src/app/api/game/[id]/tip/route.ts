@@ -5,7 +5,7 @@ import { db } from "@/db";
 import { game_players, roles, users } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import { handleKillerDefeated } from "@/lib/gameEnd";
+import { checkGameOver } from "@/lib/gameEnd";
 
 // ── Schema ────────────────────────────────────────────────────────
 
@@ -183,7 +183,7 @@ export async function POST(
     });
 
     // Trigger game-end logic (archives events, closes game, publishes GAME_ENDED).
-    await handleKillerDefeated(gameId);
+    await checkGameOver(gameId);
 
     return NextResponse.json({ success: true, data: { correct: true } });
   }
@@ -218,6 +218,9 @@ export async function POST(
       player_name: callerUser?.name ?? "Unknown",
     });
   }
+
+  // Check win conditions — the caller's death might give evil team the win.
+  await checkGameOver(gameId);
 
   return NextResponse.json({ success: true, data: { correct: false } });
 }
