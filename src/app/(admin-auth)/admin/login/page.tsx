@@ -1,14 +1,15 @@
 "use client";
 
 import { useState } from "react";
+import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 /**
  * Admin login page.
  *
- * Minimal, password-only sign-in form that POSTs to /api/auth/admin-login.
- * On success the user is redirected to /admin/dashboard. On failure an
- * inline error message is shown.
+ * Minimal, password-only sign-in form that calls the "admin" Credentials
+ * provider. On success the user is redirected to /admin/dashboard. On
+ * failure an inline error message is shown.
  *
  * This page is unreachable once an admin session is active — the middleware
  * redirects authenticated admins to /admin/dashboard before this renders.
@@ -25,19 +26,19 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch("/api/auth/admin-login", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
-      });
-
-      if (res.ok) {
-        router.push("/admin/dashboard");
+      const result = await signIn("admin", { password, redirect: false });
+      if (result?.error) {
+        setError("Invalid password");
       } else {
-        setError("Incorrect password");
+        try {
+          router.push("/admin/dashboard");
+        } catch {
+          // Navigation failed — hard-redirect as fallback.
+          window.location.href = "/admin/dashboard";
+        }
       }
     } catch {
-      setError("Incorrect password");
+      setError("Invalid password");
     } finally {
       setLoading(false);
     }
@@ -80,7 +81,7 @@ export default function AdminLoginPage() {
             disabled={loading}
             className="w-full rounded-lg bg-indigo-600 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Signing in…" : "Enter Admin Panel"}
+            {loading ? "Signing in…" : "Sign In"}
           </button>
         </form>
       </div>
