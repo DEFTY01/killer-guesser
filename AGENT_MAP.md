@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-08 (PROMPT 27 — Evening vote & daytime killer tip: new `GET/POST /api/game/[id]/vote` (HH:MM window, lazy close, majority elimination), `POST /api/game/[id]/tip` (killer guess with transaction), `update_vote_window` admin PATCH action, inline vote window time inputs in GameEditorClient, updated VotePageClient (re-tappable cards, aggregate tallies, animated bars, crossfade), FAB + 3-screen killer guess modal in GameBoardClient)
+> **Last Updated:** 2026-03-09 (PROMPT 29 — Game History & Archive Viewer: new `GET /api/admin/games/[id]/history` (full closed-game data: metadata, players with fate/location/time-of-day, archived events, anonymous vote tallies by day), updated `/admin/games` page with Active/Scheduled/Closed/Deleted tabs + winning team column, new read-only `/admin/games/[id]/history` page with header card, day-by-day timeline, player fates table, and voting history with bar charts)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -57,13 +57,15 @@ killer-guesser/
 │   │   │   │   │   ├── page.tsx              # Roles list (server component)
 │   │   │   │   │   └── RolesClient.tsx       # Interactive table + add/edit panels (client)
 │   │   │   │   ├── games/     # Game management pages
-│   │   │   │   │   ├── page.tsx              # Games list (server component)
+│   │   │   │   │   ├── page.tsx              # Games list with tabs (Active/Scheduled/Closed/Deleted)
 │   │   │   │   │   ├── new/                  # 4-step game creation wizard
 │   │   │   │   │   │   ├── page.tsx          # Server wrapper (fetches players + roles)
 │   │   │   │   │   │   └── NewGameWizard.tsx # 4-step client wizard component
 │   │   │   │   │   └── [id]/                 # Game detail / live editor
 │   │   │   │   │       ├── page.tsx          # Server wrapper (fetches game, settings, players, roles)
-│   │   │   │   │       └── GameEditorClient.tsx # Live editor: status bar, players panel, actions panel
+│   │   │   │   │       ├── GameEditorClient.tsx # Live editor: status bar, players panel, actions panel
+│   │   │   │   │       └── history/          # Read-only post-game archive
+│   │   │   │   │           └── page.tsx      # History viewer: header, timeline, players, votes
 │   │   │   │   └── page.tsx   # Redirects → /admin/dashboard
 │   │   │   └── layout.tsx     # Admin shell (role check, sidebar, bottom nav)
 │   │   ├── (game)/            # Game route group
@@ -87,9 +89,11 @@ killer-guesser/
 │   │   │   │       ├── route.ts         # GET (list roles) + POST (create role)
 │   │   │   │       └── [id]/route.ts    # PATCH (update) + DELETE (forbidden if is_default=1)
 │   │   │   │   └── games/     # Admin game management API
-│   │   │   │       ├── route.ts         # GET (list games with player count) + POST (transactional create)
+│   │   │   │       ├── route.ts         # GET (list all games with player count) + POST (transactional create)
 │   │   │   │       └── [id]/            # Per-game API
 │   │   │   │           ├── route.ts     # GET (full game data) + PATCH (close_voting / close / delete)
+│   │   │   │           ├── history/     # Game archive endpoint
+│   │   │   │           │   └── route.ts # GET (game + players with fate + events + votes_by_day)
 │   │   │   │           ├── reroll/      # Re-randomise teams or roles
 │   │   │   │           │   └── route.ts # POST ?type=teams|roles
 │   │   │   │           └── players/[playerId]/
@@ -179,11 +183,12 @@ killer-guesser/
 | `src/app/(admin)/admin/players/new/page.tsx` | New player form: name input, avatar upload with live preview |
 | `src/app/(admin)/admin/roles/page.tsx` | Roles list: server component — fetches roles from DB, passes to RolesClient |
 | `src/app/(admin)/admin/roles/RolesClient.tsx` | Interactive roles table: color swatch, inline chance slider (optimistic), add/edit panels, permission checkboxes, team-total warning |
-| `src/app/(admin)/admin/games/page.tsx` | Games list: server component — fetches all games with player counts |
+| `src/app/(admin)/admin/games/page.tsx` | Games list with status tabs (Active/Scheduled/Closed/Deleted) and per-tab badge counts; closed games link to `/history` |
 | `src/app/(admin)/admin/games/new/page.tsx` | New game wizard wrapper: server component fetches players + roles, renders NewGameWizard |
 | `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + randomize, step 3 roles/settings/murder item, step 4 summary + submit |
 | `src/app/(admin)/admin/games/[id]/page.tsx` | Game editor: server component — fetches game, settings, players (with role data), and all roles; renders GameEditorClient |
 | `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
+| `src/app/(admin)/admin/games/[id]/history/page.tsx` | Read-only game archive viewer: header card (name/duration/winner), day-by-day timeline with events + vote bars, player fates table (avatar/role/team/death), voting history with anonymous bar charts |
 | `src/app/(game)/game/page.tsx` | Main game room page (renders PlayerLogin for join flow) |
 | `src/app/(game)/game/[id]/page.tsx` | Game board: server wrapper — resolves `id` param and renders GameBoardClient |
 | `src/app/(game)/game/[id]/GameBoardClient.tsx` | Interactive game board (client): vote countdown (hidden for Mayor), murder item card, player grid, vote button, self-death modal; Seer 👁️ banner; Mayor ⚖️ banner; subscribes to PLAYER_DIED (instant grayscale), PLAYER_REVIVED (remove grayscale+X, show Undead), and GAME_ENDED (modal + 3s redirect) |
@@ -273,6 +278,7 @@ killer-guesser/
 | `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "update_vote_window" (set vote_window_start/end as HH:MM), "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Update game player: is_dead (0/1) and/or role_id — admin only |
 | `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) — admin only |
+| `GET` | `/api/admin/games/[id]/history` | `src/app/api/admin/games/[id]/history/route.ts` | Game archive: game metadata + players (with died_location, died_time_of_day, role) + archived events (chronological) + anonymous vote tallies by day — admin only |
 | `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Get global bg_light_url + bg_dark_url from app_settings singleton — admin only |
 | `PATCH` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Upsert bg_light_url and/or bg_dark_url (pass null to clear) — admin only |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
