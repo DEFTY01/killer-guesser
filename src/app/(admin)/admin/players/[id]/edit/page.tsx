@@ -312,7 +312,7 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
       </div>
 
       {/* Alert Messages */}
-      {error && (
+      {typeof error === "string" && error.length > 0 && (
         <div className="rounded-lg border border-red-200 bg-red-50 p-4">
           <p className="text-sm text-red-800">{error}</p>
         </div>
@@ -325,7 +325,7 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
       )}
 
       {/* Debug Panel */}
-      {(debugInfo.fetchStatus || debugInfo.apiResponse) && (
+      {(debugInfo.fetchStatus != null || debugInfo.apiResponse != null) && (
         <details className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
           <summary className="cursor-pointer font-medium text-yellow-900">
             🔍 Debug Information
@@ -340,7 +340,7 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
             <div>
               <strong>Timestamp:</strong> {debugInfo.timestamp}
             </div>
-            {debugInfo.apiResponse && (
+            {debugInfo.apiResponse != null && (
               <div className="mt-2 break-all whitespace-pre-wrap border-t border-yellow-200 pt-2">
                 <strong>API Response:</strong>
                 <pre className="overflow-auto max-h-32 bg-white p-2 rounded text-yellow-900">
