@@ -15,10 +15,27 @@ import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Zod schema ────────────────────────────────────────────────────
 
-const patchGameSchema = z.object({
-  action: z.enum(["close_voting", "close", "delete"]),
-  winner_team: z.enum(["team1", "team2"]).optional().nullable(),
-});
+const patchGameSchema = z.discriminatedUnion("action", [
+  z.object({
+    action: z.literal("update_vote_window"),
+    vote_window_start: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/, "Must be HH:MM")
+      .nullable(),
+    vote_window_end: z
+      .string()
+      .regex(/^\d{2}:\d{2}$/, "Must be HH:MM")
+      .nullable(),
+  }),
+  z.object({
+    action: z.literal("close_voting"),
+  }),
+  z.object({
+    action: z.literal("close"),
+    winner_team: z.enum(["team1", "team2"]).optional().nullable(),
+  }),
+  z.object({ action: z.literal("delete") }),
+]);
 
 // ── GET /api/admin/games/[id] ─────────────────────────────────────
 
@@ -146,12 +163,22 @@ export async function PATCH(
     );
   }
 
-  const { action, winner_team } = parsed.data;
+  const { action } = parsed.data;
 
   if (action === "delete") {
     // Hard-delete the game; related records cascade automatically.
     await db.delete(games).where(eq(games.id, id));
     return NextResponse.json({ success: true, data: { id } });
+  }
+
+  if (action === "update_vote_window") {
+    const { vote_window_start, vote_window_end } = parsed.data;
+    const [updated] = await db
+      .update(games)
+      .set({ vote_window_start, vote_window_end })
+      .where(eq(games.id, id))
+      .returning();
+    return NextResponse.json({ success: true, data: updated });
   }
 
   if (action === "close_voting") {
@@ -198,11 +225,12 @@ export async function PATCH(
   }
 
   // action === "close"
+  const closeData = parsed.data as { action: "close"; winner_team?: string | null };
   const [updated] = await db
     .update(games)
     .set({
       status: "closed",
-      winner_team: winner_team ?? null,
+      winner_team: closeData.winner_team ?? null,
     })
     .where(eq(games.id, id))
     .returning();

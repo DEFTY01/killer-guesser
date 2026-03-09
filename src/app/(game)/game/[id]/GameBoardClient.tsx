@@ -33,6 +33,9 @@ interface CallerInfo {
   user_id: number;
   permissions: RolePermission[];
   role_name: string | null;
+  is_dead: number;
+  revived_at: number | null;
+  has_tipped: number;
 }
 
 interface BoardData {
@@ -51,11 +54,12 @@ function isVoteWindowActive(
   end: string | null,
 ): boolean {
   if (!start || !end) return false;
-  const now = Date.now();
-  const startMs = Date.parse(start);
-  const endMs = Date.parse(end);
-  if (isNaN(startMs) || isNaN(endMs)) return false;
-  return now >= startMs && now < endMs;
+  const now = new Date();
+  const currentMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return false;
+  return currentMin >= sh * 60 + sm && currentMin < eh * 60 + em;
 }
 
 // ── Murder item fullscreen modal ──────────────────────────────────
@@ -316,6 +320,236 @@ function SkeletonCard() {
   );
 }
 
+// ── KillerGuessModal ──────────────────────────────────────────────
+
+interface GuessPlayer {
+  id: number;       // game_player.id
+  user_id: number;
+  name: string;
+  avatar_url: string | null;
+  is_dead: number;
+  revived_at: number | null;
+}
+
+type GuessScreen = 1 | 2 | 3;
+
+interface KillerGuessModalProps {
+  gameId: string;
+  players: GuessPlayer[];
+  callerUserId: number;
+  onClose: () => void;
+  onWrongGuess: (callerUserId: number) => void;
+}
+
+function KillerGuessModal({
+  gameId,
+  players,
+  callerUserId,
+  onClose,
+  onWrongGuess,
+}: KillerGuessModalProps) {
+  const router = useRouter();
+  const [screen, setScreen] = useState<GuessScreen>(1);
+  const [suspect, setSuspect] = useState<GuessPlayer | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+  const [correct, setCorrect] = useState<boolean | null>(null);
+  const [apiError, setApiError] = useState<string | null>(null);
+
+  const alivePlayers = players.filter(
+    (p) => (p.is_dead === 0 || p.revived_at !== null) && p.user_id !== callerUserId,
+  );
+
+  const handleAccuse = useCallback(async () => {
+    if (!suspect) return;
+    setSubmitting(true);
+    setApiError(null);
+    try {
+      const res = await fetch(`/api/game/${gameId}/tip`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ suspectId: suspect.user_id }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setApiError((json.error as string) ?? "Something went wrong");
+        setScreen(1);
+        return;
+      }
+      const isCorrect = (json.data as { correct: boolean }).correct;
+      setCorrect(isCorrect);
+      setScreen(3);
+      if (!isCorrect) {
+        onWrongGuess(callerUserId);
+        setTimeout(() => onClose(), 3000);
+      } else {
+        setTimeout(() => router.push("/lobby"), 3000);
+      }
+    } catch {
+      setApiError("Network error. Please try again.");
+      setScreen(1);
+    } finally {
+      setSubmitting(false);
+    }
+  }, [gameId, suspect, callerUserId, onClose, onWrongGuess, router]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="killer-guess-title"
+    >
+      <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl overflow-hidden">
+        {/* Sliding screens */}
+        <div className="relative overflow-hidden">
+          {/* Screen 1: Suspect grid */}
+          <div
+            style={{
+              transform: screen === 1 ? "translateX(0)" : "translateX(-100%)",
+              transition: "transform 0.2s ease",
+              position: screen === 1 ? "relative" : "absolute",
+              inset: 0,
+            }}
+          >
+            {screen === 1 && (
+              <div className="p-6 space-y-4">
+                <h2
+                  id="killer-guess-title"
+                  className="text-lg font-bold text-gray-900 text-center"
+                >
+                  🔍 Who is the killer?
+                </h2>
+                {apiError && (
+                  <p role="alert" className="text-sm text-red-600 text-center">
+                    {apiError}
+                  </p>
+                )}
+                <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto">
+                  {alivePlayers.map((p) => (
+                    <button
+                      key={p.id}
+                      type="button"
+                      onClick={() => {
+                        setSuspect(p);
+                        setScreen(2);
+                      }}
+                      className="flex flex-col items-center gap-1 rounded-xl border-2 border-gray-200 bg-white p-2 hover:border-indigo-400 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                    >
+                      <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-100">
+                        {p.avatar_url ? (
+                          <Image
+                            src={p.avatar_url}
+                            alt={p.name}
+                            fill
+                            sizes="48px"
+                            className="object-cover"
+                          />
+                        ) : (
+                          <span className="flex h-full w-full items-center justify-center text-base font-bold text-gray-500">
+                            {p.name.charAt(0).toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-xs font-semibold text-gray-800 truncate max-w-full">
+                        {p.name}
+                      </span>
+                    </button>
+                  ))}
+                </div>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Screen 2: Confirm accusation */}
+          {screen === 2 && suspect && (
+            <div className="p-6 space-y-5 text-center">
+              <h2
+                id="killer-guess-title"
+                className="text-lg font-bold text-gray-900"
+              >
+                Accuse {suspect.name}?
+              </h2>
+              <div className="flex justify-center">
+                <div className="relative w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-4 border-gray-200">
+                  {suspect.avatar_url ? (
+                    <Image
+                      src={suspect.avatar_url}
+                      alt={suspect.name}
+                      fill
+                      sizes="80px"
+                      className="object-cover"
+                    />
+                  ) : (
+                    <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-gray-500">
+                      {suspect.name.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <p className="text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
+                ⚠️ If you&apos;re wrong, you die!
+              </p>
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setScreen(1)}
+                  disabled={submitting}
+                  className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAccuse}
+                  disabled={submitting}
+                  className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                >
+                  {submitting ? "Accusing…" : "Accuse them"}
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* Screen 3: Result */}
+          {screen === 3 && correct !== null && (
+            <div
+              className={`p-8 text-center space-y-4 ${
+                correct ? "bg-green-50" : "bg-red-50"
+              }`}
+            >
+              <div className="text-5xl">{correct ? "🎉" : "💀"}</div>
+              <h2
+                id="killer-guess-title"
+                className={`text-xl font-bold ${
+                  correct ? "text-green-700" : "text-red-700"
+                }`}
+              >
+                {correct ? "✓ Found the killer!" : "✗ You have died."}
+              </h2>
+              <p
+                className={`text-sm ${
+                  correct ? "text-green-600" : "text-red-500"
+                }`}
+              >
+                {correct
+                  ? "Redirecting to lobby…"
+                  : "The game continues without you."}
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── GameBoardClient ───────────────────────────────────────────────
 
 interface GameBoardClientProps {
@@ -329,6 +563,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const [showDeathModal, setShowDeathModal] = useState(false);
   const [voteActive, setVoteActive] = useState(false);
   const [gameEnded, setGameEnded] = useState<string | null | false>(false);
+  const [showGuessModal, setShowGuessModal] = useState(false);
 
   // ── Load board data ─────────────────────────────────────────
 
@@ -415,6 +650,32 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const canRevive = data?.caller.permissions.includes("revive_dead") ?? false;
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
   const isMayor = data?.caller.role_name === "Mayor";
+
+  // FAB visibility: alive, not tipped, not the killer
+  const callerIsAlive =
+    data?.caller !== undefined &&
+    (data.caller.is_dead === 0 || data.caller.revived_at !== null);
+  const showFab =
+    callerIsAlive &&
+    data?.caller.has_tipped === 0 &&
+    data?.caller.role_name !== "Killer";
+
+  // ── Handle wrong tip guess (caller died optimistically) ──────
+
+  const handleWrongGuess = useCallback((callerUserId: number) => {
+    setData((prev) => {
+      if (!prev) return prev;
+      return {
+        ...prev,
+        caller: { ...prev.caller, is_dead: 1, revived_at: null },
+        players: prev.players.map((p) =>
+          p.user_id === callerUserId
+            ? { ...p, is_dead: 1, revived_at: null }
+            : p,
+        ),
+      };
+    });
+  }, []);
 
   // ── Ably: PLAYER_DIED ───────────────────────────────────────
 
@@ -594,6 +855,30 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           onConfirmed={handleDeathConfirmed}
           onClose={() => setShowDeathModal(false)}
         />
+      )}
+
+      {/* ── Killer guess modal ───────────────────────────────── */}
+      {showGuessModal && data && (
+        <KillerGuessModal
+          gameId={gameId}
+          players={data.players}
+          callerUserId={data.caller.user_id}
+          onClose={() => setShowGuessModal(false)}
+          onWrongGuess={handleWrongGuess}
+        />
+      )}
+
+      {/* ── Killer guess FAB ─────────────────────────────────── */}
+      {showFab && !showGuessModal && (
+        <button
+          type="button"
+          onClick={() => setShowGuessModal(true)}
+          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+          aria-label="Guess the killer"
+        >
+          <span aria-hidden="true">🔍</span> Guess the killer!
+        </button>
       )}
 
       {/* ── Game-ended modal ─────────────────────────────────── */}

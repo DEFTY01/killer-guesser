@@ -1,0 +1,654 @@
+import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
+import { auth } from "@/lib/auth";
+import { db } from "@/db";
+import { game_players, games, roles, users, votes } from "@/db/schema";
+import { and, count, eq, sql } from "drizzle-orm";
+import type { RolePermission } from "@/lib/role-constants";
+import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
+import { handleKillerDefeated } from "@/lib/gameEnd";
+
+// ── Helpers ────────────────────────────────────────────────────────
+
+function parsePermissions(raw: string | null | undefined): RolePermission[] {
+  if (!raw) return [];
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? (parsed as RolePermission[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+/** Returns true if the current UTC time (HH:MM) is within [start, end). */
+function isWindowOpen(
+  start: string | null,
+  end: string | null,
+): boolean {
+  if (!start || !end) return false;
+  const now = new Date();
+  const currentMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const [sh, sm] = start.split(":").map(Number);
+  const [eh, em] = end.split(":").map(Number);
+  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return false;
+  return currentMin >= sh * 60 + sm && currentMin < eh * 60 + em;
+}
+
+/** Returns true if the current UTC time is at or past vote_window_end. */
+function isWindowEnded(end: string | null): boolean {
+  if (!end) return false;
+  const now = new Date();
+  const currentMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const [eh, em] = end.split(":").map(Number);
+  if (isNaN(eh) || isNaN(em)) return false;
+  return currentMin >= eh * 60 + em;
+}
+
+// ── GET /api/game/[id]/vote ───────────────────────────────────────
+
+/**
+ * Returns the current vote state for the active day.
+ *
+ * Compares the server's current UTC time (HH:MM) against the game's
+ * `vote_window_start` / `vote_window_end` fields to determine state:
+ *
+ * **Window open:**
+ * ```json
+ * { windowOpen: true, day: 1, players: [{ id, name, avatarUrl }] }
+ * ```
+ *
+ * **Window closed / not yet started:**
+ * ```json
+ * { windowOpen: false, day: 1, results: [{ playerId, name, voteCount }] }
+ * ```
+ *
+ * Callers with the `see_votes` permission additionally receive a `votes` array
+ * with the full voter → target breakdown in both states.
+ *
+ * **Lazy close** — on the first GET received after `vote_window_end` the
+ * endpoint automatically tallies votes, applies a simple-majority elimination
+ * (> 50 % of living voters), and publishes a `VOTE_CLOSED` Ably event on the
+ * `game-[id]` channel.  The vote window is then cleared to prevent
+ * re-processing on subsequent requests.
+ */
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session || session.user?.role !== "player") {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized" },
+      { status: 401 },
+    );
+  }
+
+  const userId = Number(session.user.id);
+  if (isNaN(userId)) {
+    return NextResponse.json(
+      { success: false, error: "Invalid session" },
+      { status: 401 },
+    );
+  }
+
+  const { id: gameId } = await params;
+
+  // ── Load game ─────────────────────────────────────────────────
+  const [game] = await db
+    .select({
+      id: games.id,
+      name: games.name,
+      start_time: games.start_time,
+      vote_window_start: games.vote_window_start,
+      vote_window_end: games.vote_window_end,
+      team1_name: games.team1_name,
+      team2_name: games.team2_name,
+    })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+
+  if (!game) {
+    return NextResponse.json(
+      { success: false, error: "Game not found" },
+      { status: 404 },
+    );
+  }
+
+  // ── Verify caller is a participant ────────────────────────────
+  const [callerRow] = await db
+    .select({
+      game_player_id: game_players.id,
+      permissions: roles.permissions,
+      is_dead: game_players.is_dead,
+      revived_at: game_players.revived_at,
+    })
+    .from(game_players)
+    .leftJoin(roles, eq(game_players.role_id, roles.id))
+    .where(
+      and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
+    )
+    .limit(1);
+
+  if (!callerRow) {
+    return NextResponse.json(
+      { success: false, error: "Not a participant in this game" },
+      { status: 403 },
+    );
+  }
+
+  const callerPermissions = parsePermissions(callerRow.permissions);
+  const canSeeVotes = callerPermissions.includes("see_votes");
+
+  // ── Compute current day ───────────────────────────────────────
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const day = Math.max(
+    1,
+    Math.floor((nowUnix - game.start_time) / 86400) + 1,
+  );
+
+  const { vote_window_start, vote_window_end } = game;
+
+  // ── Lazy close: process if window has ended ──────────────────
+  if (
+    vote_window_start &&
+    vote_window_end &&
+    isWindowEnded(vote_window_end) &&
+    !isWindowOpen(vote_window_start, vote_window_end)
+  ) {
+    // Atomically clear the window to prevent concurrent re-processing.
+    const [cleared] = await db
+      .update(games)
+      .set({ vote_window_start: null, vote_window_end: null })
+      .where(
+        and(
+          eq(games.id, gameId),
+          eq(games.vote_window_start, vote_window_start),
+        ),
+      )
+      .returning({ id: games.id });
+
+    // Only the first caller that cleared the window performs close logic.
+    if (cleared) {
+      // Load alive players for majority calculation.
+      const alivePlayers = await db
+        .select({ user_id: game_players.user_id })
+        .from(game_players)
+        .where(
+          and(
+            eq(game_players.game_id, gameId),
+            eq(game_players.is_dead, 0),
+          ),
+        );
+
+      const aliveCount = alivePlayers.length;
+
+      // Tally votes for the current day.
+      const tally = await db
+        .select({
+          target_id: votes.target_id,
+          target_name: users.name,
+          vote_count: count(votes.id),
+        })
+        .from(votes)
+        .innerJoin(users, eq(votes.target_id, users.id))
+        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+        .groupBy(votes.target_id, users.name);
+
+      // Find a simple majority (> 50 % of alive voters).
+      const majority = tally.find(
+        (r) => r.vote_count > aliveCount / 2,
+      );
+
+      let eliminated: { id: number; name: string } | null = null;
+
+      if (majority) {
+        // Eliminate the majority player (died in the evening).
+        await db
+          .update(game_players)
+          .set({
+            is_dead: 1,
+            died_at: sql<number>`(unixepoch())`,
+            died_time_of_day: "evening",
+          })
+          .where(
+            and(
+              eq(game_players.game_id, gameId),
+              eq(game_players.user_id, majority.target_id),
+            ),
+          );
+
+        eliminated = { id: majority.target_id, name: majority.target_name };
+
+        // Check if the eliminated player is the killer.
+        const [killerRow] = await db
+          .select({ user_id: game_players.user_id })
+          .from(game_players)
+          .innerJoin(roles, eq(game_players.role_id, roles.id))
+          .where(
+            and(
+              eq(game_players.game_id, gameId),
+              eq(roles.name, "Killer"),
+              eq(game_players.user_id, majority.target_id),
+            ),
+          )
+          .limit(1);
+
+        if (killerRow) {
+          // Killer was voted out — survivors win.
+          await handleKillerDefeated(gameId);
+        }
+      }
+
+      // Publish VOTE_CLOSED on the game channel.
+      if (process.env.ABLY_API_KEY) {
+        const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+        await channel.publish(ABLY_EVENTS.vote_closed, {
+          eliminated,
+          voteResults: tally.map((r) => ({
+            playerId: r.target_id,
+            name: r.target_name,
+            voteCount: r.vote_count,
+          })),
+        });
+      }
+    }
+
+    // Reload game to get cleared vote_window values.
+    const [reloaded] = await db
+      .select({ vote_window_start: games.vote_window_start, vote_window_end: games.vote_window_end })
+      .from(games)
+      .where(eq(games.id, gameId))
+      .limit(1);
+
+    // Build results response.
+    const tally = await db
+      .select({
+        target_id: votes.target_id,
+        target_name: users.name,
+        vote_count: count(votes.id),
+      })
+      .from(votes)
+      .innerJoin(users, eq(votes.target_id, users.id))
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+      .groupBy(votes.target_id, users.name);
+
+    const results = tally.map((r) => ({
+      playerId: r.target_id,
+      name: r.target_name,
+      voteCount: r.vote_count,
+    }));
+
+    // Find who (if anyone) was eliminated in the evening for today's day.
+    // This covers both the first-caller and subsequent GET calls after close.
+    const eveningDead = await db
+      .select({ user_id: game_players.user_id, name: users.name })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(
+        and(
+          eq(game_players.game_id, gameId),
+          eq(game_players.is_dead, 1),
+          eq(game_players.died_time_of_day, "evening"),
+        ),
+      )
+      .limit(1);
+    const eliminatedFromDb = eveningDead[0]
+      ? { id: eveningDead[0].user_id, name: eveningDead[0].name }
+      : null;
+
+    const responseData: Record<string, unknown> = {
+      windowOpen: false,
+      day,
+      callerUserId: userId,
+      eliminated: eliminatedFromDb,
+      results,
+      vote_window_start: reloaded?.vote_window_start ?? null,
+      vote_window_end: reloaded?.vote_window_end ?? null,
+    };
+
+    if (canSeeVotes) {
+      const enriched = await db
+        .select({
+          voter_id: votes.voter_id,
+          voter_name: users.name,
+          target_id: votes.target_id,
+        })
+        .from(votes)
+        .innerJoin(users, eq(votes.voter_id, users.id))
+        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
+
+      const playerMap = new Map(
+        (await db
+          .select({ user_id: game_players.user_id, avatar_url: users.avatar_url, name: users.name })
+          .from(game_players)
+          .innerJoin(users, eq(game_players.user_id, users.id))
+          .where(eq(game_players.game_id, gameId))).map((p) => [p.user_id, p]),
+      );
+
+      responseData.votes = enriched.map((v) => ({
+        voterId: v.voter_id,
+        voterName: v.voter_name,
+        voterAvatarUrl: playerMap.get(v.voter_id)?.avatar_url ?? null,
+        targetId: v.target_id,
+        targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
+        targetAvatarUrl: playerMap.get(v.target_id)?.avatar_url ?? null,
+      }));
+    }
+
+    return NextResponse.json({ success: true, data: responseData });
+  }
+
+  // ── Window open: return alive players ────────────────────────
+  if (isWindowOpen(vote_window_start, vote_window_end)) {
+    const players = await db
+      .select({
+        id: game_players.user_id,
+        name: users.name,
+        avatarUrl: users.avatar_url,
+        is_dead: game_players.is_dead,
+        revived_at: game_players.revived_at,
+      })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(eq(game_players.game_id, gameId))
+      .orderBy(users.name);
+
+    const alivePlayers = players.filter(
+      (p) => p.is_dead === 0 || p.revived_at !== null,
+    );
+
+    // Aggregate vote tallies for live display.
+    const tally = await db
+      .select({
+        target_id: votes.target_id,
+        vote_count: count(votes.id),
+      })
+      .from(votes)
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+      .groupBy(votes.target_id);
+
+    const tallyMap = new Map(tally.map((r) => [r.target_id, r.vote_count]));
+
+    // Check if caller has already voted.
+    const [existingVote] = await db
+      .select({ target_id: votes.target_id })
+      .from(votes)
+      .where(
+        and(
+          eq(votes.game_id, gameId),
+          eq(votes.day, day),
+          eq(votes.voter_id, userId),
+        ),
+      )
+      .limit(1);
+
+    const responseData: Record<string, unknown> = {
+      windowOpen: true,
+      day,
+      callerUserId: userId,
+      vote_window_start,
+      vote_window_end,
+      callerVotedFor: existingVote?.target_id ?? null,
+      players: alivePlayers.map((p) => ({
+        id: p.id,
+        name: p.name,
+        avatarUrl: p.avatarUrl,
+        voteCount: tallyMap.get(p.id) ?? 0,
+      })),
+    };
+
+    if (canSeeVotes) {
+      const enriched = await db
+        .select({
+          voter_id: votes.voter_id,
+          voter_name: users.name,
+          target_id: votes.target_id,
+        })
+        .from(votes)
+        .innerJoin(users, eq(votes.voter_id, users.id))
+        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
+
+      const playerMap = new Map(
+        alivePlayers.map((p) => [p.id, p]),
+      );
+
+      responseData.votes = enriched.map((v) => ({
+        voterId: v.voter_id,
+        voterName: v.voter_name,
+        voterAvatarUrl: playerMap.get(v.voter_id)?.avatarUrl ?? null,
+        targetId: v.target_id,
+        targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
+        targetAvatarUrl: playerMap.get(v.target_id)?.avatarUrl ?? null,
+      }));
+    }
+
+    return NextResponse.json({ success: true, data: responseData });
+  }
+
+  // ── Window not yet open or no window set ─────────────────────
+  const tally = await db
+    .select({
+      target_id: votes.target_id,
+      target_name: users.name,
+      vote_count: count(votes.id),
+    })
+    .from(votes)
+    .innerJoin(users, eq(votes.target_id, users.id))
+    .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+    .groupBy(votes.target_id, users.name);
+
+  const results = tally.map((r) => ({
+    playerId: r.target_id,
+    name: r.target_name,
+    voteCount: r.vote_count,
+  }));
+
+  const responseData: Record<string, unknown> = {
+    windowOpen: false,
+    day,
+    callerUserId: userId,
+    vote_window_start,
+    vote_window_end,
+    results,
+  };
+
+  if (canSeeVotes) {
+    const enriched = await db
+      .select({
+        voter_id: votes.voter_id,
+        voter_name: users.name,
+        target_id: votes.target_id,
+      })
+      .from(votes)
+      .innerJoin(users, eq(votes.voter_id, users.id))
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
+
+    const playerMap = new Map(
+      (await db
+        .select({ user_id: game_players.user_id, avatar_url: users.avatar_url, name: users.name })
+        .from(game_players)
+        .innerJoin(users, eq(game_players.user_id, users.id))
+        .where(eq(game_players.game_id, gameId))).map((p) => [p.user_id, p]),
+    );
+
+    responseData.votes = enriched.map((v) => ({
+      voterId: v.voter_id,
+      voterName: v.voter_name,
+      voterAvatarUrl: playerMap.get(v.voter_id)?.avatar_url ?? null,
+      targetId: v.target_id,
+      targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
+      targetAvatarUrl: playerMap.get(v.target_id)?.avatar_url ?? null,
+    }));
+  }
+
+  return NextResponse.json({ success: true, data: responseData });
+}
+
+// ── POST /api/game/[id]/vote ──────────────────────────────────────
+
+const voteSchema = z.object({
+  targetId: z.number().int().positive(),
+});
+
+/**
+ * Submits or changes a vote for the current game day.
+ *
+ * - Caller must be a participant and alive (not dead without revival).
+ * - The vote window must be currently open (UTC HH:MM comparison).
+ * - Upserts: if the caller has already voted today the existing row is updated
+ *   (allowing vote changes), otherwise a new row is inserted.
+ * - Publishes a `VOTE_CAST` Ably event on the `vote-[gameId]-[day]` channel.
+ *
+ * @returns `{ success: true }` or `{ success: false; error: string }`
+ */
+export async function POST(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const session = await auth();
+  if (!session || session.user?.role !== "player") {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized" },
+      { status: 401 },
+    );
+  }
+
+  const userId = Number(session.user.id);
+  if (isNaN(userId)) {
+    return NextResponse.json(
+      { success: false, error: "Invalid session" },
+      { status: 401 },
+    );
+  }
+
+  const { id: gameId } = await params;
+
+  const body = await req.json().catch(() => null);
+  const parsed = voteSchema.safeParse(body);
+  if (!parsed.success) {
+    return NextResponse.json(
+      {
+        success: false,
+        error: `Invalid request: ${parsed.error.issues[0]?.message}`,
+      },
+      { status: 422 },
+    );
+  }
+
+  const { targetId } = parsed.data;
+
+  // ── Load game ─────────────────────────────────────────────────
+  const [game] = await db
+    .select({
+      id: games.id,
+      start_time: games.start_time,
+      vote_window_start: games.vote_window_start,
+      vote_window_end: games.vote_window_end,
+    })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+
+  if (!game) {
+    return NextResponse.json(
+      { success: false, error: "Game not found" },
+      { status: 404 },
+    );
+  }
+
+  // ── Check vote window is open ─────────────────────────────────
+  if (!isWindowOpen(game.vote_window_start, game.vote_window_end)) {
+    return NextResponse.json(
+      { success: false, error: "Voting is closed" },
+      { status: 403 },
+    );
+  }
+
+  // ── Verify caller is alive participant ────────────────────────
+  const [callerPlayer] = await db
+    .select({
+      id: game_players.id,
+      is_dead: game_players.is_dead,
+      revived_at: game_players.revived_at,
+    })
+    .from(game_players)
+    .where(
+      and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
+    )
+    .limit(1);
+
+  if (!callerPlayer) {
+    return NextResponse.json(
+      { success: false, error: "Not a participant in this game" },
+      { status: 403 },
+    );
+  }
+
+  if (callerPlayer.is_dead === 1 && callerPlayer.revived_at === null) {
+    return NextResponse.json(
+      { success: false, error: "Dead players cannot vote" },
+      { status: 403 },
+    );
+  }
+
+  // ── Compute current day ───────────────────────────────────────
+  const nowUnix = Math.floor(Date.now() / 1000);
+  const day = Math.max(
+    1,
+    Math.floor((nowUnix - game.start_time) / 86400) + 1,
+  );
+
+  // ── Upsert vote ───────────────────────────────────────────────
+  const [existing] = await db
+    .select({ id: votes.id })
+    .from(votes)
+    .where(
+      and(
+        eq(votes.game_id, gameId),
+        eq(votes.day, day),
+        eq(votes.voter_id, userId),
+      ),
+    )
+    .limit(1);
+
+  if (existing) {
+    await db
+      .update(votes)
+      .set({ target_id: targetId })
+      .where(eq(votes.id, existing.id));
+  } else {
+    await db
+      .insert(votes)
+      .values({ game_id: gameId, day, voter_id: userId, target_id: targetId });
+  }
+
+  // ── Load voter and target names for Ably payload ──────────────
+  const [[voterUser], [targetUser]] = await Promise.all([
+    db
+      .select({ name: users.name, avatar_url: users.avatar_url })
+      .from(users)
+      .where(eq(users.id, userId))
+      .limit(1),
+    db
+      .select({ name: users.name, avatar_url: users.avatar_url })
+      .from(users)
+      .where(eq(users.id, targetId))
+      .limit(1),
+  ]);
+
+  // ── Publish VOTE_CAST ─────────────────────────────────────────
+  if (process.env.ABLY_API_KEY) {
+    const channel = ablyServer.channels.get(ABLY_CHANNELS.vote(gameId, day));
+    await channel.publish(ABLY_EVENTS.vote_cast, {
+      voterId: userId,
+      voterName: voterUser?.name ?? "Unknown",
+      voterAvatarUrl: voterUser?.avatar_url ?? null,
+      targetId,
+      targetName: targetUser?.name ?? "Unknown",
+      targetAvatarUrl: targetUser?.avatar_url ?? null,
+    });
+  }
+
+  return NextResponse.json({ success: true });
+}
