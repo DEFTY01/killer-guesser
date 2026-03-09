@@ -19,7 +19,13 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
   useEffect(() => {
     async function extractId() {
       const { id } = await (params as Promise<{ id: string }>);
-      setPlayerId(Number(id));
+      const numericId = Number(id);
+      console.log("[EditPlayer] Extracted ID from params:", {
+        originalId: id,
+        numericId,
+        type: typeof numericId,
+      });
+      setPlayerId(numericId);
     }
     extractId();
   }, [params]);
@@ -35,6 +41,11 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<{
+    apiResponse?: unknown;
+    fetchStatus?: number;
+    timestamp?: string;
+  }>({});
 
   // Fetch player data
   useEffect(() => {
@@ -42,22 +53,81 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
 
     async function fetchPlayer() {
       try {
+        console.log("[EditPlayer] Fetching player data for ID:", playerId);
         const res = await fetch(`/api/admin/players/${playerId}`);
-        const json = await res.json();
 
-        if (!json.success) {
-          setError(json.error ?? "Failed to load player");
+        const debug = {
+          fetchStatus: res.status,
+          contentType: res.headers.get("content-type"),
+          timestamp: new Date().toISOString(),
+        };
+
+        console.log("[EditPlayer] Fetch response:", debug);
+
+        // Check if response is valid
+        if (!res.ok) {
+          const text = await res.text();
+          console.error("[EditPlayer] Error response body:", text);
+          setError(
+            `API error: ${res.status} ${res.statusText}. Body: ${text}`
+          );
+          setDebugInfo({
+            ...debug,
+            apiResponse: text,
+          });
           setLoading(false);
           return;
         }
 
+        // Attempt to parse JSON with better error handling
+        let json;
+        try {
+          json = await res.json();
+          console.log("[EditPlayer] Parsed JSON response:", json);
+        } catch (parseErr) {
+          const text = await res.text();
+          console.error(
+            "[EditPlayer] JSON parse error. Response text:",
+            text,
+            "Error:",
+            parseErr
+          );
+          setError(
+            `Failed to parse API response: ${parseErr instanceof Error ? parseErr.message : String(parseErr)}`
+          );
+          setDebugInfo({
+            ...debug,
+            apiResponse: `Parse error: ${text}`,
+          });
+          setLoading(false);
+          return;
+        }
+
+        if (!json.success) {
+          console.error("[EditPlayer] API returned success=false:", json);
+          setError(json.error ?? "Failed to load player");
+          setDebugInfo({
+            ...debug,
+            apiResponse: json,
+          });
+          setLoading(false);
+          return;
+        }
+
+        console.log("[EditPlayer] Successfully loaded player:", json.data);
         setPlayer(json.data);
         setName(json.data.name);
         setAvatarPreview(json.data.avatar_url);
         setLoading(false);
       } catch (err) {
-        console.error("Failed to fetch player:", err);
-        setError("Failed to load player");
+        console.error("[EditPlayer] Fetch error:", err);
+        setError(
+          `Failed to fetch player: ${err instanceof Error ? err.message : String(err)}`
+        );
+        setDebugInfo({
+          timestamp: new Date().toISOString(),
+          apiResponse: err instanceof Error ? err.message : String(err),
+        });
         setLoading(false);
       }
     }
@@ -252,6 +322,34 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
         <div className="rounded-lg border border-green-200 bg-green-50 p-4">
           <p className="text-sm text-green-800">✓ Changes saved successfully</p>
         </div>
+      )}
+
+      {/* Debug Panel */}
+      {(debugInfo.fetchStatus || debugInfo.apiResponse) && (
+        <details className="rounded-lg border border-yellow-200 bg-yellow-50 p-4">
+          <summary className="cursor-pointer font-medium text-yellow-900">
+            🔍 Debug Information
+          </summary>
+          <div className="mt-3 space-y-2 text-xs font-mono text-yellow-800">
+            <div>
+              <strong>Player ID:</strong> {playerId || "null"}
+            </div>
+            <div>
+              <strong>API Status:</strong> {debugInfo.fetchStatus || "N/A"}
+            </div>
+            <div>
+              <strong>Timestamp:</strong> {debugInfo.timestamp}
+            </div>
+            {debugInfo.apiResponse && (
+              <div className="mt-2 break-all whitespace-pre-wrap border-t border-yellow-200 pt-2">
+                <strong>API Response:</strong>
+                <pre className="overflow-auto max-h-32 bg-white p-2 rounded text-yellow-900">
+                  {JSON.stringify(debugInfo.apiResponse, null, 2)}
+                </pre>
+              </div>
+            )}
+          </div>
+        </details>
       )}
 
       {/* Main Content Grid */}
