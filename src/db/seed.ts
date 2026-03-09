@@ -11,6 +11,7 @@ const DEFAULT_ROLES: (typeof schema.roles.$inferInsert)[] = [
     chance_percent: 100,
     color_hex: "#EF4444",
     is_default: 1,
+    is_evil: 1,
     permissions: null,
   },
   {

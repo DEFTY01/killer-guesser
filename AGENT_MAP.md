@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-09 (PROMPT 37 — Random Team Assignment, Per-Team Caps & Spoiler-Hidden Admin View: added team1_max_players/team2_max_players to game_settings schema + migration; POST /api/admin/games stores per-team caps; wizard step 2 "Max players in [name]" labels + overflow warning; wizard step 4 note "Assignments will be randomised server-side on start."; GameEditorClient "Show Spoilers 👁" toggle hides team/role by default)
+> **Last Updated:** 2026-03-09 (PROMPT 38 — Per-Team Role Selector, Evil Team Checkbox & Killer Cap Rules: added `is_evil` column to `roles` schema + migration 0005; `resolveKillerCap(playerCount, adminCap)` in assignTeamsAndRoles; `isEvilTeam1` + `isEvil` per RoleEntry in AssignmentInput; hard constraints (Killer must be in Evil team, Good team never gets is_evil role, Evil team cap ≥ 1); Evil team checkbox in wizard step 2 (mutually exclusive, one team is always Evil); step 3 columns now label Evil/Good dynamically and filter roles by is_evil; POST /api/admin/games Zod schema updated with `is_evil_team1` and `isEvil` per role entry; returns 400 on constraint errors; seed updated: Killer is_evil=1)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.

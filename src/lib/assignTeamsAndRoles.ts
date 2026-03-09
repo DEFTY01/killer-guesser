@@ -14,27 +14,31 @@
 export interface RoleEntry {
   roleId: number;
   chancePercent: number;
+  /** True if this role is an Evil role (can only go to the Evil team). */
+  isEvil: boolean;
 }
 
 /** Input configuration for team and role assignment. */
 export interface AssignmentInput {
   /** Array of user IDs to distribute across teams. */
   playerIds: number[];
-  /** Maximum number of players allowed on team1. */
+  /** Maximum number of players allowed on team1 (admin-requested cap). */
   team1MaxPlayers: number;
   /** Maximum number of players allowed on team2. */
   team2MaxPlayers: number;
-  /** Roles eligible for team1 (must include the Killer). */
+  /** True if team1 is the Evil team; false means team2 is Evil. */
+  isEvilTeam1: boolean;
+  /** Roles eligible for team1. */
   team1Roles: RoleEntry[];
   /** How many special roles to assign on team1 (beyond the mandatory Killer). */
   team1SpecialCount: number;
-  /** The role ID of the Killer role (must exist in team1Roles). */
+  /** The role ID of the Killer role (must exist in the Evil team's roles). */
   killerRoleId: number;
-  /** Roles eligible for team2 (never includes Killer). */
+  /** Roles eligible for team2. */
   team2Roles: RoleEntry[];
   /** How many special roles to assign on team2 via weighted draw. */
   team2SpecialCount: number;
-  /** The role ID of the default "Survivor" role for team2 players without a special role. */
+  /** The role ID of the default "Survivor" role for Good team players without a special role. */
   survivorRoleId: number | null;
 }
 
@@ -102,23 +106,77 @@ export function weightedRandomSelect(
   return selected;
 }
 
+// ── Killer cap resolver ───────────────────────────────────────────
+
+/**
+ * Resolves the effective Evil team cap for a given player count.
+ *
+ * Player-count-based maximums:
+ *   players >= 15 → max 3
+ *   players >= 9  → max 2
+ *   players >= 6  → max 1
+ *   players < 6   → max 1 (floor)
+ *
+ * The resolved cap is min(adminCap, killerMaxByCount), further capped to
+ * totalPlayers - 1 to ensure at least one player remains on the Good team.
+ *
+ * If adminCap > resolvedCap, a console.warn is emitted — no exception thrown.
+ *
+ * @param playerCount - Total number of players in the game.
+ * @param adminCap    - The cap requested by the admin.
+ * @returns The resolved Evil team cap.
+ */
+export function resolveKillerCap(
+  playerCount: number,
+  adminCap: number,
+): number {
+  let killerMaxByCount: number;
+  if (playerCount >= 15) {
+    killerMaxByCount = 3;
+  } else if (playerCount >= 9) {
+    killerMaxByCount = 2;
+  } else {
+    killerMaxByCount = 1;
+  }
+
+  // Cap to player-count-based maximum
+  let resolvedCap = Math.min(adminCap, killerMaxByCount);
+
+  // Always leave at least 1 player in the Good team
+  resolvedCap = Math.min(resolvedCap, playerCount - 1);
+
+  // Ensure at least 1
+  resolvedCap = Math.max(resolvedCap, 1);
+
+  if (adminCap > resolvedCap) {
+    console.warn(
+      `[resolveKillerCap] Admin requested Evil team cap of ${adminCap} but it was reduced to ${resolvedCap} ` +
+        `(player-count-based max for ${playerCount} players: ${killerMaxByCount}, ` +
+        `must leave at least 1 player in Good team).`,
+    );
+  }
+
+  return resolvedCap;
+}
+
 // ── Main assignment function ──────────────────────────────────────
 
 /**
  * Assigns teams and roles to players server-side.
  *
- * **Algorithm:**
- * 1. Shuffle the player array using Fisher-Yates.
- * 2. Fill team1 with the first `team1MaxPlayers` players; the rest go to team2.
- * 3. Assign exactly one Killer role to a random team1 player.
- * 4. For team1, assign up to `team1SpecialCount` additional special roles
- *    (excluding the Killer) via weighted random selection.
- * 5. For team2, assign up to `team2SpecialCount` special roles via weighted
- *    random selection from `team2Roles`.
- * 6. Remaining team2 players receive the default Survivor role.
+ * Algorithm:
+ * 1. Validate hard constraints (throws on violation).
+ * 2. Resolve the Evil team cap via resolveKillerCap.
+ * 3. Shuffle the player array using Fisher-Yates.
+ * 4. Fill the Evil team with the first resolvedEvilCap players; the rest go to Good.
+ * 5. Assign exactly one Killer role to a random Evil team player.
+ * 6. Assign additional is_evil special roles to remaining Evil team players.
+ * 7. For the Good team, assign is_evil=0 special roles via weighted draw.
+ * 8. Remaining Good team players receive the default Survivor role.
  *
  * @param input - The assignment configuration.
  * @returns An array of player assignments with team and role info.
+ * @throws If any hard constraint is violated.
  */
 export function assignTeamsAndRoles(
   input: AssignmentInput,
@@ -126,6 +184,8 @@ export function assignTeamsAndRoles(
   const {
     playerIds,
     team1MaxPlayers,
+    team2MaxPlayers,
+    isEvilTeam1,
     team1Roles,
     team1SpecialCount,
     killerRoleId,
@@ -134,59 +194,105 @@ export function assignTeamsAndRoles(
     survivorRoleId,
   } = input;
 
-  // 1. Shuffle
+  // Derive evil/good roles and caps from isEvilTeam1
+  const evilRoles = isEvilTeam1 ? team1Roles : team2Roles;
+  const goodRoles = isEvilTeam1 ? team2Roles : team1Roles;
+  const evilAdminCap = isEvilTeam1 ? team1MaxPlayers : team2MaxPlayers;
+  const evilSpecialCount = isEvilTeam1 ? team1SpecialCount : team2SpecialCount;
+  const goodSpecialCount = isEvilTeam1 ? team2SpecialCount : team1SpecialCount;
+
+  // ── Hard constraints ──────────────────────────────────────────
+
+  if (evilAdminCap < 1) {
+    throw new Error("Evil team must have at least 1 player.");
+  }
+
+  const killerInEvil = evilRoles.some((r) => r.roleId === killerRoleId);
+  if (!killerInEvil) {
+    throw new Error("Killer role must be in the Evil team.");
+  }
+
+  const killerInGood = goodRoles.some((r) => r.roleId === killerRoleId);
+  if (killerInGood) {
+    throw new Error("Killer role cannot be assigned to the Good team.");
+  }
+
+  // ── Filter roles by is_evil constraint ───────────────────────
+
+  const filteredEvilRoles = evilRoles.filter((r) => r.isEvil);
+  const filteredGoodRoles = goodRoles.filter((r) => !r.isEvil);
+
+  if (filteredEvilRoles.length === 0) {
+    throw new Error(
+      "Evil team has no eligible Evil roles after filtering. Add is_evil roles for the Evil team.",
+    );
+  }
+
+  // ── Resolve Evil team cap ─────────────────────────────────────
+
+  const resolvedEvilCap = resolveKillerCap(playerIds.length, evilAdminCap);
+
+  // ── Minimum Evil role count guard ─────────────────────────────
+
+  if (filteredEvilRoles.length < resolvedEvilCap) {
+    throw new Error(
+      "Not enough Evil roles to fill the Evil team. Add more Evil roles or reduce the Evil team cap.",
+    );
+  }
+
+  // ── 1. Shuffle ────────────────────────────────────────────────
   const shuffled = fisherYatesShuffle([...playerIds]);
 
-  // 2. Distribute teams: fill team1 up to cap, rest go to team2
-  const team1Count = Math.min(team1MaxPlayers, shuffled.length);
-  const team1Players = shuffled.slice(0, team1Count);
-  const team2Players = shuffled.slice(team1Count);
+  // ── 2. Distribute teams: Evil team fills up to resolvedEvilCap ─
+  const evilCount = Math.min(resolvedEvilCap, shuffled.length);
+  const evilPlayers = shuffled.slice(0, evilCount);
+  const goodPlayers = shuffled.slice(evilCount);
 
   const assignments: PlayerAssignment[] = [];
 
-  // 3. Team1: assign exactly one Killer
-  const team1Shuffled = fisherYatesShuffle([...team1Players]);
-  const killerPlayerId = team1Shuffled[0];
-  const remainingTeam1 = team1Shuffled.slice(1);
+  // ── 3. Evil team: assign exactly one Killer ───────────────────
+  const evilShuffled = fisherYatesShuffle([...evilPlayers]);
+  const killerPlayerId = evilShuffled[0];
+  const remainingEvil = evilShuffled.slice(1);
 
   if (killerPlayerId !== undefined) {
     assignments.push({
       userId: killerPlayerId,
-      team: "team1",
+      team: isEvilTeam1 ? "team1" : "team2",
       roleId: killerRoleId,
     });
   }
 
-  // 4. Team1: assign additional special roles (exclude Killer from pool)
-  const team1NonKillerRoles = team1Roles.filter(
+  // ── 4. Evil team: assign additional is_evil special roles ─────
+  const evilNonKillerRoles = filteredEvilRoles.filter(
     (r) => r.roleId !== killerRoleId,
   );
-  const team1SpecialRoles = weightedRandomSelect(
-    team1NonKillerRoles,
-    Math.min(team1SpecialCount, remainingTeam1.length),
+  const evilSpecialRoles = weightedRandomSelect(
+    evilNonKillerRoles,
+    Math.min(evilSpecialCount, remainingEvil.length),
   );
 
-  for (let i = 0; i < remainingTeam1.length; i++) {
-    const specialRole = team1SpecialRoles[i];
+  for (let i = 0; i < remainingEvil.length; i++) {
+    const specialRole = evilSpecialRoles[i];
     assignments.push({
-      userId: remainingTeam1[i],
-      team: "team1",
+      userId: remainingEvil[i],
+      team: isEvilTeam1 ? "team1" : "team2",
       roleId: specialRole ? specialRole.roleId : null,
     });
   }
 
-  // 5. Team2: assign special roles via weighted draw
-  const team2Shuffled = fisherYatesShuffle([...team2Players]);
-  const team2SpecialRoles = weightedRandomSelect(
-    team2Roles,
-    Math.min(team2SpecialCount, team2Shuffled.length),
+  // ── 5. Good team: assign is_evil=0 special roles via weighted draw ─
+  const goodShuffled = fisherYatesShuffle([...goodPlayers]);
+  const goodSpecialRoles = weightedRandomSelect(
+    filteredGoodRoles,
+    Math.min(goodSpecialCount, goodShuffled.length),
   );
 
-  for (let i = 0; i < team2Shuffled.length; i++) {
-    const specialRole = team2SpecialRoles[i];
+  for (let i = 0; i < goodShuffled.length; i++) {
+    const specialRole = goodSpecialRoles[i];
     assignments.push({
-      userId: team2Shuffled[i],
-      team: "team2",
+      userId: goodShuffled[i],
+      team: isEvilTeam1 ? "team2" : "team1",
       roleId: specialRole
         ? specialRole.roleId
         : (survivorRoleId ?? null),

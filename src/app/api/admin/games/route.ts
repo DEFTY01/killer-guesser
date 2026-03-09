@@ -11,6 +11,7 @@ import { assignTeamsAndRoles } from "@/lib/assignTeamsAndRoles";
 const roleEntrySchema = z.object({
   roleId: z.number().int().positive(),
   chancePercent: z.number().min(0).max(100),
+  isEvil: z.boolean().default(false),
 });
 
 const createGameSchema = z.object({
@@ -31,6 +32,8 @@ const createGameSchema = z.object({
     .nullable(),
   team1_name: z.string().min(1, "team1_name is required").default("Good"),
   team2_name: z.string().min(1, "team2_name is required").default("Evil"),
+  /** True if team1 is the Evil team. Defaults to false (team2 is Evil). */
+  is_evil_team1: z.boolean().default(false),
   player_ids: z
     .array(z.number().int().positive())
     .min(1, "At least one player is required"),
@@ -128,6 +131,7 @@ export async function POST(req: NextRequest) {
     vote_window_end,
     team1_name,
     team2_name,
+    is_evil_team1,
     player_ids,
     team1_max_players,
     team2_max_players,
@@ -151,7 +155,7 @@ export async function POST(req: NextRequest) {
 
   if (allRoleIds.length > 0) {
     const dbRoles = await db
-      .select({ id: roles.id, name: roles.name, is_default: roles.is_default })
+      .select({ id: roles.id, name: roles.name, is_default: roles.is_default, is_evil: roles.is_evil })
       .from(roles)
       .where(inArray(roles.id, allRoleIds));
 
@@ -185,17 +189,27 @@ export async function POST(req: NextRequest) {
   }
 
   // ── Assign teams & roles server-side ─────────────────────────
-  const playerAssignments = assignTeamsAndRoles({
-    playerIds: player_ids,
-    team1MaxPlayers: team1_max_players,
-    team2MaxPlayers: team2_max_players,
-    team1Roles,
-    team1SpecialCount,
-    killerRoleId: killerRoleId ?? 0,
-    team2Roles,
-    team2SpecialCount,
-    survivorRoleId,
-  });
+  let playerAssignments;
+  try {
+    playerAssignments = assignTeamsAndRoles({
+      playerIds: player_ids,
+      team1MaxPlayers: team1_max_players,
+      team2MaxPlayers: team2_max_players,
+      isEvilTeam1: is_evil_team1,
+      team1Roles,
+      team1SpecialCount,
+      killerRoleId: killerRoleId ?? 0,
+      team2Roles,
+      team2SpecialCount,
+      survivorRoleId,
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Role assignment failed";
+    return NextResponse.json(
+      { success: false, error: message },
+      { status: 400 },
+    );
+  }
 
   // ── Role config stored as JSON for reference ──────────────────
   const roleChancesJson = JSON.stringify({
