@@ -297,8 +297,8 @@ export async function POST(
     );
   }
 
-  // Dead players (and not revived) may not vote.
-  if (callerPlayer.is_dead === 1 && callerPlayer.revived_at === null) {
+  // Dead players may not vote.
+  if (callerPlayer.is_dead === 1) {
     return NextResponse.json(
       { success: false, error: "Dead players cannot vote" },
       { status: 403 },

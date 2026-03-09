@@ -13,6 +13,7 @@ export interface PlayerCardPlayer {
   /** Present for most roles; omitted for Mayor callers — the server strips team data intentionally. */
   team?: "team1" | "team2" | null;
   is_dead: number;
+  is_revived: number;
   revived_at: number | null;
   /** Present for most roles; omitted for Mayor callers — the server strips role_color intentionally. */
   role_color?: string;
@@ -96,7 +97,8 @@ export function PlayerCard({
 }: PlayerCardProps) {
   const isMayorView = viewerRole === "Mayor";
   const isDead = player.is_dead === 1;
-  const isUndead = isDead && player.revived_at != null;
+  // Undead: revived but not re-dead (is_revived=1, is_dead=0)
+  const isUndead = player.is_revived === 1 && !isDead;
 
   // ── Avatar click handler (shared between Mayor and default) ─
   const avatarClickProps =
@@ -144,6 +146,11 @@ export function PlayerCard({
         <p className="text-sm font-semibold text-gray-800 leading-tight truncate w-full px-1">
           {player.name}
         </p>
+
+        {/* ── Undead badge visible to ALL players (including Mayor) ── */}
+        {isUndead && (
+          <span className="text-xs font-semibold text-green-600">Undead</span>
+        )}
       </div>
     );
   }
@@ -238,8 +245,8 @@ export function PlayerCard({
         <span className="text-xs font-semibold text-red-600">Killer</span>
       )}
 
-      {/* ── Revive button (Healer + dead player) ─────────────── */}
-      {canRevive && isDead && !isUndead && (
+      {/* ── Revive button (Healer + dead player who was never revived) ── */}
+      {canRevive && isDead && player.is_revived === 0 && (
         <button
           onClick={() => onRevive?.(player.id)}
           className="mt-1 rounded-lg bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-200 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
