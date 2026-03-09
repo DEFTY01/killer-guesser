@@ -18,13 +18,23 @@ interface Step2State {
   selectedIds: number[];
   team1Name: string;
   team2Name: string;
-  assignments: Record<number, "team1" | "team2">;
+  team1MaxPlayers: number;
+  team2MaxPlayers: number;
+}
+
+interface TeamRoleEntry {
+  roleId: number;
+  chancePercent: number;
+  enabled: boolean;
 }
 
 interface Step3State {
-  specialRoleCount: number;
-  fullyRandom: boolean;
-  roleChances: Record<number, number>; // roleId → percent
+  team1Roles: TeamRoleEntry[];
+  team1SpecialCount: number;
+  team1FullyRandom: boolean;
+  team2Roles: TeamRoleEntry[];
+  team2SpecialCount: number;
+  team2FullyRandom: boolean;
   murderItemUrl: string | null;
   murderItemName: string;
 }
@@ -33,21 +43,9 @@ const HH_MM_RE = /^\d{2}:\d{2}$/;
 
 // ── Helpers ───────────────────────────────────────────────────────
 
-function randomizeTeams(
-  ids: number[],
-): Record<number, "team1" | "team2"> {
-  // Fisher-Yates shuffle for a uniform random permutation
-  const shuffled = [...ids];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  const half = Math.ceil(shuffled.length / 2);
-  const result: Record<number, "team1" | "team2"> = {};
-  shuffled.forEach((id, i) => {
-    result[id] = i < half ? "team1" : "team2";
-  });
-  return result;
+/** Check if a role name (case-insensitive) indicates the Killer role. */
+function isKillerRole(role: Role): boolean {
+  return role.name.toLowerCase() === "killer";
 }
 
 // ── Sub-components ────────────────────────────────────────────────
@@ -134,19 +132,38 @@ export function NewGameWizard({ players, roles }: Props) {
     selectedIds: [],
     team1Name: "Good",
     team2Name: "Evil",
-    assignments: {},
+    team1MaxPlayers: 1,
+    team2MaxPlayers: 1,
   });
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
   // ── Step 3 state ──────────────────────────────────────────────
-  const initialRoleChances: Record<number, number> = {};
-  for (const r of roles) {
-    initialRoleChances[r.id] = r.chance_percent;
-  }
+  // Build initial role entries for each team
+  const team1EligibleRoles = roles.filter(
+    (r) => r.team === "team1" || r.team === "any",
+  );
+  const team2EligibleRoles = roles.filter(
+    (r) => (r.team === "team2" || r.team === "any") && !isKillerRole(r),
+  );
+
+  const initialTeam1Roles: TeamRoleEntry[] = team1EligibleRoles.map((r) => ({
+    roleId: r.id,
+    chancePercent: r.chance_percent,
+    enabled: isKillerRole(r), // Killer always pre-checked
+  }));
+  const initialTeam2Roles: TeamRoleEntry[] = team2EligibleRoles.map((r) => ({
+    roleId: r.id,
+    chancePercent: r.chance_percent,
+    enabled: false,
+  }));
+
   const [step3, setStep3] = useState<Step3State>({
-    specialRoleCount: 0,
-    fullyRandom: false,
-    roleChances: initialRoleChances,
+    team1Roles: initialTeam1Roles,
+    team1SpecialCount: 0,
+    team1FullyRandom: false,
+    team2Roles: initialTeam2Roles,
+    team2SpecialCount: 0,
+    team2FullyRandom: false,
     murderItemUrl: null,
     murderItemName: "",
   });
@@ -185,25 +202,18 @@ export function NewGameWizard({ players, roles }: Props) {
       const selected = prev.selectedIds.includes(id)
         ? prev.selectedIds.filter((x) => x !== id)
         : [...prev.selectedIds, id];
-      // Remove assignment if deselected
-      const assignments = { ...prev.assignments };
-      if (!selected.includes(id)) delete assignments[id];
-      return { ...prev, selectedIds: selected, assignments };
+      return { ...prev, selectedIds: selected };
     });
   }
 
-  function setAssignment(id: number, team: "team1" | "team2") {
-    setStep2((prev) => ({
-      ...prev,
-      assignments: { ...prev.assignments, [id]: team },
-    }));
-  }
-
-  function handleRandomize() {
-    setStep2((prev) => ({
-      ...prev,
-      assignments: randomizeTeams(prev.selectedIds),
-    }));
+  /** Inline warning if selected player count exceeds combined team caps. */
+  function getCapWarning(): string | null {
+    const total = step2.selectedIds.length;
+    const maxCapacity = step2.team1MaxPlayers + step2.team2MaxPlayers;
+    if (total > 0 && total > maxCapacity) {
+      return `Selected ${total} players but combined team cap is only ${maxCapacity}. Some players may not be assigned to a team.`;
+    }
+    return null;
   }
 
   function handleStep2Next() {
@@ -259,12 +269,17 @@ export function NewGameWizard({ players, roles }: Props) {
       vote_window_end: step1.voteEnd || null,
       team1_name: step2.team1Name.trim() || "Good",
       team2_name: step2.team2Name.trim() || "Evil",
-      players: step2.selectedIds.map((id) => ({
-        user_id: id,
-        team: step2.assignments[id] ?? null,
-      })),
-      special_role_count: step3.fullyRandom ? null : step3.specialRoleCount,
-      role_chances: JSON.stringify(step3.roleChances),
+      player_ids: step2.selectedIds,
+      team1_max_players: step2.team1MaxPlayers,
+      team2_max_players: step2.team2MaxPlayers,
+      team1Roles: step3.team1Roles
+        .filter((r) => r.enabled)
+        .map((r) => ({ roleId: r.roleId, chancePercent: r.chancePercent })),
+      team1SpecialCount: step3.team1SpecialCount,
+      team2Roles: step3.team2Roles
+        .filter((r) => r.enabled)
+        .map((r) => ({ roleId: r.roleId, chancePercent: r.chancePercent })),
+      team2SpecialCount: step3.team2SpecialCount,
       murder_item_url: step3.murderItemUrl ?? null,
       murder_item_name: step3.murderItemName.trim() || null,
     };
@@ -471,12 +486,68 @@ export function NewGameWizard({ players, roles }: Props) {
             </div>
           </div>
 
+          {/* Team caps */}
+          <div className="grid grid-cols-2 gap-4 mb-6">
+            <div>
+              <label
+                htmlFor="team1-max"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Max players per {step2.team1Name || "Team 1"}
+              </label>
+              <input
+                id="team1-max"
+                type="number"
+                min={1}
+                value={step2.team1MaxPlayers}
+                onChange={(e) =>
+                  setStep2((p) => ({
+                    ...p,
+                    team1MaxPlayers: Math.max(1, parseInt(e.target.value) || 1),
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+            <div>
+              <label
+                htmlFor="team2-max"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Max players per {step2.team2Name || "Team 2"}
+              </label>
+              <input
+                id="team2-max"
+                type="number"
+                min={1}
+                value={step2.team2MaxPlayers}
+                onChange={(e) =>
+                  setStep2((p) => ({
+                    ...p,
+                    team2MaxPlayers: Math.max(1, parseInt(e.target.value) || 1),
+                  }))
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              />
+            </div>
+          </div>
+
+          {/* Cap warning */}
+          {getCapWarning() && (
+            <p className="text-sm text-amber-600 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2 mb-4">
+              ⚠️ {getCapWarning()}
+            </p>
+          )}
+
           {/* Player avatar grid */}
           <p className="text-sm font-medium text-gray-700 mb-2">
             Select players{" "}
             <span className="text-gray-400 font-normal">
               ({step2.selectedIds.length} selected)
             </span>
+          </p>
+          <p className="text-xs text-gray-500 mb-3">
+            Teams are assigned automatically by the server — no manual assignment needed.
           </p>
 
           {players.length === 0 ? (
@@ -493,7 +564,6 @@ export function NewGameWizard({ players, roles }: Props) {
             <div className="grid grid-cols-3 sm:grid-cols-4 gap-3 mb-4">
               {players.map((player) => {
                 const isSelected = step2.selectedIds.includes(player.id);
-                const assignment = step2.assignments[player.id];
                 return (
                   <button
                     key={player.id}
@@ -507,15 +577,6 @@ export function NewGameWizard({ players, roles }: Props) {
                     <span className="text-xs font-medium text-gray-700 truncate w-full">
                       {player.name}
                     </span>
-                    {isSelected && assignment && (
-                      <span
-                        className={`text-xs font-semibold ${assignment === "team1" ? "text-blue-600" : "text-rose-600"}`}
-                      >
-                        {assignment === "team1"
-                          ? step2.team1Name || "Team 1"
-                          : step2.team2Name || "Team 2"}
-                      </span>
-                    )}
                     {isSelected && (
                       <span
                         className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full bg-indigo-500 flex items-center justify-center"
@@ -534,52 +595,6 @@ export function NewGameWizard({ players, roles }: Props) {
                   </button>
                 );
               })}
-            </div>
-          )}
-
-          {/* Team assignment for selected players */}
-          {step2.selectedIds.length > 0 && (
-            <div className="mb-4">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-sm font-medium text-gray-700">
-                  Assign teams
-                </p>
-                <button
-                  type="button"
-                  onClick={handleRandomize}
-                  className="rounded-lg border border-indigo-300 bg-indigo-50 px-3 py-1 text-xs font-medium text-indigo-700 hover:bg-indigo-100 transition-colors"
-                >
-                  🎲 Randomize Teams
-                </button>
-              </div>
-              <div className="rounded-lg border divide-y overflow-hidden">
-                {selectedPlayers.map((player) => (
-                  <div
-                    key={player.id}
-                    className="flex items-center justify-between px-3 py-2 bg-white hover:bg-gray-50"
-                  >
-                    <span className="text-sm text-gray-800">{player.name}</span>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setAssignment(player.id, "team1")}
-                        className={`rounded px-2 py-0.5 text-xs font-medium transition-colors
-                          ${step2.assignments[player.id] === "team1" ? "bg-blue-500 text-white" : "border border-blue-300 text-blue-600 hover:bg-blue-50"}`}
-                      >
-                        {step2.team1Name || "Team 1"}
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setAssignment(player.id, "team2")}
-                        className={`rounded px-2 py-0.5 text-xs font-medium transition-colors
-                          ${step2.assignments[player.id] === "team2" ? "bg-rose-500 text-white" : "border border-rose-300 text-rose-600 hover:bg-rose-50"}`}
-                      >
-                        {step2.team2Name || "Team 2"}
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
             </div>
           )}
 
@@ -613,103 +628,254 @@ export function NewGameWizard({ players, roles }: Props) {
             Roles & Settings
           </h2>
 
-          {/* Fully random toggle */}
-          <div className="flex items-center justify-between rounded-lg border border-gray-200 px-4 py-3 mb-5">
-            <div>
-              <p className="text-sm font-medium text-gray-800">Fully Random</p>
-              <p className="text-xs text-gray-500">
-                Assign roles completely at random, ignoring chance percentages
-              </p>
-            </div>
-            <button
-              type="button"
-              role="switch"
-              aria-checked={step3.fullyRandom}
-              onClick={() =>
-                setStep3((p) => ({ ...p, fullyRandom: !p.fullyRandom }))
-              }
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500
-                ${step3.fullyRandom ? "bg-indigo-600" : "bg-gray-200"}`}
-            >
-              <span
-                className={`inline-block h-4 w-4 rounded-full bg-white shadow transition-transform ${step3.fullyRandom ? "translate-x-6" : "translate-x-1"}`}
-              />
-            </button>
-          </div>
+          {/* Two-column role configuration */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+            {/* ── Team1 (Evil) column ──────────────────────────── */}
+            <div className="rounded-lg border border-blue-200 bg-blue-50/30 p-4">
+              <h3 className="text-sm font-semibold text-blue-800 mb-3">
+                {step2.team1Name || "Team 1"} (Evil)
+              </h3>
 
-          {/* Special role count (only when not fully random) */}
-          {!step3.fullyRandom && (
-            <div className="mb-5">
-              <label
-                htmlFor="role-count"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Number of special roles
-              </label>
-              <input
-                id="role-count"
-                type="number"
-                min={0}
-                value={step3.specialRoleCount}
-                onChange={(e) =>
-                  setStep3((p) => ({
-                    ...p,
-                    specialRoleCount: Math.max(0, parseInt(e.target.value) || 0),
-                  }))
-                }
-                className="w-32 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-            </div>
-          )}
+              {/* Fully Random toggle */}
+              <div className="flex items-center justify-between rounded-lg border border-blue-100 bg-white px-3 py-2 mb-3">
+                <span className="text-xs font-medium text-gray-700">Fully Random</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={step3.team1FullyRandom}
+                  onClick={() => {
+                    setStep3((p) => {
+                      const next = !p.team1FullyRandom;
+                      return {
+                        ...p,
+                        team1FullyRandom: next,
+                        team1Roles: next
+                          ? p.team1Roles.map((r) => {
+                              const orig = team1EligibleRoles.find((o) => o.id === r.roleId);
+                              return { ...r, enabled: true, chancePercent: orig?.chance_percent ?? r.chancePercent };
+                            })
+                          : p.team1Roles,
+                      };
+                    });
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-400
+                    ${step3.team1FullyRandom ? "bg-blue-600" : "bg-gray-200"}`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${step3.team1FullyRandom ? "translate-x-4" : "translate-x-0.5"}`}
+                  />
+                </button>
+              </div>
 
-          {/* Role chance sliders */}
-          {roles.length > 0 && !step3.fullyRandom && (
-            <div className="mb-5">
-              <p className="text-sm font-medium text-gray-700 mb-3">
-                Role chance percentages
-              </p>
-              <div className="space-y-3">
-                {roles.map((role) => (
-                  <div key={role.id}>
-                    <div className="flex items-center justify-between mb-1">
-                      <div className="flex items-center gap-2">
+              {/* Special count */}
+              <div className="mb-3">
+                <label htmlFor="t1-special" className="block text-xs font-medium text-gray-600 mb-1">
+                  Special roles (beyond Killer)
+                </label>
+                <input
+                  id="t1-special"
+                  type="number"
+                  min={0}
+                  value={step3.team1SpecialCount}
+                  onChange={(e) =>
+                    setStep3((p) => ({
+                      ...p,
+                      team1SpecialCount: Math.max(0, parseInt(e.target.value) || 0),
+                    }))
+                  }
+                  className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+                />
+              </div>
+
+              {/* Killer validation */}
+              {!step3.team1Roles.some((r) => {
+                const role = team1EligibleRoles.find((o) => o.id === r.roleId);
+                return role && isKillerRole(role) && r.enabled;
+              }) && (
+                <p className="text-xs text-red-500 mb-2">⚠ A Killer role must be enabled for this team.</p>
+              )}
+
+              {/* Role rows */}
+              <div className="space-y-2">
+                {step3.team1Roles.map((entry) => {
+                  const role = team1EligibleRoles.find((r) => r.id === entry.roleId);
+                  if (!role) return null;
+                  const isKiller = isKillerRole(role);
+                  return (
+                    <div key={entry.roleId} className="rounded-lg border bg-white p-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={entry.enabled}
+                          disabled={isKiller}
+                          onChange={() => {
+                            if (isKiller) return;
+                            setStep3((p) => ({
+                              ...p,
+                              team1Roles: p.team1Roles.map((r) =>
+                                r.roleId === entry.roleId ? { ...r, enabled: !r.enabled } : r,
+                              ),
+                            }));
+                          }}
+                          className="accent-blue-600"
+                        />
                         <span
-                          className="inline-block w-3 h-3 rounded-full"
+                          className="inline-block w-2.5 h-2.5 rounded-full"
                           style={{ backgroundColor: role.color_hex }}
                         />
-                        <span className="text-sm text-gray-700">
-                          {role.name}
-                        </span>
-                        <span className="text-xs text-gray-400">
-                          ({role.team})
-                        </span>
-                      </div>
-                      <span className="text-sm font-medium text-gray-800 w-10 text-right">
-                        {step3.roleChances[role.id] ?? role.chance_percent}%
-                      </span>
+                        <span className="text-xs font-medium text-gray-700">{role.name}</span>
+                        {isKiller && <span className="text-[10px] text-gray-400">(required)</span>}
+                      </label>
+                      {entry.enabled && (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={entry.chancePercent}
+                            onChange={(e) =>
+                              setStep3((p) => ({
+                                ...p,
+                                team1Roles: p.team1Roles.map((r) =>
+                                  r.roleId === entry.roleId
+                                    ? { ...r, chancePercent: parseInt(e.target.value) }
+                                    : r,
+                                ),
+                              }))
+                            }
+                            aria-label={`${role.name} chance`}
+                            className="flex-1 accent-blue-600"
+                          />
+                          <span className="text-xs font-medium text-gray-600 w-8 text-right">
+                            {entry.chancePercent}%
+                          </span>
+                        </div>
+                      )}
                     </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={100}
-                      value={step3.roleChances[role.id] ?? role.chance_percent}
-                      onChange={(e) =>
-                        setStep3((p) => ({
-                          ...p,
-                          roleChances: {
-                            ...p.roleChances,
-                            [role.id]: parseInt(e.target.value),
-                          },
-                        }))
-                      }
-                      aria-label={`${role.name} chance`}
-                      className="w-full accent-indigo-600"
-                    />
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
-          )}
+
+            {/* ── Team2 (Good) column ──────────────────────────── */}
+            <div className="rounded-lg border border-rose-200 bg-rose-50/30 p-4">
+              <h3 className="text-sm font-semibold text-rose-800 mb-3">
+                {step2.team2Name || "Team 2"} (Good)
+              </h3>
+
+              {/* Fully Random toggle */}
+              <div className="flex items-center justify-between rounded-lg border border-rose-100 bg-white px-3 py-2 mb-3">
+                <span className="text-xs font-medium text-gray-700">Fully Random</span>
+                <button
+                  type="button"
+                  role="switch"
+                  aria-checked={step3.team2FullyRandom}
+                  onClick={() => {
+                    setStep3((p) => {
+                      const next = !p.team2FullyRandom;
+                      return {
+                        ...p,
+                        team2FullyRandom: next,
+                        team2Roles: next
+                          ? p.team2Roles.map((r) => {
+                              const orig = team2EligibleRoles.find((o) => o.id === r.roleId);
+                              return { ...r, enabled: true, chancePercent: orig?.chance_percent ?? r.chancePercent };
+                            })
+                          : p.team2Roles,
+                      };
+                    });
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-rose-400
+                    ${step3.team2FullyRandom ? "bg-rose-600" : "bg-gray-200"}`}
+                >
+                  <span
+                    className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${step3.team2FullyRandom ? "translate-x-4" : "translate-x-0.5"}`}
+                  />
+                </button>
+              </div>
+
+              {/* Special count */}
+              <div className="mb-3">
+                <label htmlFor="t2-special" className="block text-xs font-medium text-gray-600 mb-1">
+                  Special roles (weighted draw)
+                </label>
+                <input
+                  id="t2-special"
+                  type="number"
+                  min={0}
+                  value={step3.team2SpecialCount}
+                  onChange={(e) =>
+                    setStep3((p) => ({
+                      ...p,
+                      team2SpecialCount: Math.max(0, parseInt(e.target.value) || 0),
+                    }))
+                  }
+                  className="w-24 rounded-lg border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-rose-400"
+                />
+                <p className="text-[10px] text-gray-400 mt-0.5">Remaining players get Survivor automatically.</p>
+              </div>
+
+              {/* Role rows */}
+              <div className="space-y-2">
+                {step3.team2Roles.map((entry) => {
+                  const role = team2EligibleRoles.find((r) => r.id === entry.roleId);
+                  if (!role) return null;
+                  return (
+                    <div key={entry.roleId} className="rounded-lg border bg-white p-2">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={entry.enabled}
+                          onChange={() =>
+                            setStep3((p) => ({
+                              ...p,
+                              team2Roles: p.team2Roles.map((r) =>
+                                r.roleId === entry.roleId ? { ...r, enabled: !r.enabled } : r,
+                              ),
+                            }))
+                          }
+                          className="accent-rose-600"
+                        />
+                        <span
+                          className="inline-block w-2.5 h-2.5 rounded-full"
+                          style={{ backgroundColor: role.color_hex }}
+                        />
+                        <span className="text-xs font-medium text-gray-700">{role.name}</span>
+                      </label>
+                      {entry.enabled && (
+                        <div className="mt-1.5 flex items-center gap-2">
+                          <input
+                            type="range"
+                            min={0}
+                            max={100}
+                            value={entry.chancePercent}
+                            onChange={(e) =>
+                              setStep3((p) => ({
+                                ...p,
+                                team2Roles: p.team2Roles.map((r) =>
+                                  r.roleId === entry.roleId
+                                    ? { ...r, chancePercent: parseInt(e.target.value) }
+                                    : r,
+                                ),
+                              }))
+                            }
+                            aria-label={`${role.name} chance`}
+                            className="flex-1 accent-rose-600"
+                          />
+                          <span className="text-xs font-medium text-gray-600 w-8 text-right">
+                            {entry.chancePercent}%
+                          </span>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                {step3.team2Roles.length === 0 && (
+                  <p className="text-xs text-gray-400 italic">No eligible roles found.</p>
+                )}
+              </div>
+            </div>
+          </div>
 
           {/* Murder item */}
           <div className="mb-2">
@@ -799,14 +965,14 @@ export function NewGameWizard({ players, roles }: Props) {
         </div>
       )}
 
-      {/* ── Step 4: Review & Submit ──────────────────────────────── */}
+      {/* ── Step 4: Review & Submit (spoiler-free) ────────────────── */}
       {step === 4 && (
         <div className="rounded-xl border bg-white p-6 shadow-sm">
           <h2 className="text-lg font-semibold text-gray-900 mb-5">
             Review & Start
           </h2>
 
-          {/* Summary card */}
+          {/* Summary card — does NOT reveal team/role assignments */}
           <div className="rounded-lg border bg-gray-50 divide-y text-sm mb-6">
             {/* Game details */}
             <div className="px-4 py-3">
@@ -837,102 +1003,109 @@ export function NewGameWizard({ players, roles }: Props) {
               </dl>
             </div>
 
-            {/* Teams */}
+            {/* Selected players (no team breakdown) */}
+            <div className="px-4 py-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Players ({selectedPlayers.length})
+              </p>
+              <div className="flex flex-wrap gap-1.5">
+                {selectedPlayers.map((p) => (
+                  <span
+                    key={p.id}
+                    className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-700"
+                  >
+                    {p.avatar_url && (
+                      <span className="relative w-4 h-4 rounded-full overflow-hidden inline-block">
+                        <Image src={p.avatar_url} alt="" fill sizes="16px" className="object-cover" />
+                      </span>
+                    )}
+                    {p.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Team settings (caps only, no assignments) */}
             <div className="px-4 py-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
                 Teams
               </p>
-              <div className="grid grid-cols-2 gap-2">
-                <div>
-                  <p className="font-medium text-blue-700 mb-1">
-                    {step2.team1Name || "Team 1"}
-                  </p>
-                  {selectedPlayers
-                    .filter((p) => step2.assignments[p.id] === "team1")
-                    .map((p) => (
-                      <p key={p.id} className="text-gray-600 text-xs">
-                        {p.name}
-                      </p>
-                    ))}
-                  {selectedPlayers.filter(
-                    (p) => step2.assignments[p.id] === "team1",
-                  ).length === 0 && (
-                    <p className="text-gray-400 text-xs italic">
-                      No players assigned
-                    </p>
-                  )}
+              <dl className="space-y-1">
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">{step2.team1Name || "Team 1"} cap</dt>
+                  <dd className="font-medium">{step2.team1MaxPlayers}</dd>
                 </div>
-                <div>
-                  <p className="font-medium text-rose-700 mb-1">
-                    {step2.team2Name || "Team 2"}
-                  </p>
-                  {selectedPlayers
-                    .filter((p) => step2.assignments[p.id] === "team2")
-                    .map((p) => (
-                      <p key={p.id} className="text-gray-600 text-xs">
-                        {p.name}
-                      </p>
-                    ))}
-                  {selectedPlayers.filter(
-                    (p) => step2.assignments[p.id] === "team2",
-                  ).length === 0 && (
-                    <p className="text-gray-400 text-xs italic">
-                      No players assigned
-                    </p>
-                  )}
+                <div className="flex justify-between">
+                  <dt className="text-gray-500">{step2.team2Name || "Team 2"} cap</dt>
+                  <dd className="font-medium">{step2.team2MaxPlayers}</dd>
                 </div>
-              </div>
-              {selectedPlayers.filter((p) => !step2.assignments[p.id])
-                .length > 0 && (
-                <div className="mt-2">
-                  <p className="text-xs text-gray-500 italic">
-                    Unassigned:{" "}
-                    {selectedPlayers
-                      .filter((p) => !step2.assignments[p.id])
-                      .map((p) => p.name)
-                      .join(", ")}
-                  </p>
-                </div>
-              )}
+              </dl>
+              <p className="text-[10px] text-gray-400 mt-1">
+                Teams and roles are assigned randomly by the server on submission.
+              </p>
             </div>
 
-            {/* Roles */}
+            {/* Role config */}
             <div className="px-4 py-3">
               <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                Roles
+                Role Configuration
               </p>
-              {step3.fullyRandom ? (
-                <p className="text-gray-700">
-                  Fully random assignment enabled
-                </p>
-              ) : (
-                <dl className="space-y-1">
-                  <div className="flex justify-between">
-                    <dt className="text-gray-500">Special role count</dt>
-                    <dd className="font-medium">{step3.specialRoleCount}</dd>
-                  </div>
-                  {roles.length > 0 && (
-                    <div className="mt-1">
-                      <dt className="text-gray-500 mb-1">Chance overrides</dt>
-                      <div className="flex flex-wrap gap-2">
-                        {roles.map((r) => {
-                          const chance =
-                            step3.roleChances[r.id] ?? r.chance_percent;
-                          const changed = chance !== r.chance_percent;
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <p className="text-xs font-medium text-blue-700 mb-1">
+                    {step2.team1Name || "Team 1"}
+                  </p>
+                  {step3.team1FullyRandom ? (
+                    <p className="text-xs text-gray-500 italic">Fully random</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500">
+                        Special roles: {step3.team1SpecialCount}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {step3.team1Roles.filter((r) => r.enabled).map((r) => {
+                          const role = team1EligibleRoles.find((o) => o.id === r.roleId);
                           return (
                             <span
-                              key={r.id}
-                              className={`text-xs rounded px-1.5 py-0.5 ${changed ? "bg-indigo-100 text-indigo-700 font-medium" : "bg-gray-100 text-gray-500"}`}
+                              key={r.roleId}
+                              className="text-[10px] rounded px-1.5 py-0.5 bg-blue-50 text-blue-700"
                             >
-                              {r.name}: {chance}%
+                              {role?.name ?? `Role #${r.roleId}`}: {r.chancePercent}%
                             </span>
                           );
                         })}
                       </div>
-                    </div>
+                    </>
                   )}
-                </dl>
-              )}
+                </div>
+                <div>
+                  <p className="text-xs font-medium text-rose-700 mb-1">
+                    {step2.team2Name || "Team 2"}
+                  </p>
+                  {step3.team2FullyRandom ? (
+                    <p className="text-xs text-gray-500 italic">Fully random</p>
+                  ) : (
+                    <>
+                      <p className="text-xs text-gray-500">
+                        Special roles: {step3.team2SpecialCount}
+                      </p>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {step3.team2Roles.filter((r) => r.enabled).map((r) => {
+                          const role = team2EligibleRoles.find((o) => o.id === r.roleId);
+                          return (
+                            <span
+                              key={r.roleId}
+                              className="text-[10px] rounded px-1.5 py-0.5 bg-rose-50 text-rose-700"
+                            >
+                              {role?.name ?? `Role #${r.roleId}`}: {r.chancePercent}%
+                            </span>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
             </div>
 
             {/* Murder item */}

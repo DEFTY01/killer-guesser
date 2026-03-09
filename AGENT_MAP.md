@@ -146,6 +146,7 @@ killer-guesser/
 │   │   ├── blob.ts            # Vercel Blob upload helper (thin wrapper around @vercel/blob)
 │   │   ├── gameEnd.ts         # Game-end logic: handleKillerDefeated, handleKillerWins, deleteGame, closeGame
 │   │   ├── role-constants.ts  # Role permissions + colors
+│   │   ├── assignTeamsAndRoles.ts # Server-side team & role assignment (Fisher-Yates, weighted random)
 │   │   ├── roleUtils.ts       # Role utility helpers (isKiller)
 │   │   └── validations.ts     # Zod schemas for shared validation
 │   ├── hooks/
@@ -163,6 +164,7 @@ killer-guesser/
 │   │   ├── auth.test.ts       # Auth provider logic tests
 │   │   ├── gameEnd.test.ts    # Game end function tests
 │   │   ├── roleUtils.test.ts  # isKiller utility tests
+│   │   └── assignTeamsAndRoles.test.ts # Team & role assignment tests
 │   │   └── useCountdown.test.ts # Countdown hook tests
 │   ├── api/
 │   │   ├── auth-admin.test.ts # Admin auth flow tests
@@ -214,7 +216,7 @@ killer-guesser/
 | `src/app/(admin)/admin/roles/RolesClient.tsx` | Interactive roles table: color swatch, inline chance slider (optimistic), add/edit panels, permission checkboxes, team-total warning |
 | `src/app/(admin)/admin/games/page.tsx` | Games list with status tabs (Active/Scheduled/Closed/Deleted) and per-tab badge counts; closed games link to `/history` |
 | `src/app/(admin)/admin/games/new/page.tsx` | New game wizard wrapper: server component fetches players + roles, renders NewGameWizard |
-| `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + randomize, step 3 roles/settings/murder item, step 4 summary + submit |
+| `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + team caps (no manual team assignment), step 3 per-team role columns with toggleable roles + chance sliders + special counts + murder item, step 4 spoiler-free summary + submit |
 | `src/app/(admin)/admin/games/[id]/page.tsx` | Game editor: server component — fetches game, settings, players (with role data), and all roles; renders GameEditorClient |
 | `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
 | `src/app/(admin)/admin/games/[id]/history/page.tsx` | Read-only game archive viewer: header card (name/duration/winner), day-by-day timeline with events + vote bars, player fates table (avatar/role/team/death), voting history with anonymous bar charts |
@@ -252,13 +254,14 @@ killer-guesser/
 | `src/lib/blob.ts` | Thin wrapper around `@vercel/blob` — `uploadBlob(filename, buffer, mimeType)` → public URL |
 | `src/lib/gameEnd.ts` | Game-end scenarios: `handleKillerDefeated` (killer voted out → archive events, close, survivors win), `handleKillerWins` (killer wins → archive events, close, killer team wins), `deleteGame` (hard-delete all game data), `closeGame` (close without deletion); all publish Ably `game_ended` event |
 | `src/lib/role-constants.ts` | Shared role constants — `DEFAULT_ROLE_COLOR`, `ROLE_PERMISSIONS` tuple, `RolePermission` type |
+| `src/lib/assignTeamsAndRoles.ts` | Server-side team & role assignment: Fisher-Yates shuffle, fill team1 up to cap then team2, assign Killer to team1, weighted random special roles per team, Survivor default for team2 remainder |
 | `src/lib/roleUtils.ts` | Role utility helpers — `isKiller(playerId, killerId)` for testable killer identification |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
 | `src/app/api/admin/players/route.ts` | GET (all players, ordered by name) + POST (create player with Zod validation) — admin only |
 | `src/app/api/admin/players/[id]/route.ts` | PATCH (update player fields) + DELETE (soft-delete: sets is_active=0) — admin only |
 | `src/app/api/admin/roles/route.ts` | GET (all roles, ordered by name) + POST (create role with Zod validation) — admin only |
 | `src/app/api/admin/roles/[id]/route.ts` | PATCH (update role fields) + DELETE (forbidden if is_default=1; otherwise hard-delete) — admin only |
-| `src/app/api/admin/games/route.ts` | GET (all games with player counts) + POST (create game in DB transaction: games + game_settings + game_players, Zod validation) — admin only |
+| `src/app/api/admin/games/route.ts` | GET (all games with player counts) + POST (create game in DB transaction with server-side team/role assignment via assignTeamsAndRoles: games + game_settings + game_players, Zod validation, per-team role config) — admin only |
 | `src/app/api/admin/games/[id]/route.ts` | GET (full game with settings + players including role data) + PATCH (action: close_voting / close / delete) — admin only |
 | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | PATCH (mark player dead / change role assignment) — admin only |
 | `src/app/api/admin/games/[id]/reroll/route.ts` | POST ?type=teams (random 50/50 split) or ?type=roles (weighted random by chance_percent) — admin only |
@@ -282,6 +285,7 @@ killer-guesser/
 | `src/test/unit/auth.test.ts` | Auth provider logic: player valid/inactive/unknown, admin correct/wrong/empty password |
 | `src/test/unit/gameEnd.test.ts` | Game end functions: handleKillerDefeated, handleKillerWins, deleteGame, closeGame |
 | `src/test/unit/roleUtils.test.ts` | isKiller utility: matching, non-matching, and undefined killerId |
+| `src/test/unit/assignTeamsAndRoles.test.ts` | assignTeamsAndRoles: Fisher-Yates shuffle, team distribution, Killer assignment, weighted random roles, Survivor default |
 | `src/test/unit/useCountdown.test.ts` | Countdown hook: future/past dates, interval cleanup, time ticking |
 | `src/test/api/auth-admin.test.ts` | Admin auth: correct/wrong/missing/empty password, timing-safe comparison |
 | `src/test/api/board.test.ts` | GET /api/game/[id]/board: no perms, Seer (killerId), Spy (votes), Mayor (stripped), dead player |
@@ -326,7 +330,7 @@ killer-guesser/
 | `PATCH` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Admin (403) | Update role fields |
 | `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Admin (403) | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") |
 | `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Admin (403) | List all games with per-game player counts ordered by created_at desc |
-| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Admin (403) | Create game in a single DB transaction (games + game_settings + game_players); accepts optional `revive_cooldown_seconds` |
+| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Admin (403) | Create game with server-side team/role assignment (player_ids, team caps, per-team role config); single DB transaction (games + game_settings + game_players) |
 | `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Admin (403) | Get full game data (game + settings + players with role details) |
 | `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Admin (403) | Update game state: action "update_vote_window" (set vote_window_start/end as HH:MM), "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) |
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Admin (403) | Update game player: is_dead (0/1) and/or role_id |
