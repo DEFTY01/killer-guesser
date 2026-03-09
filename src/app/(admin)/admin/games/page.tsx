@@ -6,6 +6,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import type { GameStatus } from "@/types";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
+import { activateScheduledGames } from "@/lib/activateGame";
 
 export const metadata: Metadata = { title: "Games" };
 
@@ -55,6 +56,9 @@ export default async function GamesPage({
   const { tab } = await searchParams;
   const activeTab: GameStatus =
     TABS.find((t) => t.key === tab)?.key ?? "active";
+
+  // Auto-activate games whose start_time has passed
+  await activateScheduledGames();
 
   const allGames = await db
     .select({
