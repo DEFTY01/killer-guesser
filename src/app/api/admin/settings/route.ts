@@ -19,7 +19,7 @@ const patchSchema = z.object({
 export async function GET() {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   const [row] = await db
@@ -44,7 +44,7 @@ export async function GET() {
 export async function PATCH(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   let body: unknown;

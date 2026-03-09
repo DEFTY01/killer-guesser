@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBlob } from "@/lib/blob";
+import { requireAdmin } from "@/lib/auth-helpers";
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_MIME_TYPES = [
@@ -17,8 +18,17 @@ const ALLOWED_MIME_TYPES = [
  * Uploads the file to Vercel Blob storage and returns the public URL.
  *
  * On success returns `{ url: string }`.
+ * Requires an admin session — returns 403 if not authenticated as admin.
  */
 export async function POST(req: NextRequest) {
+  const session = await requireAdmin();
+  if (!session) {
+    return NextResponse.json(
+      { success: false, error: "Forbidden" },
+      { status: 403 },
+    );
+  }
+
   let formData: FormData;
   try {
     formData = await req.formData();

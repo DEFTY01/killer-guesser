@@ -1,6 +1,7 @@
 import { describe, it, expect } from "vitest";
 import {
   adminLoginSchema,
+  adminLoginPasswordSchema,
   playerRegisterSchema,
   avatarUploadSchema,
   createGameSchema,
@@ -29,6 +30,24 @@ describe("adminLoginSchema", () => {
       password: "short",
     });
     expect(result.success).toBe(false);
+  });
+});
+
+describe("adminLoginPasswordSchema", () => {
+  it("accepts a non-empty password", () => {
+    expect(adminLoginPasswordSchema.safeParse({ password: "anypassword" }).success).toBe(true);
+  });
+
+  it("accepts a single-character password", () => {
+    expect(adminLoginPasswordSchema.safeParse({ password: "x" }).success).toBe(true);
+  });
+
+  it("rejects an empty password", () => {
+    expect(adminLoginPasswordSchema.safeParse({ password: "" }).success).toBe(false);
+  });
+
+  it("rejects missing password field", () => {
+    expect(adminLoginPasswordSchema.safeParse({}).success).toBe(false);
   });
 });
 
