@@ -91,6 +91,7 @@ function MurderItemModal({
           sizes="100vw"
           className="object-contain"
           onClick={(e) => e.stopPropagation()}
+          unoptimized
         />
       </div>
     </div>
@@ -125,6 +126,7 @@ function MurderItemCard({ url, name }: { url: string | null; name: string | null
               fill
               sizes="(max-width: 320px) 100vw, 320px"
               className="object-contain p-4"
+              unoptimized
             />
           </button>
         )}

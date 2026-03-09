@@ -132,6 +132,7 @@ export function PlayerCard({
               fill
               sizes="64px"
               className="object-cover"
+              unoptimized
             />
           ) : (
             <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-indigo-400 select-none">
@@ -190,6 +191,7 @@ export function PlayerCard({
             fill
             sizes="64px"
             className="object-cover"
+            unoptimized
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-indigo-400 select-none">

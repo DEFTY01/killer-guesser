@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
-import { users } from "@/db/schema";
-import { eq } from "drizzle-orm";
+import { users, game_players, votes } from "@/db/schema";
+import { eq, sql } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 /** Zod schema for PATCH /api/admin/players/[id] body. */
@@ -84,8 +84,10 @@ export async function PATCH(
 /**
  * DELETE /api/admin/players/[id]
  *
- * Soft-deletes the player by setting `is_active` to `0`.
- * The database record is NOT removed.
+ * Hard-deletes the player account and all related records:
+ * - All votes where the user is voter or target
+ * - All game_players entries (cascade)
+ * - The user record itself
  * Requires an admin session — returns 403 if not authenticated as admin.
  */
 export async function DELETE(
@@ -109,18 +111,32 @@ export async function DELETE(
     );
   }
 
-  const [updated] = await db
-    .update(users)
-    .set({ is_active: 0, updated_at: Math.floor(Date.now() / 1000) })
+  // Check if player exists
+  const existing = await db
+    .select()
+    .from(users)
     .where(eq(users.id, numericId))
-    .returning();
+    .limit(1);
 
-  if (!updated) {
+  if (!existing.length) {
     return NextResponse.json(
       { success: false, error: "Player not found" },
       { status: 404 },
     );
   }
+
+  // Delete all votes involving this user (as voter or target)
+  await db
+    .delete(votes)
+    .where(
+      sql`${votes.voter_id} = ${numericId} OR ${votes.target_id} = ${numericId}`,
+    );
+
+  // Delete all game_players entries (will cascade from user delete, but explicit for clarity)
+  await db.delete(game_players).where(eq(game_players.user_id, numericId));
+
+  // Delete the user
+  await db.delete(users).where(eq(users.id, numericId));
 
   return NextResponse.json({ success: true, data: { id: numericId } });
 }

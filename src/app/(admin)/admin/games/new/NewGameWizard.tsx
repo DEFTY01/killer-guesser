@@ -1016,7 +1016,7 @@ export function NewGameWizard({ players, roles }: Props) {
                   >
                     {p.avatar_url && (
                       <span className="relative w-4 h-4 rounded-full overflow-hidden inline-block">
-                        <Image src={p.avatar_url} alt="" fill sizes="16px" className="object-cover" />
+                        <Image src={p.avatar_url} alt="" fill sizes="16px" className="object-cover" unoptimized />
                       </span>
                     )}
                     {p.name}

@@ -44,6 +44,7 @@ export default async function GameLayout({
                 width={32}
                 height={32}
                 className="rounded-full object-cover"
+                unoptimized
               />
             ) : null}
             <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[120px] truncate">

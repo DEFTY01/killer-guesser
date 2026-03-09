@@ -9,7 +9,8 @@ interface DeletePlayerButtonProps {
 }
 
 /**
- * Client-side button that soft-deletes a player via DELETE /api/admin/players/[id].
+ * Client-side button that deletes a player via DELETE /api/admin/players/[id].
+ * Permanently removes the player and all related records from the database.
  * Confirms with the user before sending the request.
  */
 export default function DeletePlayerButton({
@@ -20,7 +21,7 @@ export default function DeletePlayerButton({
   const [loading, setLoading] = useState(false);
 
   async function handleDelete() {
-    if (!confirm(`Deactivate player "${playerName}"?`)) return;
+    if (!confirm(`Delete player "${playerName}"? This cannot be undone.`)) return;
 
     setLoading(true);
     try {
@@ -31,7 +32,7 @@ export default function DeletePlayerButton({
         router.refresh();
       } else {
         const data = await res.json().catch(() => ({}));
-        alert(data?.error ?? "Failed to deactivate player.");
+        alert(data?.error ?? "Failed to delete player.");
       }
     } finally {
       setLoading(false);
@@ -43,7 +44,7 @@ export default function DeletePlayerButton({
       onClick={handleDelete}
       disabled={loading}
       className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      aria-label={`Deactivate ${playerName}`}
+      aria-label={`Delete ${playerName}`}
     >
       {loading ? "…" : "Delete"}
     </button>

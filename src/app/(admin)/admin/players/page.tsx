@@ -62,6 +62,7 @@ export default async function PlayersPage() {
                         width={40}
                         height={40}
                         className="rounded-full object-cover"
+                        unoptimized
                       />
                     ) : (
                       <div
