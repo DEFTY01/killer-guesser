@@ -55,13 +55,24 @@ export function useAbly(
   );
 
   useEffect(() => {
-    const client = getAblyClient();
-    const channel = client.channels.get(channelName);
-
-    channel.subscribe(eventName, stableCallback);
+    let channel: ReturnType<InstanceType<typeof Ably.Realtime>["channels"]["get"]> | null = null;
+    try {
+      const client = getAblyClient();
+      channel = client.channels.get(channelName);
+      channel.subscribe(eventName, stableCallback);
+    } catch {
+      // Ably is unavailable (e.g. missing API key in this environment).
+      // Fail silently — real-time updates won't arrive but the board is
+      // still fully usable via manual refresh.
+      return;
+    }
 
     return () => {
-      channel.unsubscribe(eventName, stableCallback);
+      try {
+        channel?.unsubscribe(eventName, stableCallback);
+      } catch {
+        // Ignore cleanup errors
+      }
     };
   }, [channelName, eventName, stableCallback]);
 }

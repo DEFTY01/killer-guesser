@@ -194,14 +194,10 @@ describe("DELETE /api/admin/players/[id]", () => {
     vi.clearAllMocks();
   });
 
-  it("sets is_active=0, does not delete row", async () => {
+  it("hard-deletes the player and related data, returns 200", async () => {
     mockRequireAdmin.mockResolvedValue(true);
-    const updated = { id: 1, name: "Alice", is_active: 0 };
-
-    const returningFn = vi.fn().mockResolvedValue([updated]);
-    const whereFn = vi.fn(() => ({ returning: returningFn }));
-    const setFn = vi.fn(() => ({ where: whereFn }));
-    mockDbUpdate.mockReturnValue({ set: setFn });
+    // Mock existence check: player exists
+    mockDbLimit.mockResolvedValue([{ id: 1, name: "Alice", is_active: 1 }]);
 
     const req = makeRequest("DELETE");
     const res = await deletePlayer(req, { params: Promise.resolve({ id: "1" }) });
@@ -209,11 +205,19 @@ describe("DELETE /api/admin/players/[id]", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.id).toBe(1);
-    // Verify update was called, not delete
-    expect(mockDbUpdate).toHaveBeenCalled();
-    expect(setFn).toHaveBeenCalledWith(
-      expect.objectContaining({ is_active: 0 })
-    );
+    // Verify delete was called (not update)
+    expect(mockDbDelete).toHaveBeenCalled();
+  });
+
+  it("unknown id → 404", async () => {
+    mockRequireAdmin.mockResolvedValue(true);
+    // Mock existence check: player does not exist
+    mockDbLimit.mockResolvedValue([]);
+
+    const req = makeRequest("DELETE");
+    const res = await deletePlayer(req, { params: Promise.resolve({ id: "999" }) });
+
+    expect(res.status).toBe(404);
   });
 });
 

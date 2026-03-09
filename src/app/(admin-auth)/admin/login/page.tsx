@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 
 /**
  * Admin login page.
@@ -49,9 +50,31 @@ export default function AdminLoginPage() {
   return (
     <main className="flex min-h-screen items-center justify-center bg-gray-950 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-gray-900 p-8 shadow-xl">
-        <h1 className="mb-6 text-xl font-bold text-center text-white">
-          Admin Login
-        </h1>
+        <div className="mb-6 flex items-center gap-3">
+          <Link
+            href="/"
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-gray-400 hover:text-gray-200 transition-colors"
+            aria-label="Back to home"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              className="w-4 h-4"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M17 10a.75.75 0 0 1-.75.75H5.612l4.158 3.96a.75.75 0 1 1-1.04 1.08l-5.5-5.25a.75.75 0 0 1 0-1.08l5.5-5.25a.75.75 0 1 1 1.04 1.08L5.612 9.25H16.25A.75.75 0 0 1 17 10Z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Back
+          </Link>
+          <h1 className="flex-1 text-xl font-bold text-center text-white">
+            Admin Login
+          </h1>
+        </div>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
