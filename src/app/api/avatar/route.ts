@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { put } from "@vercel/blob";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { resizeAvatar } from "@/lib/avatar";
@@ -42,9 +43,13 @@ export async function POST(req: NextRequest) {
   const inputBuffer = Buffer.from(await file.arrayBuffer());
   const processed = await resizeAvatar(inputBuffer);
 
-  // TODO: upload processed.buffer to Cloudflare R2 and store the public URL.
-  // For now, store a placeholder URL until the storage integration is wired up.
-  const avatarUrl = `/api/avatar/${playerId}`;
+  const blob = await put(`avatars/player-${playerId}.png`, processed.buffer, {
+    access: "public",
+    contentType: "image/png",
+    addRandomSuffix: true,
+  });
+
+  const avatarUrl = blob.url;
 
   await db
     .update(users)
