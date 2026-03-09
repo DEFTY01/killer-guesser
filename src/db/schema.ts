@@ -137,6 +137,8 @@ export const game_settings = sqliteTable("game_settings", {
   murder_item_url: text("murder_item_url"),
   murder_item_name: text("murder_item_name"),
   revive_cooldown_seconds: integer("revive_cooldown_seconds"),
+  team1_max_players: integer("team1_max_players"),
+  team2_max_players: integer("team2_max_players"),
 });
 
 // ── app_settings (singleton — id is always 1) ────────────────────

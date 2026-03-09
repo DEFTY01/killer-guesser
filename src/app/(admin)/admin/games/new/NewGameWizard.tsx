@@ -211,7 +211,7 @@ export function NewGameWizard({ players, roles }: Props) {
     const total = step2.selectedIds.length;
     const maxCapacity = step2.team1MaxPlayers + step2.team2MaxPlayers;
     if (total > 0 && total > maxCapacity) {
-      return `Selected ${total} players but combined team cap is only ${maxCapacity}. Some players may not be assigned to a team.`;
+      return `overflow will go to ${step2.team2Name || "Team 2"}`;
     }
     return null;
   }
@@ -493,7 +493,7 @@ export function NewGameWizard({ players, roles }: Props) {
                 htmlFor="team1-max"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Max players per {step2.team1Name || "Team 1"}
+                Max players in {step2.team1Name || "Team 1"}
               </label>
               <input
                 id="team1-max"
@@ -514,7 +514,7 @@ export function NewGameWizard({ players, roles }: Props) {
                 htmlFor="team2-max"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Max players per {step2.team2Name || "Team 2"}
+                Max players in {step2.team2Name || "Team 2"}
               </label>
               <input
                 id="team2-max"
@@ -1041,7 +1041,7 @@ export function NewGameWizard({ players, roles }: Props) {
                 </div>
               </dl>
               <p className="text-[10px] text-gray-400 mt-1">
-                Teams and roles are assigned randomly by the server on submission.
+                Assignments will be randomised server-side on start.
               </p>
             </div>
 

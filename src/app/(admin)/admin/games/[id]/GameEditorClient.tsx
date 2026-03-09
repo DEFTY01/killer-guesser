@@ -29,6 +29,9 @@ type SettingsRow = {
   bg_dark_url: string | null;
   murder_item_url: string | null;
   murder_item_name: string | null;
+  revive_cooldown_seconds: number | null;
+  team1_max_players: number | null;
+  team2_max_players: number | null;
 } | null;
 
 interface PlayerRow {
@@ -95,6 +98,7 @@ export default function GameEditorClient({
   const [game, setGame] = useState<GameRow>(initialGame);
   const [players, setPlayers] = useState<PlayerRow[]>(initialPlayers);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [showSpoilers, setShowSpoilers] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   // Vote window editing state
@@ -427,6 +431,18 @@ export default function GameEditorClient({
           <h2 className="text-sm font-semibold text-gray-700">
             Players ({players.length})
           </h2>
+          <button
+            type="button"
+            onClick={() => setShowSpoilers((s) => !s)}
+            className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
+              showSpoilers
+                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
+                : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+            }`}
+            aria-pressed={showSpoilers}
+          >
+            {showSpoilers ? "Hide Spoilers 🙈" : "Show Spoilers 👁"}
+          </button>
         </div>
 
         {players.length === 0 ? (
@@ -487,43 +503,49 @@ export default function GameEditorClient({
 
                     {/* Team */}
                     <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
-                      {p.team === "team1"
-                        ? game.team1_name
-                        : p.team === "team2"
-                          ? game.team2_name
-                          : "—"}
+                      {showSpoilers
+                        ? (p.team === "team1"
+                            ? game.team1_name
+                            : p.team === "team2"
+                              ? game.team2_name
+                              : "—")
+                        : "—"}
                     </td>
 
-                    {/* Role — inline select */}
+                    {/* Role — inline select when spoilers on, hidden otherwise */}
                     <td className="px-4 py-3">
-                      <div className="flex items-center gap-2">
-                        {p.role_color && (
-                          <span
-                            className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
-                            style={{ backgroundColor: p.role_color }}
-                            aria-hidden="true"
-                          />
-                        )}
-                        <select
-                          aria-label={`Role for ${p.name}`}
-                          value={p.role_id ?? ""}
-                          disabled={roleBusy.has(p.id)}
-                          onChange={(e) =>
-                            changeRole(
-                              p,
-                              e.target.value === "" ? null : Number(e.target.value),
-                            )
-                          }
-                          className="rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
-                        >
-                          <option value="">— No role —</option>
-                          {allRoles.map((r) => (
-                            <option key={r.id} value={r.id}>
-                              {r.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
+                      {showSpoilers ? (
+                        <div className="flex items-center gap-2">
+                          {p.role_color && (
+                            <span
+                              className="inline-block w-2.5 h-2.5 rounded-full shrink-0"
+                              style={{ backgroundColor: p.role_color }}
+                              aria-hidden="true"
+                            />
+                          )}
+                          <select
+                            aria-label={`Role for ${p.name}`}
+                            value={p.role_id ?? ""}
+                            disabled={roleBusy.has(p.id)}
+                            onChange={(e) =>
+                              changeRole(
+                                p,
+                                e.target.value === "" ? null : Number(e.target.value),
+                              )
+                            }
+                            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                          >
+                            <option value="">— No role —</option>
+                            {allRoles.map((r) => (
+                              <option key={r.id} value={r.id}>
+                                {r.name}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      ) : (
+                        <span className="text-gray-500">—</span>
+                      )}
                     </td>
 
                     {/* Status */}
