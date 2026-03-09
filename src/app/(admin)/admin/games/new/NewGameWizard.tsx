@@ -135,44 +135,48 @@ export function NewGameWizard({ players, roles }: Props) {
   // ── Step 2 state ──────────────────────────────────────────────
   const [step2, setStep2] = useState<Step2State>({
     selectedIds: [],
-    team1Name: "Good",
-    team2Name: "Evil",
+    team1Name: "Evil",
+    team2Name: "Good",
     team1MaxPlayers: 1,
     team2MaxPlayers: 1,
-    isEvilTeam1: false, // team2 (Evil) is the default Evil team
+    isEvilTeam1: true, // Team 1 is ALWAYS the Evil team by default
   });
   const [step2Error, setStep2Error] = useState<string | null>(null);
 
   // ── Step 3 state ──────────────────────────────────────────────
-  // Build initial role entries for each team.
-  // Team1 column shows only is_evil=1 roles when isEvilTeam1=true, or is_evil=0 roles when isEvilTeam1=false.
-  // Team2 column shows the opposite. For simplicity, we always pre-filter:
-  //   - team1EligibleRoles: is_evil=1 roles (Evil column pool)
-  //   - team2EligibleRoles: is_evil=0 roles excluding Killer (Good column pool)
-  // The correct column is rendered based on isEvilTeam1 at submit time.
-  const team1EligibleRoles = roles.filter(
+  // Evil roles (is_evil=1) go to the Evil team; Good roles (is_evil=0) go to the Good team.
+  // When isEvilTeam1=true (default): team1 = Evil column, team2 = Good column.
+  // When isEvilTeam1=false:          team1 = Good column, team2 = Evil column.
+  // Role pools are keyed by is_evil so they always reflect the correct eligible set.
+  const evilEligibleRoles = roles.filter(
     (r) => (r.team === "team1" || r.team === "any") && r.is_evil === 1,
   );
-  const team2EligibleRoles = roles.filter(
+  const goodEligibleRoles = roles.filter(
     (r) => (r.team === "team2" || r.team === "any") && r.is_evil === 0 && !isKillerRole(r),
   );
 
-  const initialTeam1Roles: TeamRoleEntry[] = team1EligibleRoles.map((r) => ({
+  // team1EligibleRoles and team2EligibleRoles depend on which team is Evil.
+  // We keep mutable refs so handleSubmit can read the current pool.
+  const team1EligibleRoles = step2.isEvilTeam1 ? evilEligibleRoles : goodEligibleRoles;
+  const team2EligibleRoles = step2.isEvilTeam1 ? goodEligibleRoles : evilEligibleRoles;
+
+  const initialEvilRoles: TeamRoleEntry[] = evilEligibleRoles.map((r) => ({
     roleId: r.id,
     chancePercent: r.chance_percent,
     enabled: isKillerRole(r), // Killer always pre-checked
   }));
-  const initialTeam2Roles: TeamRoleEntry[] = team2EligibleRoles.map((r) => ({
+  const initialGoodRoles: TeamRoleEntry[] = goodEligibleRoles.map((r) => ({
     roleId: r.id,
     chancePercent: r.chance_percent,
     enabled: false,
   }));
 
   const [step3, setStep3] = useState<Step3State>({
-    team1Roles: initialTeam1Roles,
+    // team1 is Evil by default (isEvilTeam1=true)
+    team1Roles: initialEvilRoles,
     team1SpecialCount: 0,
     team1FullyRandom: false,
-    team2Roles: initialTeam2Roles,
+    team2Roles: initialGoodRoles,
     team2SpecialCount: 0,
     team2FullyRandom: false,
     murderItemUrl: null,
@@ -281,8 +285,8 @@ export function NewGameWizard({ players, roles }: Props) {
       start_time: startTime,
       vote_window_start: step1.voteStart || null,
       vote_window_end: step1.voteEnd || null,
-      team1_name: step2.team1Name.trim() || "Good",
-      team2_name: step2.team2Name.trim() || "Evil",
+      team1_name: step2.team1Name.trim() || "Evil",
+      team2_name: step2.team2Name.trim() || "Good",
       is_evil_team1: step2.isEvilTeam1,
       player_ids: step2.selectedIds,
       team1_max_players: step2.team1MaxPlayers,
@@ -519,9 +523,25 @@ export function NewGameWizard({ players, roles }: Props) {
                 <input
                   type="checkbox"
                   checked={step2.isEvilTeam1}
-                  onChange={() =>
-                    setStep2((p) => ({ ...p, isEvilTeam1: true }))
-                  }
+                  onChange={() => {
+                    if (!step2.isEvilTeam1) {
+                      // Switching evil to team1 → reset roles: team1=evil pool, team2=good pool
+                      setStep3((p) => ({
+                        ...p,
+                        team1Roles: evilEligibleRoles.map((r) => ({
+                          roleId: r.id,
+                          chancePercent: r.chance_percent,
+                          enabled: isKillerRole(r),
+                        })),
+                        team2Roles: goodEligibleRoles.map((r) => ({
+                          roleId: r.id,
+                          chancePercent: r.chance_percent,
+                          enabled: false,
+                        })),
+                      }));
+                    }
+                    setStep2((p) => ({ ...p, isEvilTeam1: true }));
+                  }}
                   className="accent-red-600"
                   aria-label={`${step2.team1Name || "Team 1"} is the Evil team`}
                 />
@@ -549,9 +569,25 @@ export function NewGameWizard({ players, roles }: Props) {
                 <input
                   type="checkbox"
                   checked={!step2.isEvilTeam1}
-                  onChange={() =>
-                    setStep2((p) => ({ ...p, isEvilTeam1: false }))
-                  }
+                  onChange={() => {
+                    if (step2.isEvilTeam1) {
+                      // Switching evil to team2 → reset roles: team1=good pool, team2=evil pool
+                      setStep3((p) => ({
+                        ...p,
+                        team1Roles: goodEligibleRoles.map((r) => ({
+                          roleId: r.id,
+                          chancePercent: r.chance_percent,
+                          enabled: false,
+                        })),
+                        team2Roles: evilEligibleRoles.map((r) => ({
+                          roleId: r.id,
+                          chancePercent: r.chance_percent,
+                          enabled: isKillerRole(r),
+                        })),
+                      }));
+                    }
+                    setStep2((p) => ({ ...p, isEvilTeam1: false }));
+                  }}
                   className="accent-red-600"
                   aria-label={`${step2.team2Name || "Team 2"} is the Evil team`}
                 />

@@ -33,6 +33,9 @@ interface CallerInfo {
   user_id: number;
   permissions: RolePermission[];
   role_name: string | null;
+  role_color: string | null;
+  role_description: string | null;
+  team: "team1" | "team2" | null;
   is_dead: number;
   revived_at: number | null;
   has_tipped: number;
@@ -322,6 +325,112 @@ function SkeletonCard() {
   );
 }
 
+// ── RoleRevealModal ───────────────────────────────────────────────
+
+interface RoleRevealModalProps {
+  roleName: string | null;
+  roleColor: string | null;
+  roleDescription: string | null;
+  teamName: string | null;
+  onClose: () => void;
+}
+
+function RoleRevealModal({
+  roleName,
+  roleColor,
+  roleDescription,
+  teamName,
+  onClose,
+}: RoleRevealModalProps) {
+  const [flipped, setFlipped] = useState(false);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="role-reveal-title"
+    >
+      <div className="flex flex-col items-center gap-5">
+        {/* Flip card */}
+        <div
+          className="relative cursor-pointer"
+          style={{ perspective: "1000px", width: 220, height: 300 }}
+          onClick={() => setFlipped(true)}
+          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFlipped(true); } }}
+          tabIndex={0}
+          role="button"
+          aria-label={flipped ? undefined : "Tap to reveal your role"}
+        >
+          <div
+            className="relative w-full h-full transition-transform duration-700"
+            style={{
+              transformStyle: "preserve-3d",
+              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+            }}
+          >
+            {/* Front face */}
+            <div
+              className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center gap-3 shadow-2xl"
+              style={{
+                backfaceVisibility: "hidden",
+                background: "linear-gradient(135deg, #1e3a5f 0%, #0f2040 100%)",
+              }}
+            >
+              <div className="text-6xl">🃏</div>
+              <p className="text-white font-semibold text-sm">
+                Tap to reveal your role
+              </p>
+            </div>
+
+            {/* Back face */}
+            <div
+              className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center gap-3 shadow-2xl p-5"
+              style={{
+                backfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                background: roleColor
+                  ? `linear-gradient(135deg, ${roleColor}dd 0%, ${roleColor}aa 100%)`
+                  : "linear-gradient(135deg, #2E6DA4dd 0%, #2E6DA4aa 100%)",
+              }}
+            >
+              <p className="text-white/80 text-xs font-semibold uppercase tracking-widest">
+                Your Role
+              </p>
+              <p
+                id="role-reveal-title"
+                className="text-white text-2xl font-bold text-center"
+              >
+                {roleName ?? "Unknown"}
+              </p>
+              {teamName && (
+                <span className="text-white/90 text-sm font-medium bg-white/20 px-3 py-1 rounded-full">
+                  {teamName}
+                </span>
+              )}
+              {roleDescription && (
+                <p className="text-white/80 text-xs text-center leading-relaxed mt-1">
+                  {roleDescription}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {flipped && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-gray-800 shadow-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black/70"
+          >
+            Got it!
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── KillerGuessModal ──────────────────────────────────────────────
 
 interface GuessPlayer {
@@ -567,6 +676,8 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const [voteActive, setVoteActive] = useState(false);
   const [gameEnded, setGameEnded] = useState<string | null | false>(false);
   const [showGuessModal, setShowGuessModal] = useState(false);
+  const [showRoleReveal, setShowRoleReveal] = useState(false);
+  const [roleCardOpen, setRoleCardOpen] = useState(false);
 
   // ── Load board data ─────────────────────────────────────────
 
@@ -589,6 +700,20 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   useEffect(() => {
     fetchBoard();
   }, [fetchBoard]);
+
+  // ── Show role reveal on first load (once per session) ───────
+  useEffect(() => {
+    if (!data) return;
+    const key = `role_reveal_shown_${gameId}`;
+    if (!sessionStorage.getItem(key)) {
+      setShowRoleReveal(true);
+    }
+  }, [data, gameId]);
+
+  const handleRoleRevealClose = useCallback(() => {
+    sessionStorage.setItem(`role_reveal_shown_${gameId}`, "1");
+    setShowRoleReveal(false);
+  }, [gameId]);
 
   // ── Track vote window ───────────────────────────────────────
 
@@ -836,6 +961,62 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         </div>
       )}
 
+      {/* ── "Your Role" collapsible section ─────────────────── */}
+      {data && data.caller.role_name && (
+        <div>
+          <button
+            type="button"
+            onClick={() => setRoleCardOpen((o) => !o)}
+            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-lg px-1"
+            aria-expanded={roleCardOpen}
+          >
+            <span aria-hidden="true">{roleCardOpen ? "🙈" : "👁️"}</span>
+            {roleCardOpen ? "Hide your role" : "Click to see your role"}
+          </button>
+          {roleCardOpen && (
+            <div
+              className="mt-2 rounded-2xl p-4 shadow-md text-white text-center"
+              style={{
+                background: data.caller.role_color
+                  ? `linear-gradient(135deg, ${data.caller.role_color}cc 0%, ${data.caller.role_color}88 100%)`
+                  : "linear-gradient(135deg, #2E6DA4cc 0%, #2E6DA488 100%)",
+              }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-1">
+                Your Role
+              </p>
+              <p className="text-xl font-bold">{data.caller.role_name}</p>
+              {data.caller.team && (
+                <p className="text-sm opacity-90 mt-1">
+                  Team:{" "}
+                  {data.caller.team === "team1"
+                    ? data.game.team1_name
+                    : data.game.team2_name}
+                </p>
+              )}
+              {data.caller.role_description && (
+                <p className="text-xs opacity-80 mt-2 leading-relaxed">
+                  {data.caller.role_description}
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── "I was eliminated" button ────────────────────────── */}
+      {data && callerIsAlive && (
+        <div className="flex justify-center">
+          <button
+            type="button"
+            onClick={() => setShowDeathModal(true)}
+            className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+          >
+            <span aria-hidden="true">💀</span> I was eliminated
+          </button>
+        </div>
+      )}
+
       {/* ── Vote button ─────────────────────────────────────── */}
       {data && voteActive && (
         <div className="flex justify-center pt-2">
@@ -846,6 +1027,23 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
             🗳 Vote
           </Link>
         </div>
+      )}
+
+      {/* ── Role reveal modal (shown once on first load) ─────── */}
+      {showRoleReveal && data && (
+        <RoleRevealModal
+          roleName={data.caller.role_name}
+          roleColor={data.caller.role_color}
+          roleDescription={data.caller.role_description}
+          teamName={
+            data.caller.team
+              ? data.caller.team === "team1"
+                ? data.game.team1_name
+                : data.game.team2_name
+              : null
+          }
+          onClose={handleRoleRevealClose}
+        />
       )}
 
       {/* ── Self-death modal ─────────────────────────────────── */}

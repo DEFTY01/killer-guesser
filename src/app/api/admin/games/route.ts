@@ -30,10 +30,10 @@ const createGameSchema = z.object({
     .regex(/^\d{2}:\d{2}$/, "vote_window_end must be HH:MM")
     .optional()
     .nullable(),
-  team1_name: z.string().min(1, "team1_name is required").default("Good"),
-  team2_name: z.string().min(1, "team2_name is required").default("Evil"),
-  /** True if team1 is the Evil team. Defaults to false (team2 is Evil). */
-  is_evil_team1: z.boolean().default(false),
+  team1_name: z.string().min(1, "team1_name is required").default("Evil"),
+  team2_name: z.string().min(1, "team2_name is required").default("Good"),
+  /** True if team1 is the Evil team. Defaults to true (team1 is always Evil). */
+  is_evil_team1: z.boolean().default(true),
   player_ids: z
     .array(z.number().int().positive())
     .min(1, "At least one player is required"),
