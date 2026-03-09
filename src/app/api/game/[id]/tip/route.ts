@@ -103,7 +103,7 @@ export async function POST(
   }
 
   // Guard: caller is dead
-  if (callerPlayer.is_dead === 1 && callerPlayer.revived_at === null) {
+  if (callerPlayer.is_dead === 1) {
     return NextResponse.json(
       { success: false, error: "You are already dead." },
       { status: 403 },
@@ -147,7 +147,7 @@ export async function POST(
 
   if (
     !suspectPlayer ||
-    (suspectPlayer.is_dead === 1 && suspectPlayer.revived_at === null)
+    suspectPlayer.is_dead === 1
   ) {
     return NextResponse.json(
       { success: false, error: "Suspect not found among alive players" },

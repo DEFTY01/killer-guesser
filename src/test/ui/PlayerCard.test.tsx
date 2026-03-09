@@ -23,6 +23,7 @@ function makePlayer(overrides: Partial<PlayerCardPlayer> = {}): PlayerCardPlayer
     avatar_url: null,
     team: "team1",
     is_dead: 0,
+    is_revived: 0,
     revived_at: null,
     role_color: "#2E6DA4",
     ...overrides,
@@ -51,7 +52,7 @@ describe("PlayerCard", () => {
   });
 
   it("revived player renders without X, with 'Undead' label", () => {
-    const player = makePlayer({ is_dead: 1, revived_at: 1700000000 });
+    const player = makePlayer({ is_dead: 0, is_revived: 1, revived_at: 1700000000 });
     render(
       <PlayerCard
         player={player}
@@ -62,6 +63,23 @@ describe("PlayerCard", () => {
     );
 
     expect(screen.getByText("Undead")).toBeInTheDocument();
+  });
+
+  it("re-dead undead player (is_dead=1, is_revived=1) has no 'Undead' label", () => {
+    const player = makePlayer({ is_dead: 1, is_revived: 1, revived_at: 1700000000 });
+    const { container } = render(
+      <PlayerCard
+        player={player}
+        isOwnCard={false}
+        isKiller={false}
+        canRevive={false}
+      />
+    );
+
+    expect(screen.queryByText("Undead")).not.toBeInTheDocument();
+    // Should show X overlay (dead, not undead)
+    const xOverlay = container.querySelector("[aria-hidden='true']");
+    expect(xOverlay).not.toBeNull();
   });
 
   it("Seer view + killerId match → red border class + 'Killer' label", () => {
@@ -131,6 +149,21 @@ describe("PlayerCard", () => {
     // Card should not have role-color border (Mayor view renders a flat card)
     const card = container.firstChild as HTMLElement;
     expect(card.style.border).toBeFalsy();
+  });
+
+  it("Mayor view + undead player shows 'Undead' badge", () => {
+    const player = makePlayer({ is_dead: 0, is_revived: 1, revived_at: 1700000000, team: undefined, role_color: undefined });
+    render(
+      <PlayerCard
+        player={player}
+        isOwnCard={false}
+        isKiller={false}
+        canRevive={false}
+        viewerRole="Mayor"
+      />
+    );
+
+    expect(screen.getByText("Undead")).toBeInTheDocument();
   });
 
   it("default view → border color matches player's role color", () => {

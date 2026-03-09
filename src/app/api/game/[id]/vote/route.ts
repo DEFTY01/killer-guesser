@@ -355,7 +355,7 @@ export async function GET(
       .orderBy(users.name);
 
     const alivePlayers = players.filter(
-      (p) => p.is_dead === 0 || p.revived_at !== null,
+      (p) => p.is_dead === 0,
     );
 
     // Aggregate vote tallies for live display.
@@ -585,7 +585,7 @@ export async function POST(
     );
   }
 
-  if (callerPlayer.is_dead === 1 && callerPlayer.revived_at === null) {
+  if (callerPlayer.is_dead === 1) {
     return NextResponse.json(
       { success: false, error: "Dead players cannot vote" },
       { status: 403 },

@@ -36,6 +36,20 @@
       "when": 1773063884905,
       "tag": "0004_overrated_scarecrow",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1741540262939,
+      "tag": "0005_is_evil_role",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1741540800000,
+      "tag": "0006_is_revived_undead",
+      "breakpoints": true
     }
   ]
 }

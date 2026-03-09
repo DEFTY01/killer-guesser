@@ -77,7 +77,7 @@ vi.mock("@/db/schema", () => ({
   users: { id: "id", name: "name", avatar_url: "avatar_url" },
   roles: { id: "id", name: "name", permissions: "permissions" },
   games: { id: "id", start_time: "st", vote_window_start: "vws", vote_window_end: "vwe", status: "status" },
-  game_players: { id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", revived_at: "ra", has_tipped: "ht", role_id: "rid" },
+  game_players: { id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", is_revived: "is_revived", revived_at: "ra", has_tipped: "ht", role_id: "rid" },
   votes: { id: "id", game_id: "gid", day: "day", voter_id: "vid", target_id: "tid" },
 }));
 
@@ -128,8 +128,8 @@ describe("tip-and-vote-isolation", () => {
     dbState.callIndex = 0;
     dbState.selectResults = [
       [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
-      // Caller is dead (from wrong tip), but has revived_at set (undead can vote)
-      [{ id: 1, is_dead: 1, revived_at: Math.floor(Date.now() / 1000) }],
+      // Caller is alive-after-revival (undead: is_dead=0, is_revived=1, can vote)
+      [{ id: 1, is_dead: 0, is_revived: 1, revived_at: Math.floor(Date.now() / 1000) }],
       [], // no existing vote
       [{ name: "Alice", avatar_url: null }],
       [{ name: "Bob", avatar_url: null }],

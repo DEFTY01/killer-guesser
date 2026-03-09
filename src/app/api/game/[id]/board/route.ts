@@ -131,6 +131,7 @@ export async function GET(
       role_description: roles.description,
       team: game_players.team,
       is_dead: game_players.is_dead,
+      is_revived: game_players.is_revived,
       revived_at: game_players.revived_at,
       has_tipped: game_players.has_tipped,
     })
@@ -160,6 +161,7 @@ export async function GET(
       name: users.name,
       avatar_url: users.avatar_url,
       is_dead: game_players.is_dead,
+      is_revived: game_players.is_revived,
       revived_at: game_players.revived_at,
       role_color: roles.color_hex,
     })
@@ -180,12 +182,13 @@ export async function GET(
   // Strip every field except the bare minimum needed to render a face-and-name card.
   const isMayor = callerRow.role_name === "Mayor";
   const responsePlayers = isMayor
-    ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, revived_at }) => ({
+    ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, is_revived, revived_at }) => ({
         id,
         user_id,
         name,
         avatar_url,
         is_dead,
+        is_revived,
         revived_at,
       }))
     : normalizedPlayers;
@@ -221,6 +224,7 @@ export async function GET(
       role_description: string | null;
       team: "team1" | "team2" | null;
       is_dead: number;
+      is_revived: number;
       revived_at: number | null;
       has_tipped: number;
     };
@@ -250,6 +254,7 @@ export async function GET(
       role_description: callerRow.role_description ?? null,
       team: callerRow.team ?? null,
       is_dead: callerRow.is_dead,
+      is_revived: callerRow.is_revived,
       revived_at: callerRow.revived_at ?? null,
       has_tipped: callerRow.has_tipped,
     },

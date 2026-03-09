@@ -81,12 +81,14 @@ export const game_players = sqliteTable("game_players", {
   team: text("team", { enum: ["team1", "team2"] }),
   role_id: integer("role_id").references(() => roles.id),
   is_dead: integer("is_dead").notNull().default(0),
+  is_revived: integer("is_revived").notNull().default(0),
   died_at: integer("died_at"),
   died_location: text("died_location"),
   died_time_of_day: text("died_time_of_day", {
     enum: ["morning", "afternoon", "evening", "day"],
   }),
   revived_at: integer("revived_at"),
+  last_revive_at: integer("last_revive_at"),
   has_tipped: integer("has_tipped").notNull().default(0),
 });
 
@@ -138,6 +140,7 @@ export const game_settings = sqliteTable("game_settings", {
   murder_item_url: text("murder_item_url"),
   murder_item_name: text("murder_item_name"),
   revive_cooldown_seconds: integer("revive_cooldown_seconds"),
+  revive_cooldown_minutes: integer("revive_cooldown_minutes"),
   team1_max_players: integer("team1_max_players"),
   team2_max_players: integer("team2_max_players"),
 });

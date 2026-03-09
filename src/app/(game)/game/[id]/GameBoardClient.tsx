@@ -37,6 +37,7 @@ interface CallerInfo {
   role_description: string | null;
   team: "team1" | "team2" | null;
   is_dead: number;
+  is_revived: number;
   revived_at: number | null;
   has_tipped: number;
 }
@@ -738,7 +739,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         ...prev,
         players: prev.players.map((p) =>
           p.user_id === prev.caller.user_id
-            ? { ...p, is_dead: 1, revived_at: null }
+            ? { ...p, is_dead: 1 }
             : p,
         ),
       };
@@ -761,7 +762,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
             ...prev,
             players: prev.players.map((p) =>
               p.id === gamePlayerId
-                ? { ...p, is_dead: 0, revived_at: Math.floor(Date.now() / 1000) }
+                ? { ...p, is_dead: 0, is_revived: 1, revived_at: Math.floor(Date.now() / 1000) }
                 : p,
             ),
           };
@@ -779,10 +780,10 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
   const isMayor = data?.caller.role_name === "Mayor";
 
-  // FAB visibility: alive, not tipped, not the killer
+  // FAB visibility: alive (includes undead since is_dead=0), not tipped, not the killer
   const callerIsAlive =
     data?.caller !== undefined &&
-    (data.caller.is_dead === 0 || data.caller.revived_at !== null);
+    data.caller.is_dead === 0;
   const showFab =
     callerIsAlive &&
     data?.caller.has_tipped === 0 &&
@@ -795,10 +796,10 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       if (!prev) return prev;
       return {
         ...prev,
-        caller: { ...prev.caller, is_dead: 1, revived_at: null },
+        caller: { ...prev.caller, is_dead: 1 },
         players: prev.players.map((p) =>
           p.user_id === callerUserId
-            ? { ...p, is_dead: 1, revived_at: null }
+            ? { ...p, is_dead: 1 }
             : p,
         ),
       };
@@ -818,7 +819,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           ...prev,
           players: prev.players.map((p) =>
             p.user_id === player_id
-              ? { ...p, is_dead: 1, revived_at: null }
+              ? { ...p, is_dead: 1 }
               : p,
           ),
         };
@@ -832,10 +833,11 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
     ABLY_CHANNELS.game(gameId),
     ABLY_EVENTS.player_revived,
     useCallback((msg) => {
-      const { game_player_id, revived_at } = msg.data as {
+      const { game_player_id, revived_at, is_revived } = msg.data as {
         player_id: number;
         game_player_id: number;
         revived_at: number;
+        is_revived: number;
       };
       setData((prev) => {
         if (!prev) return prev;
@@ -843,7 +845,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           ...prev,
           players: prev.players.map((p) =>
             p.id === game_player_id
-              ? { ...p, is_dead: 0, revived_at }
+              ? { ...p, is_dead: 0, is_revived: is_revived ?? 1, revived_at }
               : p,
           ),
         };
