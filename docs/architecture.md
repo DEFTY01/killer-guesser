@@ -2,7 +2,7 @@
 
 ## Overview
 
-Killer Guesser is a Next.js 16 application using the App Router. It has two user flows:
+Summit of Lies is a Next.js 16 application using the App Router. It has two user flows:
 
 1. **Admin** — authenticated via Auth.js v5 (credentials or OAuth). Manages games and players.
 2. **Player** — anonymous flow: pick a nickname, upload an avatar, join a game via a 6-character code.

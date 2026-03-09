@@ -1,6 +1,6 @@
-# Mountain Killer Game
+# Summit of Lies
 
-**Mountain Killer** is a real-time multiplayer social-deduction game inspired by
+**Summit of Lies** is a real-time multiplayer social-deduction game inspired by
 the classic "Mafia / Werewolf" format, set in a mountain resort.  One player
 is secretly assigned the role of **Killer**.  All other players must identify
 and eliminate the killer before the killer eliminates them.

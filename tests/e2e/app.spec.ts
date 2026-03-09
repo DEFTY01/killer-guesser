@@ -3,7 +3,7 @@ import { test, expect } from "@playwright/test";
 test.describe("Home page", () => {
   test("renders heading and nav links", async ({ page }) => {
     await page.goto("/");
-    await expect(page.getByRole("heading", { name: /killer guesser/i })).toBeVisible();
+    await expect(page.getByRole("heading", { name: /summit of lies/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /play now/i })).toBeVisible();
     await expect(page.getByRole("link", { name: /admin panel/i })).toBeVisible();
   });

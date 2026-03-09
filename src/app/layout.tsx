@@ -13,8 +13,8 @@ export const viewport: Viewport = {
 
 export const metadata: Metadata = {
   title: {
-    default: "Killer Guesser",
-    template: "%s | Killer Guesser",
+    default: "Summit of Lies",
+    template: "%s | Summit of Lies",
   },
   description: "A real-time social deduction guessing game",
 };

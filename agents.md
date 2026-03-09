@@ -1,4 +1,4 @@
-# Agent Map — Killer Guesser
+# Agent Map — Summit of Lies
 
 This file describes the responsibilities and boundaries of each agent (AI or
 human) that may work on this codebase.

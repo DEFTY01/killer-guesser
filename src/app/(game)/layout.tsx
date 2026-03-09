@@ -33,7 +33,7 @@ export default async function GameLayout({
             href="/lobby"
             className="font-bold text-base text-indigo-700 tracking-tight"
           >
-            Mountain Killer
+            Summit of Lies
           </Link>
 
           <div className="flex items-center gap-3">

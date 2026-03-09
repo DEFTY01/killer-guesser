@@ -36,7 +36,7 @@ export default async function AdminLayout({
       >
         <div className="flex h-16 items-center justify-between px-4 md:px-6">
           <span className="font-bold text-lg text-gray-900 tracking-tight">
-            Mountain Killer — Admin
+            Summit of Lies — Admin
           </span>
 
           <div className="flex items-center gap-3">

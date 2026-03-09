@@ -197,7 +197,7 @@ export default function LoginScreen({ players }: Props) {
             textShadow: "0 2px 24px rgba(124, 58, 237, 0.5)",
           }}
         >
-          Mountain Killer Game
+          Summit of Lies
         </h1>
 
         <p
