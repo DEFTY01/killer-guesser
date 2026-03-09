@@ -83,12 +83,12 @@ import { POST as createGame } from "@/app/api/admin/games/route";
 import { PATCH as patchGame } from "@/app/api/admin/games/[id]/route";
 
 function makeRequest(method: string, body?: Record<string, unknown>, url = "http://localhost/api/admin/games"): NextRequest {
-  const init: RequestInit = { method };
+  const init: Record<string, unknown> = { method };
   if (body) {
     init.body = JSON.stringify(body);
     init.headers = { "Content-Type": "application/json" };
   }
-  return new NextRequest(url, init);
+  return new NextRequest(url, init as ConstructorParameters<typeof NextRequest>[1]);
 }
 
 describe("POST /api/admin/games", () => {
@@ -109,8 +109,8 @@ describe("POST /api/admin/games", () => {
 
     // Mock db.select for role lookups (Killer + Survivor)
     const limitFn = vi.fn().mockResolvedValue([]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const req = makeRequest("POST", {
@@ -132,8 +132,8 @@ describe("POST /api/admin/games", () => {
 
     // Mock db.select for role lookups
     const limitFn = vi.fn().mockResolvedValue([]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const req = makeRequest("POST", {
@@ -156,13 +156,13 @@ describe("PATCH /api/admin/games/[id]", () => {
 
     // Mock the game existence check
     const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     // Mock the update
     const returningFn = vi.fn().mockResolvedValue([{ id: "G1", vote_window_start: "18:00", vote_window_end: "20:00" }]);
-    const updateWhereFn = vi.fn(() => ({ returning: returningFn }));
+    const updateWhereFn = vi.fn(() => ({ returning: returningFn, limit: vi.fn().mockResolvedValue([]) }));
     const setFn = vi.fn(() => ({ where: updateWhereFn }));
     mockDbUpdate.mockReturnValue({ set: setFn });
 
@@ -180,8 +180,8 @@ describe("PATCH /api/admin/games/[id]", () => {
     mockRequireAdmin.mockResolvedValue(true);
 
     const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const req = makeRequest("PATCH", {
@@ -198,12 +198,12 @@ describe("PATCH /api/admin/games/[id]", () => {
     mockRequireAdmin.mockResolvedValue(true);
 
     const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "scheduled" }]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const returningFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
-    const updateWhereFn = vi.fn(() => ({ returning: returningFn }));
+    const updateWhereFn = vi.fn(() => ({ returning: returningFn, limit: vi.fn().mockResolvedValue([]) }));
     const setFn = vi.fn(() => ({ where: updateWhereFn }));
     mockDbUpdate.mockReturnValue({ set: setFn });
 
@@ -219,8 +219,8 @@ describe("PATCH /api/admin/games/[id]", () => {
     mockRequireAdmin.mockResolvedValue(true);
 
     const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const req = makeRequest("PATCH", { action: "start" });
@@ -235,12 +235,12 @@ describe("PATCH /api/admin/games/[id]", () => {
     mockRequireAdmin.mockResolvedValue(true);
 
     const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const returningFn = vi.fn().mockResolvedValue([{ id: "G1", status: "closed" }]);
-    const updateWhereFn = vi.fn(() => ({ returning: returningFn }));
+    const updateWhereFn = vi.fn(() => ({ returning: returningFn, limit: vi.fn().mockResolvedValue([]) }));
     const setFn = vi.fn(() => ({ where: updateWhereFn }));
     mockDbUpdate.mockReturnValue({ set: setFn });
 
@@ -256,8 +256,8 @@ describe("PATCH /api/admin/games/[id]", () => {
     mockRequireAdmin.mockResolvedValue(true);
 
     const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
-    const whereFn = vi.fn(() => ({ limit: limitFn }));
-    const fromFn = vi.fn(() => ({ where: whereFn }));
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    const fromFn = vi.fn(() => ({ where: whereFn, leftJoin: vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy: vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue([]) })) })), orderBy: vi.fn().mockResolvedValue([]) }));
     mockDbSelect.mockReturnValue({ from: fromFn });
 
     const req = makeRequest("PATCH", { action: "delete" });

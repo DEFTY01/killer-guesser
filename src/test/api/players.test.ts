@@ -82,12 +82,12 @@ import { NextRequest } from "next/server";
 // ── Helpers ──────────────────────────────────────────────────────
 
 function makeRequest(method: string, body?: Record<string, unknown>, url = "http://localhost/api/admin/players"): NextRequest {
-  const init: RequestInit = { method };
+  const init: Record<string, unknown> = { method };
   if (body) {
     init.body = JSON.stringify(body);
     init.headers = { "Content-Type": "application/json" };
   }
-  return new NextRequest(url, init);
+  return new NextRequest(url, init as ConstructorParameters<typeof NextRequest>[1]);
 }
 
 // ──────────────────────────────────────────────────────────────────
