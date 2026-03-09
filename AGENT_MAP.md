@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-09 (PROMPT 31 — Loading States & Error Boundaries: new `src/components/ui/Skeleton.tsx` (Skeleton base, SkeletonCard for player avatar cards, SkeletonTable for admin tables), new `src/components/ui/ErrorBoundary.tsx` (class-based React error boundary with "Something went wrong" fallback + Retry button), new `loading.tsx` files for game board route (SkeletonCard grid) and admin games routes (SkeletonTable), game board and voting pages wrapped with ErrorBoundary, empty states added: "No players found", "No active game" in lobby, "No votes yet")
+> **Last Updated:** 2026-03-09 (PROMPT 33 — Security Audit, Documentation & v1.0.0 Release: added admin auth guard (requireAdmin + 403) to `/api/upload/avatar`, `/api/upload/background`, `/api/upload/murder-item`; fixed `/api/admin/settings` returning 401 → 403; added Zod validation + JSDoc to `/api/auth/admin-login`; added `adminLoginPasswordSchema` to `validations.ts`; finalized README.md with full project overview, tech stack, developer setup, branch strategy, feature list, and screenshots section; updated AGENT_MAP.md with complete file listing and full API routes table)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -262,47 +262,48 @@ killer-guesser/
 
 ## API Routes
 
-| Method | Path | Handler file | Description |
-|---|---|---|---|
-| `GET/POST` | `/api/auth/[...nextauth]` | `src/app/api/auth/[...nextauth]/route.ts` | NextAuth.js catch-all (sign-in, session, CSRF) |
-| `POST` | `/api/auth/callback/player` | `src/app/api/auth/[...nextauth]/route.ts` | Credentials callback for the "player" provider (userId, no password) |
-| `POST` | `/api/auth/callback/admin` | `src/app/api/auth/[...nextauth]/route.ts` | Credentials callback for the "admin" provider (password-only) |
-| `POST` | `/api/player` | `src/app/api/player/route.ts` | Register player nickname; create/return session |
-| `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Upload & resize player avatar (→ Vercel Blob) |
-| `GET` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | List all player accounts ordered by name — admin only |
-| `POST` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | Create new player account (Zod validation) — admin only |
-| `PATCH` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Update player fields — admin only |
-| `DELETE` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Soft-delete player (sets is_active=0) — admin only |
-| `GET` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | List all roles ordered by name — admin only |
-| `POST` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | Create new role (Zod validation: name, team, chance_percent required; description, color_hex, permissions optional) — admin only |
-| `PATCH` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Update role fields — admin only |
-| `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") — admin only |
-| `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | List all games with per-game player counts ordered by created_at desc — admin only |
-| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Create game in a single DB transaction (games + game_settings + game_players); accepts optional `revive_cooldown_seconds` — admin only |
-| `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Get full game data (game + settings + players with role details) — admin only |
-| `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Update game state: action "update_vote_window" (set vote_window_start/end as HH:MM), "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) — admin only |
-| `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Update game player: is_dead (0/1) and/or role_id — admin only |
-| `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) — admin only |
-| `GET` | `/api/admin/games/[id]/history` | `src/app/api/admin/games/[id]/history/route.ts` | Game archive: game metadata + players (with died_location, died_time_of_day, role) + archived events (chronological) + anonymous vote tallies by day — admin only |
-| `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Get global bg_light_url + bg_dark_url from app_settings singleton — admin only |
-| `PATCH` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Upsert bg_light_url and/or bg_dark_url (pass null to clear) — admin only |
-| `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
-| `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
-| `POST` | `/api/upload/background` | `src/app/api/upload/background/route.ts` | Upload background image to Vercel Blob under `backgrounds/` prefix (jpeg/png/webp, max 8 MB) |
-| `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Returns `{ active, scheduled, past }` games for the current player — player session required |
-| `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
-| `GET` | `/api/game/theme` | `src/app/api/game/theme/route.ts` | Returns bg_light_url + bg_dark_url from app_settings for the client layout — public |
-| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`, `is_dead`, `revived_at`, `has_tipped`); `see_killer` → `killer_id`; `see_votes` → today's vote details; **Mayor**: player objects stripped to `{id, user_id, name, avatar_url, is_dead, revived_at}` only (no `role_color`, no `team`) |
-| `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
-| `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
-| `GET` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Evening vote state — compares current UTC HH:MM to `vote_window_start`/`vote_window_end`; open: returns alive players + aggregate tallies; closed: lazy-closes (majority elimination → VOTE_CLOSED), returns results; `see_votes` → full voter→target detail |
-| `POST` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Cast/change vote — body: `{ targetId }`; window must be open (403 "Voting is closed"); alive-only; **upsert** (one row per player per day, re-voteable); publishes `VOTE_CAST` |
-| `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names and avatar_url |
-| `POST` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Submit vote — one per player per day; body: `{ target_id }`; publishes `VOTE_CAST` to vote channel with voter/target names and avatar_url |
-| `POST` | `/api/game/[id]/vote/[day]/close` | `src/app/api/game/[id]/vote/[day]/close/route.ts` | Close vote window — computes grouped results, publishes `VOTE_CLOSED` to game channel; idempotent |
-| `POST` | `/api/game/[id]/tip` | `src/app/api/game/[id]/tip/route.ts` | Daytime killer guess — body: `{ suspectId }`; guards: dead caller, already tipped, is killer, suspect not alive; correct → killer dies + `handleKillerDefeated()` + `{ correct: true }`; wrong → caller dies + `PLAYER_DIED` + `{ correct: false }`; all writes in DB transaction |
+| Method | Path | Handler file | Auth | Description |
+|---|---|---|---|---|
+| `GET/POST` | `/api/auth/[...nextauth]` | `src/app/api/auth/[...nextauth]/route.ts` | Public | NextAuth.js catch-all (sign-in, session, CSRF) |
+| `POST` | `/api/auth/admin-login` | `src/app/api/auth/admin-login/route.ts` | Public | Cookie-based admin login — validates password with `crypto.timingSafeEqual` via SHA-256 hashing; sets `admin_session` httpOnly cookie (24 h) |
+| `POST` | `/api/auth/callback/player` | `src/app/api/auth/[...nextauth]/route.ts` | Public | Credentials callback for the "player" provider (userId, no password) |
+| `POST` | `/api/auth/callback/admin` | `src/app/api/auth/[...nextauth]/route.ts` | Public | Credentials callback for the "admin" provider (password-only, timingSafeEqual) |
+| `POST` | `/api/player` | `src/app/api/player/route.ts` | Public | Register player nickname; create/return session |
+| `POST` | `/api/avatar` | `src/app/api/avatar/route.ts` | Public | Upload & resize player avatar (→ Vercel Blob) |
+| `GET` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | Admin (403) | List all player accounts ordered by name |
+| `POST` | `/api/admin/players` | `src/app/api/admin/players/route.ts` | Admin (403) | Create new player account (Zod validation) |
+| `PATCH` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Admin (403) | Update player fields |
+| `DELETE` | `/api/admin/players/[id]` | `src/app/api/admin/players/[id]/route.ts` | Admin (403) | Soft-delete player (sets is_active=0) |
+| `GET` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | Admin (403) | List all roles ordered by name |
+| `POST` | `/api/admin/roles` | `src/app/api/admin/roles/route.ts` | Admin (403) | Create new role (Zod validation: name, team, chance_percent required; description, color_hex, permissions optional) |
+| `PATCH` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Admin (403) | Update role fields |
+| `DELETE` | `/api/admin/roles/[id]` | `src/app/api/admin/roles/[id]/route.ts` | Admin (403) | Delete role (403 if is_default=1 with message "Default roles cannot be deleted") |
+| `GET` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Admin (403) | List all games with per-game player counts ordered by created_at desc |
+| `POST` | `/api/admin/games` | `src/app/api/admin/games/route.ts` | Admin (403) | Create game in a single DB transaction (games + game_settings + game_players); accepts optional `revive_cooldown_seconds` |
+| `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Admin (403) | Get full game data (game + settings + players with role details) |
+| `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Admin (403) | Update game state: action "update_vote_window" (set vote_window_start/end as HH:MM), "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) |
+| `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Admin (403) | Update game player: is_dead (0/1) and/or role_id |
+| `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Admin (403) | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) |
+| `GET` | `/api/admin/games/[id]/history` | `src/app/api/admin/games/[id]/history/route.ts` | Admin (403) | Game archive: game metadata + players (with died_location, died_time_of_day, role) + archived events (chronological) + anonymous vote tallies by day |
+| `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Admin (403) | Get global bg_light_url + bg_dark_url from app_settings singleton |
+| `PATCH` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Admin (403) | Upsert bg_light_url and/or bg_dark_url (pass null to clear) |
+| `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Admin (403) | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
+| `POST` | `/api/upload/murder-item` | `src/app/api/upload/murder-item/route.ts` | Admin (403) | Upload murder item image to Vercel Blob (jpeg/png/webp/gif, max 4 MB) |
+| `POST` | `/api/upload/background` | `src/app/api/upload/background/route.ts` | Admin (403) | Upload background image to Vercel Blob under `backgrounds/` prefix (jpeg/png/webp, max 8 MB) |
+| `GET` | `/api/game/lobby` | `src/app/api/game/lobby/route.ts` | Player (401) | Returns `{ active, scheduled, past }` games for the current player |
+| `GET` | `/api/game/participants` | `src/app/api/game/participants/route.ts` | Player (401) | Returns players in the current player's active/scheduled game with name, avatar_url, team (no role/is_dead) |
+| `GET` | `/api/game/theme` | `src/app/api/game/theme/route.ts` | Public | Returns bg_light_url + bg_dark_url from app_settings for the client layout |
+| `GET` | `/api/game/[id]/board` | `src/app/api/game/[id]/board/route.ts` | Player (401) | Role-filtered board: all players (name, avatar_url, team, is_dead, revived_at, role_color) + game/settings/caller (incl. `role_name`, `is_dead`, `revived_at`, `has_tipped`); `see_killer` → `killer_id`; `see_votes` → today's vote details; **Mayor**: player objects stripped to `{id, user_id, name, avatar_url, is_dead, revived_at}` only (no `role_color`, no `team`) |
+| `PATCH` | `/api/game/[id]/players/[playerId]/die` | `src/app/api/game/[id]/players/[playerId]/die/route.ts` | Player (401) | Self-report death — caller must own the game_player; body: `{ location, time_of_day }`; publishes `PLAYER_DIED` to game channel |
+| `POST` | `/api/game/[id]/players/[playerId]/revive` | `src/app/api/game/[id]/players/[playerId]/revive/route.ts` | Player (401) | Healer revives a dead player — requires `revive_dead` permission; checks `is_dead=1`; sets `is_dead=0` + `revived_at`; enforces `revive_cooldown_seconds` (429 if cooldown active); publishes `PLAYER_REVIVED` to game channel with full player data |
+| `GET` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Player (401) | Evening vote state — compares current UTC HH:MM to `vote_window_start`/`vote_window_end`; open: returns alive players + aggregate tallies; closed: lazy-closes (majority elimination → VOTE_CLOSED), returns results; `see_votes` → full voter→target detail |
+| `POST` | `/api/game/[id]/vote` | `src/app/api/game/[id]/vote/route.ts` | Player (401) | Cast/change vote — body: `{ targetId }`; window must be open (403 "Voting is closed"); alive-only; **upsert** (one row per player per day, re-voteable); publishes `VOTE_CAST` |
+| `GET` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Player (401) | Vote page data: game meta, players, caller, has_voted; `see_votes` → today's votes with voter/target names and avatar_url |
+| `POST` | `/api/game/[id]/vote/[day]` | `src/app/api/game/[id]/vote/[day]/route.ts` | Player (401) | Submit vote — one per player per day; body: `{ target_id }`; publishes `VOTE_CAST` to vote channel with voter/target names and avatar_url |
+| `POST` | `/api/game/[id]/vote/[day]/close` | `src/app/api/game/[id]/vote/[day]/close/route.ts` | Player (401) | Close vote window — computes grouped results, publishes `VOTE_CLOSED` to game channel; idempotent |
+| `POST` | `/api/game/[id]/tip` | `src/app/api/game/[id]/tip/route.ts` | Player (401) | Daytime killer guess — body: `{ suspectId }`; guards: dead caller, already tipped, is killer, suspect not alive; correct → killer dies + `handleKillerDefeated()` + `{ correct: true }`; wrong → caller dies + `PLAYER_DIED` + `{ correct: false }`; all writes in DB transaction |
 
-> This table will be expanded as new API routes are added.
+> **Auth legend:** `Admin (403)` = requires `admin_session` cookie (set by `/api/auth/admin-login`), returns 403 when absent. `Player (401)` = requires a valid NextAuth JWT session with `role=player`, returns 401 when absent. `Public` = no authentication required.
 
 ---
 

@@ -30,8 +30,6 @@ export function useCountdown(target: Date): CountdownResult {
   );
 
   useEffect(() => {
-    setState(computeRemaining(target));
-
     const id = setInterval(() => {
       const next = computeRemaining(target);
       setState(next);

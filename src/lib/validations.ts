@@ -7,7 +7,18 @@ export const adminLoginSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters"),
 });
 
+/**
+ * Zod schema for the POST /api/auth/admin-login request body.
+ * Validates that a non-empty password string is present.
+ * The email field is not required for the cookie-based admin login flow.
+ */
+export const adminLoginPasswordSchema = z.object({
+  password: z.string().min(1, "Password is required"),
+});
+
 export type AdminLoginInput = z.infer<typeof adminLoginSchema>;
+
+export type AdminLoginPasswordInput = z.infer<typeof adminLoginPasswordSchema>;
 
 // ── Player registration ───────────────────────────────────────────
 
