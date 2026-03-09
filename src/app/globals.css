@@ -253,6 +253,7 @@ textarea {
     border-radius: 20px;
     transform: translate(-50%, calc(-50% + 28px));
     opacity: 0;
+    pointer-events: none;
     transition:
       transform 0.45s cubic-bezier(0.32, 0, 0.17, 1),
       opacity 0.4s ease;
@@ -261,6 +262,7 @@ textarea {
   .login-panel.panel-open {
     transform: translate(-50%, -50%);
     opacity: 1;
+    pointer-events: auto;
   }
 }
 

@@ -1,14 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 
 /**
  * Admin login page.
  *
- * Minimal, password-only sign-in form that calls the "admin" Credentials
- * provider. On success the user is redirected to /admin/dashboard. On
+ * Minimal, password-only sign-in form that calls the /api/auth/admin-login
+ * endpoint. On success the user is redirected to /admin/dashboard. On
  * failure an inline error message is shown.
  *
  * This page is unreachable once an admin session is active — the middleware
@@ -26,20 +25,25 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const result = await signIn("admin", { password, redirect: false });
-      if (result?.error) {
-        setError("Invalid password");
-      } else {
-        try {
-          router.push("/admin/dashboard");
-        } catch {
-          // Navigation failed — hard-redirect as fallback.
-          window.location.href = "/admin/dashboard";
-        }
+      const res = await fetch("/api/auth/admin-login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok || !data.ok) {
+        setError(data.error || "Invalid password");
+        setLoading(false);
+        return;
       }
+
+      // Successfully logged in — redirect to admin dashboard
+      router.push("/admin/dashboard");
+      router.refresh();
     } catch {
-      setError("Invalid password");
-    } finally {
+      setError("An error occurred. Please try again.");
       setLoading(false);
     }
   }
