@@ -505,7 +505,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
       )}
 
       {/* Player grid */}
-      <div className="grid grid-cols-3 gap-3">
+      <div className="player-grid">
         {openData.players.map((player) => {
           const isSelf = player.id === openData.callerUserId;
           return (

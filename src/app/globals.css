@@ -4,6 +4,10 @@
   --background: #ffffff;
   --foreground: #171717;
   --font-cinzel: "Cinzel";
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+  --safe-left: env(safe-area-inset-left, 0px);
+  --safe-right: env(safe-area-inset-right, 0px);
 }
 
 @media (prefers-color-scheme: dark) {
@@ -13,10 +17,38 @@
   }
 }
 
+html {
+  overflow-x: hidden;
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  overflow-x: hidden;
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  padding-bottom: var(--safe-bottom);
+}
+
+/* ── iOS touch / interaction resets ────────────────────────────── */
+
+button,
+a,
+label,
+[role="button"],
+[role="link"],
+[role="tab"],
+summary {
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ── Prevent iOS auto-zoom on form focus ────────────────────────── */
+
+input,
+select,
+textarea {
+  font-size: max(16px, 1rem);
 }
 
 /* ── Night background ───────────────────────────────────────────── */
@@ -202,6 +234,7 @@ body {
   overflow-y: auto;
   overscroll-behavior: contain;
   will-change: transform;
+  padding-bottom: var(--safe-bottom);
 }
 
 .login-panel.panel-open {
@@ -294,4 +327,18 @@ body {
 
 .sign-in-btn:not(:disabled) {
   box-shadow: 0 4px 20px rgba(124, 58, 237, 0.45);
+}
+
+/* ── Player grid — auto-fill with minmax for iPhone responsiveness ── */
+
+.player-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(96px, 1fr));
+  gap: 12px;
+}
+
+/* ── Modal slide screens — GPU-accelerated transitions ─────────── */
+
+.modal-slide-screen {
+  will-change: transform;
 }

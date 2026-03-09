@@ -24,7 +24,10 @@ export default async function GameLayout({
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex flex-col">
       {/* ── Top header ─────────────────────────────────────────── */}
-      <header className="fixed top-0 inset-x-0 z-40 border-b border-white/20 bg-white/80 backdrop-blur-md shadow-sm">
+      <header
+        className="fixed top-0 inset-x-0 z-40 border-b border-white/20 bg-white/80 backdrop-blur-md shadow-sm"
+        style={{ paddingTop: "var(--safe-top)" }}
+      >
         <div className="flex h-14 items-center justify-between px-4 max-w-2xl mx-auto w-full">
           <Link
             href="/lobby"
@@ -49,7 +52,7 @@ export default async function GameLayout({
             <form action={handleSignOut}>
               <button
                 type="submit"
-                className="rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+                className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
               >
                 Sign out
               </button>
@@ -59,7 +62,12 @@ export default async function GameLayout({
       </header>
 
       {/* ── Page content ────────────────────────────────────────── */}
-      <main className="flex-1 pt-14">{children}</main>
+      <main
+        className="flex-1 pt-14"
+        style={{ paddingTop: "calc(3.5rem + var(--safe-top))" }}
+      >
+        {children}
+      </main>
     </div>
   );
 }

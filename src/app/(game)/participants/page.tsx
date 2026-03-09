@@ -189,7 +189,7 @@ export default function ParticipantsPage() {
 
       {/* ── Avatar grid ───────────────────────────────────────────── */}
       {isLoading && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="player-grid">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -203,7 +203,7 @@ export default function ParticipantsPage() {
       )}
 
       {data && data.players.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="player-grid">
           {data.players.map((player) => (
             <PlayerCard
               key={player.id}

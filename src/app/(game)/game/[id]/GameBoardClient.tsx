@@ -261,7 +261,7 @@ function SelfDeathModal({
                 placeholder="e.g. The kitchen"
                 maxLength={200}
                 required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
             </label>
 
@@ -276,7 +276,7 @@ function SelfDeathModal({
                     e.target.value as "morning" | "afternoon" | "evening",
                   )
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
               >
                 <option value="morning">Morning</option>
                 <option value="afternoon">Afternoon</option>
@@ -404,6 +404,7 @@ function KillerGuessModal({
         <div className="relative overflow-hidden">
           {/* Screen 1: Suspect grid */}
           <div
+            className="modal-slide-screen"
             style={{
               transform: screen === 1 ? "translateX(0)" : "translateX(-100%)",
               transition: "transform 0.2s ease",
@@ -424,7 +425,7 @@ function KillerGuessModal({
                     {apiError}
                   </p>
                 )}
-                <div className="grid grid-cols-3 gap-2 max-h-72 overflow-y-auto">
+                <div className="player-grid max-h-72 overflow-y-auto">
                   {alivePlayers.map((p) => (
                     <button
                       key={p.id}
@@ -433,7 +434,7 @@ function KillerGuessModal({
                         setSuspect(p);
                         setScreen(2);
                       }}
-                      className="flex flex-col items-center gap-1 rounded-xl border-2 border-gray-200 bg-white p-2 hover:border-indigo-400 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                      className="flex flex-col items-center gap-1 rounded-xl border-2 border-gray-200 bg-white p-2 min-h-[44px] hover:border-indigo-400 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
                     >
                       <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-100">
                         {p.avatar_url ? (
@@ -803,7 +804,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
       {/* ── Player grid ─────────────────────────────────────── */}
       {isLoading && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="player-grid">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -817,7 +818,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       )}
 
       {data && data.players.length > 0 && (
-        <div className="grid grid-cols-3 gap-3">
+        <div className="player-grid">
           {data.players.map((player) => (
             <PlayerCard
               key={player.id}
@@ -873,8 +874,8 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         <button
           type="button"
           onClick={() => setShowGuessModal(true)}
-          className="fixed bottom-6 right-6 z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          style={{ marginBottom: "env(safe-area-inset-bottom, 0px)" }}
+          className="fixed right-6 z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          style={{ bottom: "calc(1.5rem + var(--safe-bottom))" }}
           aria-label="Guess the killer"
         >
           <span aria-hidden="true">🔍</span> Guess the killer!

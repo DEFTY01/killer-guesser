@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
 import "./globals.css";
@@ -6,6 +6,10 @@ import { ThemeProvider } from "@/components/ThemeProvider";
 import { db } from "@/db";
 import { app_settings } from "@/db/schema";
 import { eq } from "drizzle-orm";
+
+export const viewport: Viewport = {
+  viewportFit: "cover",
+};
 
 export const metadata: Metadata = {
   title: {
@@ -62,7 +66,7 @@ export default async function RootLayout({
         />
       </head>
       <body
-        className={`${GeistSans.variable} ${GeistMono.variable} antialiased night-bg`}
+        className={`${GeistSans.variable} ${GeistMono.variable} antialiased night-bg overflow-x-hidden`}
         style={
           {
             ...(bgLightUrl
