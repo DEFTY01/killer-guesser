@@ -3,13 +3,15 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { fromZonedTime } from "date-fns-tz";
 import type { User, Role } from "@/types";
 
 // ── Types ─────────────────────────────────────────────────────────
 
 interface Step1State {
   name: string;
-  startDate: string; // datetime-local value "YYYY-MM-DDTHH:MM"
+  startDate: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
   voteStart: string; // "HH:MM"
   voteEnd: string;   // "HH:MM"
 }
@@ -122,6 +124,7 @@ export function NewGameWizard({ players, roles }: Props) {
   const [step1, setStep1] = useState<Step1State>({
     name: "",
     startDate: "",
+    startTime: "",
     voteStart: "",
     voteEnd: "",
   });
@@ -179,9 +182,10 @@ export function NewGameWizard({ players, roles }: Props) {
     const errs: Partial<Step1State> = {};
     if (!step1.name.trim()) errs.name = "Name is required";
     if (!step1.startDate) {
-      errs.startDate = "Start date/time is required";
-    } else if (isNaN(new Date(step1.startDate).getTime())) {
-      errs.startDate = "Invalid date/time";
+      errs.startDate = "Start date is required";
+    }
+    if (!step1.startTime) {
+      errs.startTime = "Start time is required";
     }
     if (step1.voteStart && !HH_MM_RE.test(step1.voteStart))
       errs.voteStart = "Must be HH:MM";
@@ -258,9 +262,11 @@ export function NewGameWizard({ players, roles }: Props) {
     setSubmitError(null);
     setSubmitting(true);
 
-    const startTime = Math.floor(
-      new Date(step1.startDate).getTime() / 1000,
-    );
+    // Convert Budapest time to UTC
+    const dateTimeStr = `${step1.startDate}T${step1.startTime}`;
+    const budapestDate = new Date(dateTimeStr);
+    const utcDate = fromZonedTime(budapestDate, "Europe/Budapest");
+    const startTime = Math.floor(utcDate.getTime() / 1000);
 
     const body = {
       name: step1.name.trim(),
@@ -356,29 +362,56 @@ export function NewGameWizard({ players, roles }: Props) {
               )}
             </div>
 
-            {/* Start date/time */}
-            <div>
-              <label
-                htmlFor="start-date"
-                className="block text-sm font-medium text-gray-700 mb-1"
-              >
-                Start date & time <span className="text-red-500">*</span>
-              </label>
-              <input
-                id="start-date"
-                type="datetime-local"
-                value={step1.startDate}
-                onChange={(e) =>
-                  setStep1((p) => ({ ...p, startDate: e.target.value }))
-                }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
-              />
-              {step1Errors.startDate && (
-                <p className="mt-1 text-xs text-red-500">
-                  {step1Errors.startDate}
-                </p>
-              )}
+            {/* Start date & time */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="start-date"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Start date <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="start-date"
+                  type="date"
+                  value={step1.startDate}
+                  onChange={(e) =>
+                    setStep1((p) => ({ ...p, startDate: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {step1Errors.startDate && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {step1Errors.startDate}
+                  </p>
+                )}
+              </div>
+              <div>
+                <label
+                  htmlFor="start-time"
+                  className="block text-sm font-medium text-gray-700 mb-1"
+                >
+                  Start time (24h) <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="start-time"
+                  type="time"
+                  value={step1.startTime}
+                  onChange={(e) =>
+                    setStep1((p) => ({ ...p, startTime: e.target.value }))
+                  }
+                  className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                />
+                {step1Errors.startTime && (
+                  <p className="mt-1 text-xs text-red-500">
+                    {step1Errors.startTime}
+                  </p>
+                )}
+              </div>
             </div>
+            <p className="text-xs text-gray-500 -mt-2">
+              Times in Europe/Budapest timezone
+            </p>
 
             {/* Vote window */}
             <div className="grid grid-cols-2 gap-4">
@@ -987,8 +1020,8 @@ export function NewGameWizard({ players, roles }: Props) {
                 <div className="flex justify-between">
                   <dt className="text-gray-500">Start</dt>
                   <dd>
-                    {step1.startDate
-                      ? new Date(step1.startDate).toLocaleString()
+                    {step1.startDate && step1.startTime
+                      ? `${step1.startDate} ${step1.startTime} (Budapest)`
                       : "—"}
                   </dd>
                 </div>
