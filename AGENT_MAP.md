@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-09 (PROMPT 33 — Security Audit, Documentation & v1.0.0 Release: added admin auth guard (requireAdmin + 403) to `/api/upload/avatar`, `/api/upload/background`, `/api/upload/murder-item`; fixed `/api/admin/settings` returning 401 → 403; added Zod validation + JSDoc to `/api/auth/admin-login`; added `adminLoginPasswordSchema` to `validations.ts`; finalized README.md with full project overview, tech stack, developer setup, branch strategy, feature list, and screenshots section; updated AGENT_MAP.md with complete file listing and full API routes table)
+> **Last Updated:** 2026-03-09 (PROMPT 37 — Random Team Assignment, Per-Team Caps & Spoiler-Hidden Admin View: added team1_max_players/team2_max_players to game_settings schema + migration; POST /api/admin/games stores per-team caps; wizard step 2 "Max players in [name]" labels + overflow warning; wizard step 4 note "Assignments will be randomised server-side on start."; GameEditorClient "Show Spoilers 👁" toggle hides team/role by default)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -218,7 +218,7 @@ killer-guesser/
 | `src/app/(admin)/admin/games/new/page.tsx` | New game wizard wrapper: server component fetches players + roles, renders NewGameWizard |
 | `src/app/(admin)/admin/games/new/NewGameWizard.tsx` | 4-step game creation wizard (client): step 1 details, step 2 players/teams with avatar grid + team caps (no manual team assignment), step 3 per-team role columns with toggleable roles + chance sliders + special counts + murder item, step 4 spoiler-free summary + submit |
 | `src/app/(admin)/admin/games/[id]/page.tsx` | Game editor: server component — fetches game, settings, players (with role data), and all roles; renders GameEditorClient |
-| `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with inline role selector + mark-dead toggle, actions panel with optimistic UI |
+| `src/app/(admin)/admin/games/[id]/GameEditorClient.tsx` | Live game editor (client): status bar, players panel with "Show Spoilers 👁" toggle (hides team/role by default, reveals on click), inline role selector + mark-dead toggle, actions panel with optimistic UI |
 | `src/app/(admin)/admin/games/[id]/history/page.tsx` | Read-only game archive viewer: header card (name/duration/winner), day-by-day timeline with events + vote bars, player fates table (avatar/role/team/death), voting history with anonymous bar charts |
 | `src/app/(game)/game/page.tsx` | Main game room page (renders PlayerLogin for join flow) |
 | `src/app/(game)/game/[id]/page.tsx` | Game board: server wrapper — resolves `id` param and renders GameBoardClient |
@@ -242,7 +242,7 @@ killer-guesser/
 | `src/components/ui/ErrorBoundary.tsx` | Class-based React ErrorBoundary (client component): catches render errors, shows "Something went wrong. Please reload the page." + Retry button |
 | `src/components/game/PlayerCard.tsx` | Role-aware player card: Mayor view=flat grid (only avatar+name, no border/badge/labels); dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; default=role color border+team badge; accepts `viewerRole`, `team1Name`, `team2Name`; `team` and `role_color` are optional (stripped server-side for Mayor) |
 | `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
-| `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; game_settings includes revive_cooldown_seconds |
+| `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; game_settings includes revive_cooldown_seconds, team1_max_players, team2_max_players |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |

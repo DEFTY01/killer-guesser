@@ -226,6 +226,8 @@ export async function POST(req: NextRequest) {
       murder_item_url: murder_item_url ?? null,
       murder_item_name: murder_item_name ?? null,
       revive_cooldown_seconds: revive_cooldown_seconds ?? null,
+      team1_max_players,
+      team2_max_players,
     });
 
     if (playerAssignments.length > 0) {
