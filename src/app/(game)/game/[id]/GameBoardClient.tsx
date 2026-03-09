@@ -326,112 +326,6 @@ function SkeletonCard() {
   );
 }
 
-// ── RoleRevealModal ───────────────────────────────────────────────
-
-interface RoleRevealModalProps {
-  roleName: string | null;
-  roleColor: string | null;
-  roleDescription: string | null;
-  teamName: string | null;
-  onClose: () => void;
-}
-
-function RoleRevealModal({
-  roleName,
-  roleColor,
-  roleDescription,
-  teamName,
-  onClose,
-}: RoleRevealModalProps) {
-  const [flipped, setFlipped] = useState(false);
-
-  return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="role-reveal-title"
-    >
-      <div className="flex flex-col items-center gap-5">
-        {/* Flip card */}
-        <div
-          className="relative cursor-pointer"
-          style={{ perspective: "1000px", width: 220, height: 300 }}
-          onClick={() => setFlipped(true)}
-          onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setFlipped(true); } }}
-          tabIndex={0}
-          role="button"
-          aria-label={flipped ? undefined : "Tap to reveal your role"}
-        >
-          <div
-            className="relative w-full h-full transition-transform duration-700"
-            style={{
-              transformStyle: "preserve-3d",
-              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-            }}
-          >
-            {/* Front face */}
-            <div
-              className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center gap-3 shadow-2xl"
-              style={{
-                backfaceVisibility: "hidden",
-                background: "linear-gradient(135deg, #1e3a5f 0%, #0f2040 100%)",
-              }}
-            >
-              <div className="text-6xl">🃏</div>
-              <p className="text-white font-semibold text-sm">
-                Tap to reveal your role
-              </p>
-            </div>
-
-            {/* Back face */}
-            <div
-              className="absolute inset-0 rounded-2xl flex flex-col items-center justify-center gap-3 shadow-2xl p-5"
-              style={{
-                backfaceVisibility: "hidden",
-                transform: "rotateY(180deg)",
-                background: roleColor
-                  ? `linear-gradient(135deg, ${roleColor}dd 0%, ${roleColor}aa 100%)`
-                  : "linear-gradient(135deg, #2E6DA4dd 0%, #2E6DA4aa 100%)",
-              }}
-            >
-              <p className="text-white/80 text-xs font-semibold uppercase tracking-widest">
-                Your Role
-              </p>
-              <p
-                id="role-reveal-title"
-                className="text-white text-2xl font-bold text-center"
-              >
-                {roleName ?? "Unknown"}
-              </p>
-              {teamName && (
-                <span className="text-white/90 text-sm font-medium bg-white/20 px-3 py-1 rounded-full">
-                  {teamName}
-                </span>
-              )}
-              {roleDescription && (
-                <p className="text-white/80 text-xs text-center leading-relaxed mt-1">
-                  {roleDescription}
-                </p>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {flipped && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-xl bg-white px-6 py-2.5 text-sm font-semibold text-gray-800 shadow-lg hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black/70"
-          >
-            Got it!
-          </button>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── KillerGuessModal ──────────────────────────────────────────────
 
 interface GuessPlayer {
@@ -779,6 +673,8 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const canRevive = data?.caller.permissions.includes("revive_dead") ?? false;
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
   const isMayor = data?.caller.role_name === "Mayor";
+  // Only players with at least one special permission see role-color borders.
+  const canSeeColors = (data?.caller.permissions.length ?? 0) > 0;
 
   // FAB visibility: alive (includes undead since is_dead=0), not tipped, not the killer
   const callerIsAlive =
@@ -954,10 +850,23 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               isKiller={canSeeKiller && isKiller(player.user_id, data.killer_id ?? undefined)}
               canRevive={canRevive}
               viewerRole={data.caller.role_name}
+              showRoleBorder={canSeeColors}
               team1Name={data.game.team1_name}
               team2Name={data.game.team2_name}
               onSelfTap={() => setShowDeathModal(true)}
               onRevive={handleRevive}
+              isRoleRevealing={showRoleReveal && player.user_id === data.caller.user_id}
+              revealRoleName={data.caller.role_name}
+              revealRoleColor={data.caller.role_color}
+              revealRoleDescription={data.caller.role_description}
+              revealTeamName={
+                data.caller.team
+                  ? data.caller.team === "team1"
+                    ? data.game.team1_name
+                    : data.game.team2_name
+                  : null
+              }
+              onRoleRevealDone={handleRoleRevealClose}
             />
           ))}
         </div>
@@ -1029,23 +938,6 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
             🗳 Vote
           </Link>
         </div>
-      )}
-
-      {/* ── Role reveal modal (shown once on first load) ─────── */}
-      {showRoleReveal && data && (
-        <RoleRevealModal
-          roleName={data.caller.role_name}
-          roleColor={data.caller.role_color}
-          roleDescription={data.caller.role_description}
-          teamName={
-            data.caller.team
-              ? data.caller.team === "team1"
-                ? data.game.team1_name
-                : data.game.team2_name
-              : null
-          }
-          onClose={handleRoleRevealClose}
-        />
       )}
 
       {/* ── Self-death modal ─────────────────────────────────── */}

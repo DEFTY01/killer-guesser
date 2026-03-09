@@ -98,6 +98,80 @@ export async function POST(
     );
   }
 
+  // ── Load roles (needed for both team-reroll and role-reroll) ─────
+  const allRoles = await db.select().from(roles);
+
+  if (allRoles.length === 0) {
+    return NextResponse.json(
+      { success: false, error: "No roles configured" },
+      { status: 422 },
+    );
+  }
+
+  const killerRole = allRoles.find((r) => r.name.toLowerCase() === "killer");
+  const evilTeamId: "team1" | "team2" = isEvilTeam1 ? "team1" : "team2";
+  const goodTeamId: "team1" | "team2" = isEvilTeam1 ? "team2" : "team1";
+
+  const evilEligibleRoles = allRoles
+    .filter((r) => r.is_evil === 1)
+    .map((r) => ({ ...r, weight: r.chance_percent }));
+
+  const goodEligibleRoles = allRoles
+    .filter((r) => r.is_evil === 0)
+    .map((r) => ({ ...r, weight: r.chance_percent }));
+
+  /**
+   * Assigns roles to a list of players according to their team.
+   * Evil team → evil roles (Killer first, then remaining evil roles).
+   * Good team → good roles.
+   * Unassigned → null.
+   */
+  async function assignRoles(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    teamedPlayers: Array<{ id: number; team: "team1" | "team2" | null }>,
+  ) {
+    const evil = teamedPlayers.filter((p) => p.team === evilTeamId);
+    const good = teamedPlayers.filter((p) => p.team === goodTeamId);
+    const none = teamedPlayers.filter((p) => p.team === null);
+
+    const shuffledEvil = fisherYatesShuffle([...evil]);
+    let killerAssigned = false;
+
+    for (const player of shuffledEvil) {
+      if (killerRole && !killerAssigned) {
+        await tx
+          .update(game_players)
+          .set({ role_id: killerRole.id })
+          .where(eq(game_players.id, player.id));
+        killerAssigned = true;
+      } else {
+        const pool = evilEligibleRoles.filter(
+          (r) => !killerRole || r.id !== killerRole.id,
+        );
+        const picked = weightedPick(pool.length > 0 ? pool : evilEligibleRoles);
+        await tx
+          .update(game_players)
+          .set({ role_id: picked?.id ?? null })
+          .where(eq(game_players.id, player.id));
+      }
+    }
+
+    for (const player of good) {
+      const picked = weightedPick(goodEligibleRoles);
+      await tx
+        .update(game_players)
+        .set({ role_id: picked?.id ?? null })
+        .where(eq(game_players.id, player.id));
+    }
+
+    for (const player of none) {
+      await tx
+        .update(game_players)
+        .set({ role_id: null })
+        .where(eq(game_players.id, player.id));
+    }
+  }
+
   if (type === "teams") {
     // Fetch game settings for the admin-requested evil team cap.
     const [settings] = await db
@@ -113,21 +187,27 @@ export async function POST(
       ? (settings?.team1_max_players ?? 1)
       : (settings?.team2_max_players ?? 1);
 
-    // Apply killer cap rules: resolve the actual evil team size.
     const resolvedEvilCap = resolveKillerCap(players.length, adminEvilCap);
 
     const shuffled = fisherYatesShuffle([...players]);
     const evilTeam: "team1" | "team2" = isEvilTeam1 ? "team1" : "team2";
     const goodTeam: "team1" | "team2" = isEvilTeam1 ? "team2" : "team1";
 
+    // Assign teams AND auto-assign roles from the correct pool in one transaction.
     await db.transaction(async (tx) => {
+      const newTeams: Array<{ id: number; team: "team1" | "team2" | null }> = [];
+
       for (let i = 0; i < shuffled.length; i++) {
         const team = i < resolvedEvilCap ? evilTeam : goodTeam;
         await tx
           .update(game_players)
           .set({ team })
           .where(eq(game_players.id, shuffled[i].id));
+        newTeams.push({ id: shuffled[i].id, team });
       }
+
+      // Re-assign roles based on the freshly assigned teams.
+      await assignRoles(tx, newTeams);
     });
 
     const updated = await db
@@ -139,74 +219,8 @@ export async function POST(
   }
 
   // type === "roles": weighted random assignment per player, respecting is_evil constraints.
-  const allRoles = await db.select().from(roles);
-
-  if (allRoles.length === 0) {
-    return NextResponse.json(
-      { success: false, error: "No roles configured" },
-      { status: 422 },
-    );
-  }
-
-  const killerRole = allRoles.find((r) => r.name.toLowerCase() === "killer");
-  const evilTeamId: "team1" | "team2" = isEvilTeam1 ? "team1" : "team2";
-  const goodTeamId: "team1" | "team2" = isEvilTeam1 ? "team2" : "team1";
-
-  // Separate players by team.
-  const evilPlayers = players.filter((p) => p.team === evilTeamId);
-  const goodPlayers = players.filter((p) => p.team === goodTeamId);
-  const unassigned = players.filter((p) => p.team === null);
-
-  // Roles eligible for each side.
-  const evilEligibleRoles = allRoles
-    .filter((r) => r.is_evil === 1)
-    .map((r) => ({ ...r, weight: r.chance_percent }));
-
-  const goodEligibleRoles = allRoles
-    .filter((r) => r.is_evil === 0)
-    .map((r) => ({ ...r, weight: r.chance_percent }));
-
   await db.transaction(async (tx) => {
-    // Assign Killer to exactly one random Evil team player first.
-    const shuffledEvil = fisherYatesShuffle([...evilPlayers]);
-    let killerAssigned = false;
-
-    for (const player of shuffledEvil) {
-      if (killerRole && !killerAssigned) {
-        await tx
-          .update(game_players)
-          .set({ role_id: killerRole.id })
-          .where(eq(game_players.id, player.id));
-        killerAssigned = true;
-      } else {
-        // Remaining evil players get non-killer evil roles.
-        const pool = evilEligibleRoles.filter(
-          (r) => !killerRole || r.id !== killerRole.id,
-        );
-        const picked = weightedPick(pool.length > 0 ? pool : evilEligibleRoles);
-        await tx
-          .update(game_players)
-          .set({ role_id: picked?.id ?? null })
-          .where(eq(game_players.id, player.id));
-      }
-    }
-
-    // Good team players get only is_evil=0 roles.
-    for (const player of goodPlayers) {
-      const picked = weightedPick(goodEligibleRoles);
-      await tx
-        .update(game_players)
-        .set({ role_id: picked?.id ?? null })
-        .where(eq(game_players.id, player.id));
-    }
-
-    // Unassigned players (no team yet) receive no role assignment.
-    for (const player of unassigned) {
-      await tx
-        .update(game_players)
-        .set({ role_id: null })
-        .where(eq(game_players.id, player.id));
-    }
+    await assignRoles(tx, players);
   });
 
   const updated = await db

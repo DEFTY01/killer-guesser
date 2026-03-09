@@ -544,13 +544,14 @@ export default function GameEditorClient({
                             <option value="">— No role —</option>
                             {allRoles
                               .filter((r) => {
+                                if (p.team === null) return true;
                                 // Determine if this player is on the evil team
                                 const isEvilTeamPlayer =
                                   (p.team === "team1" && game.evil_team_is_team1 === 1) ||
                                   (p.team === "team2" && game.evil_team_is_team1 === 0);
-                                // Exclude evil roles (e.g. Killer) for non-evil team players
-                                if (r.is_evil === 1 && !isEvilTeamPlayer) return false;
-                                return true;
+                                // Evil team → only evil roles; Good team → only good roles
+                                if (isEvilTeamPlayer) return r.is_evil === 1;
+                                return r.is_evil === 0;
                               })
                               .map((r) => (
                               <option key={r.id} value={r.id}>
