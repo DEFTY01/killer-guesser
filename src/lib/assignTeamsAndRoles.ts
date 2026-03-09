@@ -88,10 +88,12 @@ export function weightedRandomSelect(
 
     let rand = Math.random() * totalWeight;
     let idx = 0;
-    for (; idx < pool.length - 1; idx++) {
+    for (; idx < pool.length; idx++) {
       rand -= pool[idx].chancePercent;
       if (rand <= 0) break;
     }
+    // Clamp to last valid index in case of floating-point rounding
+    if (idx >= pool.length) idx = pool.length - 1;
 
     selected.push(pool[idx]);
     pool.splice(idx, 1);

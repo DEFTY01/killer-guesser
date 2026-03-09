@@ -166,14 +166,12 @@ export async function POST(req: NextRequest) {
     survivorRoleId = survivorRole?.id ?? null;
   }
 
-  // If no killer role was found in the provided roles, try to find one globally
-  if (killerRoleId === null) {
-    const [killerRow] = await db
-      .select({ id: roles.id })
-      .from(roles)
-      .where(eq(roles.name, "Killer"))
-      .limit(1);
-    killerRoleId = killerRow?.id ?? null;
+  // If no killer role was found, return an error
+  if (killerRoleId === null && team1Roles.length > 0) {
+    return NextResponse.json(
+      { success: false, error: "No Killer role found in the database. Please create one first." },
+      { status: 422 },
+    );
   }
 
   // If no survivor role was found, try to find one globally
@@ -222,6 +220,7 @@ export async function POST(req: NextRequest) {
 
     await tx.insert(game_settings).values({
       game_id: game.id,
+      // Combined total of both teams' special role counts
       special_role_count: team1SpecialCount + team2SpecialCount,
       role_chances: roleChancesJson,
       murder_item_url: murder_item_url ?? null,
