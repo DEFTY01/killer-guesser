@@ -229,6 +229,7 @@ export async function POST(req: NextRequest) {
         vote_window_end: vote_window_end ?? null,
         team1_name,
         team2_name,
+        evil_team_is_team1: is_evil_team1 ? 1 : 0,
       })
       .returning();
 

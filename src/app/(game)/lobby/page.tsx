@@ -147,25 +147,17 @@ function ScheduledCard({ game }: { game: LobbyGame }) {
 function PastCard({ game }: { game: LobbyGame }) {
   const router = useRouter();
 
-  // Derive the user's team display name from their team assignment.
-  // winner_team stores the display name of the winning team (e.g. "Evil"),
-  // while user_team stores the identifier ("team1" | "team2").
-  const userTeamName =
-    game.user_team === "team1"
-      ? game.team1_name
-      : game.user_team === "team2"
-        ? game.team2_name
-        : null;
-
+  // winner_team is now stored as the team identifier ("team1" | "team2").
+  // Compare directly with the player's own team assignment.
   const userWon =
-    userTeamName != null &&
+    game.user_team != null &&
     game.winner_team != null &&
-    userTeamName === game.winner_team;
+    game.user_team === game.winner_team;
 
   const resultLabel =
     game.winner_team == null
       ? null
-    : userTeamName == null
+    : game.user_team == null
       ? null
       : userWon
         ? "Won"

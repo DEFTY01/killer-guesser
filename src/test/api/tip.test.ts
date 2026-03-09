@@ -2,13 +2,13 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockHandleKillerDefeated } = vi.hoisted(() => ({
+const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
-  mockHandleKillerDefeated: vi.fn(),
+  mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/gameEnd", () => ({ handleKillerDefeated: mockHandleKillerDefeated }));
+vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },
@@ -163,7 +163,7 @@ describe("POST /api/game/[id]/tip", () => {
     expect(data.data.correct).toBe(false);
   });
 
-  it("correct guess → handleKillerDefeated called, { correct: true }", async () => {
+  it("correct guess → checkGameOver called, { correct: true }", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
 
     dbState.selectResults = [
@@ -180,6 +180,6 @@ describe("POST /api/game/[id]/tip", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.correct).toBe(true);
-    expect(mockHandleKillerDefeated).toHaveBeenCalledWith("G1");
+    expect(mockCheckGameOver).toHaveBeenCalledWith("G1");
   });
 });

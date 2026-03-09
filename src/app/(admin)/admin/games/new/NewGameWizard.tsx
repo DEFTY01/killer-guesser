@@ -545,7 +545,9 @@ export function NewGameWizard({ players, roles }: Props) {
                   className="accent-red-600"
                   aria-label={`${step2.team1Name || "Team 1"} is the Evil team`}
                 />
-                <span className="text-xs text-gray-600">☠ This is the Evil team</span>
+                <span className="text-xs text-gray-600">
+                  ☠ Evil Team ({step2.team1Name || "Team 1"})
+                </span>
               </label>
             </div>
             <div>
@@ -591,7 +593,9 @@ export function NewGameWizard({ players, roles }: Props) {
                   className="accent-red-600"
                   aria-label={`${step2.team2Name || "Team 2"} is the Evil team`}
                 />
-                <span className="text-xs text-gray-600">☠ This is the Evil team</span>
+                <span className="text-xs text-gray-600">
+                  ☠ Evil Team ({step2.team2Name || "Team 2"})
+                </span>
               </label>
             </div>
           </div>

@@ -17,7 +17,7 @@ vi.mock("@/lib/ably", () => ({
 }));
 
 vi.mock("@/lib/gameEnd", () => ({
-  handleKillerDefeated: vi.fn(),
+  checkGameOver: vi.fn().mockResolvedValue(undefined),
 }));
 
 // Chainable DB mock

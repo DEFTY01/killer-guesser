@@ -16,6 +16,13 @@ export interface RoleEntry {
   chancePercent: number;
   /** True if this role is an Evil role (can only go to the Evil team). */
   isEvil: boolean;
+  /**
+   * The `team` column value from the `roles` table.
+   * "team1" → only eligible for the team1-aligned side.
+   * "team2" → only eligible for the team2-aligned side.
+   * "any"   → eligible for either team.
+   */
+  team?: "team1" | "team2" | "any";
 }
 
 /** Input configuration for team and role assignment. */
@@ -217,10 +224,29 @@ export function assignTeamsAndRoles(
     throw new Error("Killer role cannot be assigned to the Good team.");
   }
 
-  // ── Filter roles by is_evil constraint ───────────────────────
+  // ── Filter roles by role.team column value ───────────────────
+  // "team1" roles → only for the team1-aligned side (evil when isEvilTeam1=true).
+  // "team2" roles → only for the team2-aligned side (good when isEvilTeam1=true).
+  // "any"   roles → eligible for either side.
+  // The evilTeamId/goodTeamId labels correspond to the DB team column values.
+  const evilTeamId: "team1" | "team2" = isEvilTeam1 ? "team1" : "team2";
+  const goodTeamId: "team1" | "team2" = isEvilTeam1 ? "team2" : "team1";
 
-  const filteredEvilRoles = evilRoles.filter((r) => r.isEvil);
-  const filteredGoodRoles = goodRoles.filter((r) => !r.isEvil);
+  const filteredEvilRoles = evilRoles.filter((r) => {
+    if (r.team !== undefined) {
+      return r.team === evilTeamId || r.team === "any";
+    }
+    // Fallback: use isEvil flag when team field not provided.
+    return r.isEvil;
+  });
+
+  const filteredGoodRoles = goodRoles.filter((r) => {
+    if (r.team !== undefined) {
+      return r.team === goodTeamId || r.team === "any";
+    }
+    // Fallback: use isEvil flag when team field not provided.
+    return !r.isEvil;
+  });
 
   if (filteredEvilRoles.length === 0) {
     throw new Error(
@@ -297,6 +323,40 @@ export function assignTeamsAndRoles(
         ? specialRole.roleId
         : (survivorRoleId ?? null),
     });
+  }
+
+  // ── Post-assignment guard: detect role↔team mismatch ─────────
+  // Verify that no good-team player received a role whose team column
+  // restricts it to the evil team. This catches the Killer-on-good-team bug.
+  const allRoleEntriesById = new Map<number, RoleEntry>(
+    [...evilRoles, ...goodRoles].map((r) => [r.roleId, r]),
+  );
+
+  for (const assignment of assignments) {
+    const isGoodTeam = assignment.team === (isEvilTeam1 ? "team2" : "team1");
+    if (!isGoodTeam) continue;
+    if (assignment.roleId === null) continue;
+
+    const entry = allRoleEntriesById.get(assignment.roleId);
+    if (!entry) continue;
+
+    const roleTeam = entry.team;
+    const hasViolation =
+      roleTeam !== undefined &&
+      roleTeam !== "any" &&
+      roleTeam !== goodTeamId;
+
+    if (hasViolation) {
+      const msg =
+        `[assignTeamsAndRoles] Guard violation: good-team player (userId=${assignment.userId}) ` +
+        `received a role (id=${assignment.roleId}) restricted to team="${roleTeam}" ` +
+        `but good team is "${goodTeamId}".`;
+      if (process.env.NODE_ENV === "development") {
+        throw new Error(msg);
+      } else {
+        console.error(msg);
+      }
+    }
   }
 
   return assignments;

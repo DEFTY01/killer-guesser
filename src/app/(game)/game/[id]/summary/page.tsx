@@ -270,19 +270,22 @@ export default async function GameSummaryPage({
         <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 text-center">
           <div className="text-4xl mb-2">🏆</div>
           <p className="text-lg font-bold text-amber-900">
-            {game.winner_team} wins!
+            {game.winner_team === "team1"
+              ? game.team1_name
+              : game.winner_team === "team2"
+                ? game.team2_name
+                : game.winner_team}{" "}
+            wins!
           </p>
           {callerTeam != null && (
             <p
               className={`mt-1 text-sm font-semibold ${
-                (callerTeam === "team1" ? game.team1_name : game.team2_name) ===
-                game.winner_team
+                callerTeam === game.winner_team
                   ? "text-green-700"
                   : "text-red-600"
               }`}
             >
-              {(callerTeam === "team1" ? game.team1_name : game.team2_name) ===
-              game.winner_team
+              {callerTeam === game.winner_team
                 ? "You won! 🎉"
                 : "You lost. 😞"}
             </p>

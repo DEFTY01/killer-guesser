@@ -48,6 +48,8 @@ export const games = sqliteTable("games", {
   vote_window_end: text("vote_window_end"),
   team1_name: text("team1_name").notNull().default("Good"),
   team2_name: text("team2_name").notNull().default("Evil"),
+  /** 1 = team1 is the Evil team (default). 0 = team2 is the Evil team. */
+  evil_team_is_team1: integer("evil_team_is_team1").notNull().default(1),
   winner_team: text("winner_team"),
   created_at: integer("created_at")
     .notNull()

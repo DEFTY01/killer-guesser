@@ -6,7 +6,7 @@ import { game_players, games, roles, users, votes } from "@/db/schema";
 import { and, count, eq, sql } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import { handleKillerDefeated } from "@/lib/gameEnd";
+import { checkGameOver } from "@/lib/gameEnd";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
@@ -220,24 +220,9 @@ export async function GET(
 
         eliminated = { id: majority.target_id, name: majority.target_name };
 
-        // Check if the eliminated player is the killer.
-        const [killerRow] = await db
-          .select({ user_id: game_players.user_id })
-          .from(game_players)
-          .innerJoin(roles, eq(game_players.role_id, roles.id))
-          .where(
-            and(
-              eq(game_players.game_id, gameId),
-              eq(roles.name, "Killer"),
-              eq(game_players.user_id, majority.target_id),
-            ),
-          )
-          .limit(1);
-
-        if (killerRow) {
-          // Killer was voted out — survivors win.
-          await handleKillerDefeated(gameId);
-        }
+        // Check win conditions after vote elimination (multi-killer rule:
+        // good wins only when ALL evil players are dead).
+        await checkGameOver(gameId);
       }
 
       // Publish VOTE_CLOSED on the game channel.

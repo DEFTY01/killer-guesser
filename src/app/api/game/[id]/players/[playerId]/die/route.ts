@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { game_players } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
+import { checkGameOver } from "@/lib/gameEnd";
 
 // ── Zod schema ────────────────────────────────────────────────────
 
@@ -102,6 +103,9 @@ export async function PATCH(
       player_id: updated.user_id,
     });
   }
+
+  // Check win conditions after every death event.
+  await checkGameOver(gameId);
 
   return NextResponse.json({ success: true, data: updated });
 }

@@ -8,13 +8,13 @@ import { NextRequest } from "next/server";
  */
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockHandleKillerDefeated } = vi.hoisted(() => ({
+const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
-  mockHandleKillerDefeated: vi.fn(),
+  mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/gameEnd", () => ({ handleKillerDefeated: mockHandleKillerDefeated }));
+vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },
@@ -100,8 +100,8 @@ describe("killer-tip-flow", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.correct).toBe(false);
-    // handleKillerDefeated should NOT be called for wrong guess
-    expect(mockHandleKillerDefeated).not.toHaveBeenCalled();
+    // checkGameOver IS called even for a wrong tip (caller's death might trigger evil win)
+    expect(mockCheckGameOver).toHaveBeenCalledWith("G1");
   });
 
   it("POST /tip as same caller again → 403 'Already used'", async () => {
@@ -139,6 +139,6 @@ describe("killer-tip-flow", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.correct).toBe(true);
-    expect(mockHandleKillerDefeated).toHaveBeenCalledWith("G1");
+    expect(mockCheckGameOver).toHaveBeenCalledWith("G1");
   });
 });
