@@ -92,6 +92,7 @@ export const game_players = sqliteTable("game_players", {
   revived_at: integer("revived_at"),
   last_revive_at: integer("last_revive_at"),
   has_tipped: integer("has_tipped").notNull().default(0),
+  tipped_user_id: integer("tipped_user_id").references(() => users.id),
 });
 
 // ── votes ─────────────────────────────────────────────────────────

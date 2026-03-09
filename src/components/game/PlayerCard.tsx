@@ -1,7 +1,6 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useState } from "react";
 import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -46,16 +45,6 @@ export interface PlayerCardProps {
    * Only viewers with a special role (any permissions) should see these.
    */
   showRoleBorder?: boolean;
-  /**
-   * When true the card plays a flip animation to reveal the player's role.
-   * Used once per session when the player first enters the game board.
-   */
-  isRoleRevealing?: boolean;
-  revealRoleName?: string | null;
-  revealRoleColor?: string | null;
-  revealRoleDescription?: string | null;
-  revealTeamName?: string | null;
-  onRoleRevealDone?: () => void;
 }
 
 // ── Team badge ────────────────────────────────────────────────────
@@ -111,90 +100,8 @@ export function PlayerCard({
   onSelfTap,
   onRevive,
   showRoleBorder = false,
-  isRoleRevealing = false,
-  revealRoleName,
-  revealRoleColor,
-  revealRoleDescription,
-  revealTeamName,
-  onRoleRevealDone,
 }: PlayerCardProps) {
-  // Flip state for role reveal
-  const [flipped, setFlipped] = useState(false);
-  useEffect(() => {
-    if (!isRoleRevealing) return;
-    setFlipped(false);
-    const t = setTimeout(() => setFlipped(true), 600);
-    return () => clearTimeout(t);
-  }, [isRoleRevealing]);
-
   const isMayorView = viewerRole === "Mayor";
-
-  // ── Role reveal flip card (own card, first visit) ────────────
-  if (isRoleRevealing) {
-    const bg = revealRoleColor ?? DEFAULT_ROLE_COLOR;
-    return (
-      <div style={{ perspective: "1200px" }}>
-        <div
-          style={{
-            position: "relative",
-            width: "100%",
-            minHeight: 148,
-            transformStyle: "preserve-3d",
-            transition: "transform 0.65s cubic-bezier(0.4,0,0.2,1)",
-            transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-          }}
-        >
-          {/* Front face — mystery back */}
-          <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-2xl shadow-md"
-            style={{
-              backfaceVisibility: "hidden",
-              background: "linear-gradient(135deg,#1e3a5f 0%,#0f2040 100%)",
-            }}
-          >
-            <div className="text-4xl select-none">🃏</div>
-            <p className="text-white/70 text-xs font-medium">Your role…</p>
-          </div>
-
-          {/* Back face — role info */}
-          <div
-            className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 rounded-2xl p-3 shadow-md"
-            style={{
-              backfaceVisibility: "hidden",
-              transform: "rotateY(180deg)",
-              background: `linear-gradient(135deg,${bg}ee 0%,${bg}99 100%)`,
-            }}
-          >
-            <p className="text-white/80 text-[9px] font-bold uppercase tracking-widest">
-              Your Role
-            </p>
-            <p className="text-white text-sm font-bold text-center leading-tight">
-              {revealRoleName ?? "Unknown"}
-            </p>
-            {revealTeamName && (
-              <span className="text-white/90 text-[10px] font-semibold bg-white/20 px-2 py-0.5 rounded-full">
-                {revealTeamName}
-              </span>
-            )}
-            {revealRoleDescription && (
-              <p className="text-white/75 text-[9px] text-center leading-snug">
-                {revealRoleDescription}
-              </p>
-            )}
-            {flipped && (
-              <button
-                type="button"
-                onClick={onRoleRevealDone}
-                className="mt-1 rounded-lg bg-white/25 px-3 py-1 text-[10px] font-bold text-white hover:bg-white/40 transition-colors focus:outline-none"
-              >
-                Got it ✓
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const isDead = player.is_dead === 1;
   // Undead: revived but not re-dead (is_revived=1, is_dead=0)

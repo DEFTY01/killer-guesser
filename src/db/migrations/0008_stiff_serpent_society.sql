@@ -1,0 +1,1 @@
+ALTER TABLE `game_players` ADD `tipped_user_id` integer REFERENCES users(id);

@@ -175,10 +175,10 @@ export async function POST(
           ),
         );
 
-      // Mark caller as having used their tip.
+      // Mark caller as having used their tip (record who they accused).
       await tx
         .update(game_players)
-        .set({ has_tipped: 1 })
+        .set({ has_tipped: 1, tipped_user_id: suspectId })
         .where(eq(game_players.id, callerPlayer.id));
     });
 
@@ -206,6 +206,7 @@ export async function POST(
         died_at: sql<number>`(unixepoch())`,
         died_time_of_day: "day",
         has_tipped: 1,
+        tipped_user_id: suspectId,
       })
       .where(eq(game_players.id, callerPlayer.id));
   });

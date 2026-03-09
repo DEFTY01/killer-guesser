@@ -9,7 +9,7 @@ import {
   users,
   votes,
 } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { activateGameIfReady } from "@/lib/activateGame";
 import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 import type { RolePermission } from "@/lib/role-constants";
@@ -49,6 +49,7 @@ function parsePermissions(raw: string | null | undefined): RolePermission[] {
  *
  * If the caller has `see_votes` permission:
  *  - votes[]: today's { voter_id, target_id } entries
+ *  - tips[]: all killer guesses { tipper_id, tipper_name, suspect_id, suspect_name, tipper_is_dead }
  *
  * **Security constraint:** The `killer_id` field is **only** included in the
  * response when the authenticated caller's role grants the `see_killer`
@@ -231,6 +232,13 @@ export async function GET(
     players: typeof responsePlayers;
     killer_id?: number | null;
     votes?: Array<{ voter_id: number; target_id: number }>;
+    tips?: Array<{
+      tipper_id: number;
+      tipper_name: string;
+      suspect_id: number | null;
+      suspect_name: string | null;
+      tipper_is_dead: number;
+    }>;
   } = {
     game: {
       id: game.id,
@@ -275,7 +283,7 @@ export async function GET(
     data.killer_id = killerRow?.user_id ?? null;
   }
 
-  // ── see_votes permission: include today's vote details ────────
+  // ── see_votes permission: include today's vote details + tips ──
   if (callerPermissions.includes("see_votes")) {
     const todayVotes = await db
       .select({
@@ -286,6 +294,56 @@ export async function GET(
       .where(and(eq(votes.game_id, gameId), eq(votes.day, currentDay)));
 
     data.votes = todayVotes;
+
+    // Include all killer guesses (tips) made in this game.
+    const rawTips = await db
+      .select({
+        tipper_id: game_players.user_id,
+        tipper_name: users.name,
+        suspect_id: game_players.tipped_user_id,
+        tipper_is_dead: game_players.is_dead,
+      })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(
+        and(
+          eq(game_players.game_id, gameId),
+          eq(game_players.has_tipped, 1),
+        ),
+      );
+
+    // Bulk-fetch suspect names.
+    const suspectIds = [
+      ...new Set(
+        rawTips
+          .map((t) => t.suspect_id)
+          .filter((id): id is number => id != null),
+      ),
+    ];
+
+    const suspectNameMap = new Map<number, string>();
+    if (suspectIds.length > 0) {
+      const suspectUsers = await db
+        .select({ id: users.id, name: users.name })
+        .from(users)
+        .where(
+          suspectIds.length === 1
+            ? eq(users.id, suspectIds[0]!)
+            : inArray(users.id, suspectIds),
+        );
+      for (const u of suspectUsers) suspectNameMap.set(u.id, u.name);
+    }
+
+    data.tips = rawTips.map((t) => ({
+      tipper_id: t.tipper_id,
+      tipper_name: t.tipper_name,
+      suspect_id: t.suspect_id ?? null,
+      suspect_name:
+        t.suspect_id != null
+          ? (suspectNameMap.get(t.suspect_id) ?? "Unknown")
+          : null,
+      tipper_is_dead: t.tipper_is_dead,
+    }));
   }
 
   return NextResponse.json({ success: true, data });

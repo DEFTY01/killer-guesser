@@ -368,10 +368,13 @@ export async function GET(
       )
       .limit(1);
 
+    const canVote = !callerPermissions.includes("see_killer");
+
     const responseData: Record<string, unknown> = {
       windowOpen: true,
       day,
       callerUserId: userId,
+      canVote,
       vote_window_start,
       vote_window_end,
       callerVotedFor: existingVote?.target_id ?? null,
@@ -556,8 +559,10 @@ export async function POST(
       id: game_players.id,
       is_dead: game_players.is_dead,
       revived_at: game_players.revived_at,
+      permissions: roles.permissions,
     })
     .from(game_players)
+    .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(
       and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
     )
@@ -573,6 +578,16 @@ export async function POST(
   if (callerPlayer.is_dead === 1) {
     return NextResponse.json(
       { success: false, error: "Dead players cannot vote" },
+      { status: 403 },
+    );
+  }
+
+  // Players who can see the killer's identity are observers -- they may not
+  // cast a vote (they already know the answer and would spoil the game).
+  const postCallerPerms = parsePermissions(callerPlayer.permissions);
+  if (postCallerPerms.includes("see_killer")) {
+    return NextResponse.json(
+      { success: false, error: "Players with killer knowledge cannot vote" },
       { status: 403 },
     );
   }

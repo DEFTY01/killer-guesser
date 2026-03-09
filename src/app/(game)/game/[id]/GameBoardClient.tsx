@@ -49,6 +49,13 @@ interface BoardData {
   players: PlayerCardPlayer[];
   killer_id?: number | null;
   votes?: Array<{ voter_id: number; target_id: number }>;
+  tips?: Array<{
+    tipper_id: number;
+    tipper_name: string;
+    suspect_id: number | null;
+    suspect_name: string | null;
+    tipper_is_dead: number;
+  }>;
 }
 
 interface VoteLogEntry {
@@ -321,6 +328,125 @@ function SelfDeathModal({
   );
 }
 
+// ── Role reveal modal (full-screen, once per session) ─────────────────
+
+interface RoleRevealModalProps {
+  roleName: string | null;
+  roleColor: string | null;
+  roleDescription: string | null;
+  teamName: string | null;
+  onClose: () => void;
+}
+
+function RoleRevealModal({
+  roleName,
+  roleColor,
+  roleDescription,
+  teamName,
+  onClose,
+}: RoleRevealModalProps) {
+  const [flipped, setFlipped] = useState(false);
+
+  const reveal = () => setFlipped(true);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="role-reveal-title"
+    >
+      <div className="flex flex-col items-center gap-6">
+        {/* Flip card */}
+        <div
+          style={{ perspective: "1200px", width: 240, height: 340 }}
+          onClick={!flipped ? reveal : undefined}
+          onKeyDown={(e) => {
+            if (!flipped && (e.key === "Enter" || e.key === " ")) {
+              e.preventDefault();
+              reveal();
+            }
+          }}
+          tabIndex={flipped ? -1 : 0}
+          role={flipped ? undefined : "button"}
+          aria-label={flipped ? undefined : "Tap to reveal your role"}
+          className={flipped ? "" : "cursor-pointer"}
+        >
+          <div
+            style={{
+              position: "relative",
+              width: "100%",
+              height: "100%",
+              transformStyle: "preserve-3d",
+              transition: "transform 0.7s cubic-bezier(0.4,0,0.2,1)",
+              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
+            }}
+          >
+            {/* Front face (— mystery card) */}
+            <div
+              className="absolute inset-0 rounded-3xl flex flex-col items-center justify-center gap-4 shadow-2xl"
+              style={{
+                backfaceVisibility: "hidden",
+                background: "linear-gradient(135deg,#1e3a5f 0%,#0f2040 100%)",
+                border: "2px solid rgba(255,255,255,0.12)",
+              }}
+            >
+              <div className="text-7xl select-none">🃏</div>
+              <p className="text-white text-base font-semibold text-center px-4">
+                Your role is…
+              </p>
+              <p className="text-white/50 text-xs">Tap to reveal</p>
+            </div>
+
+            {/* Back face (— role reveal) */}
+            <div
+              className="absolute inset-0 rounded-3xl flex flex-col items-center justify-center gap-3 shadow-2xl p-6"
+              style={{
+                backfaceVisibility: "hidden",
+                transform: "rotateY(180deg)",
+                background: roleColor
+                  ? `linear-gradient(135deg,${roleColor}ee 0%,${roleColor}99 100%)`
+                  : "linear-gradient(135deg,#2E6DA4ee 0%,#2E6DA499 100%)",
+                border: "2px solid rgba(255,255,255,0.18)",
+              }}
+            >
+              <p className="text-white/70 text-xs font-bold uppercase tracking-widest">
+                Your Role
+              </p>
+              <p
+                id="role-reveal-title"
+                className="text-white text-3xl font-bold text-center"
+              >
+                {roleName ?? "Unknown"}
+              </p>
+              {teamName && (
+                <span className="text-white/90 text-sm font-semibold bg-white/20 px-4 py-1 rounded-full">
+                  {teamName}
+                </span>
+              )}
+              {roleDescription && (
+                <p className="text-white/80 text-sm text-center leading-relaxed">
+                  {roleDescription}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+
+        {flipped && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="rounded-2xl bg-white px-8 py-3 text-sm font-bold text-gray-900 shadow-xl hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black/80"
+          >
+            Got it!
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ── Skeleton card ─────────────────────────────────────────────────
 
 function SkeletonCard() {
@@ -581,6 +707,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const [showRoleReveal, setShowRoleReveal] = useState(false);
   const [roleCardOpen, setRoleCardOpen] = useState(false);
   const [liveVotes, setLiveVotes] = useState<VoteLogEntry[]>([]);
+  const [tips, setTips] = useState<BoardData["tips"]>([]);
 
   // ── Load board data ─────────────────────────────────────────
 
@@ -606,6 +733,9 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
                 target_name: playerMap.get(v.target_id) ?? "Unknown",
               })),
             );
+          }
+          if (boardData.tips) {
+            setTips(boardData.tips);
           }
         } else {
           setError((json.error as string) ?? "Unknown error");
@@ -815,8 +945,11 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   // ── Render ──────────────────────────────────────────────────
 
+  // canVote: alive and does not have see_killer privilege
+  const canVote = callerIsAlive && !canSeeKiller;
+
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+    <div className={`max-w-2xl mx-auto px-4 py-6 space-y-6${voteActive ? " pb-28" : ""}`}>
       {/* ── Vote countdown (hidden for Mayor) ───────────────── */}
       {data && !isMayor && (
         <VoteCountdown
@@ -902,18 +1035,6 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               team2Name={data.game.team2_name}
               onSelfTap={() => setShowDeathModal(true)}
               onRevive={handleRevive}
-              isRoleRevealing={showRoleReveal && player.user_id === data.caller.user_id}
-              revealRoleName={data.caller.role_name}
-              revealRoleColor={data.caller.role_color}
-              revealRoleDescription={data.caller.role_description}
-              revealTeamName={
-                data.caller.team
-                  ? data.caller.team === "team1"
-                    ? data.game.team1_name
-                    : data.game.team2_name
-                  : null
-              }
-              onRoleRevealDone={handleRoleRevealClose}
             />
           ))}
         </div>
@@ -1002,6 +1123,44 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         </div>
       )}
 
+      {/* ── Spy: Killer Guesses ──────────────────────────── */}
+      {data && canSeeVotes && (
+        <div className="rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-4 space-y-3">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-700 uppercase tracking-wide">
+            <span aria-hidden="true">🔍</span> Killer Guesses
+          </h2>
+          {!tips || tips.length === 0 ? (
+            <p className="text-sm text-rose-400 italic">No killer guesses made yet.</p>
+          ) : (
+            <ul className="space-y-2" role="list">
+              {tips.map((entry) => {
+                const isDead = entry.tipper_is_dead === 1;
+                return (
+                  <li
+                    key={entry.tipper_id}
+                    className="flex flex-wrap items-center gap-1.5 text-sm"
+                  >
+                    <span
+                      className={`font-semibold ${isDead ? "line-through text-gray-400" : "text-gray-900"}`}
+                    >
+                      {entry.tipper_name}
+                    </span>
+                    {isDead && (
+                      <span aria-label="eliminated" title="Eliminated">☠️</span>
+                    )}
+                    <span className="text-rose-500">accused</span>
+                    <span className="font-semibold text-gray-900">
+                      {entry.suspect_name ?? "???"}
+                    </span>
+                    <span className="text-gray-400 text-xs">as the killer</span>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+      )}
+
       {/* ── "I was eliminated" button ────────────────────────── */}
       {data && callerIsAlive && (
         <div className="flex justify-center">
@@ -1015,16 +1174,23 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         </div>
       )}
 
-      {/* ── Vote button ─────────────────────────────────────── */}
-      {data && voteActive && (
-        <div className="flex justify-center pt-2">
-          <Link
-            href={`/game/${gameId}/vote/${data.game.current_day}`}
-            className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-6 py-3 text-base font-semibold text-white shadow-md hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          >
-            🗳 Vote
-          </Link>
-        </div>
+
+
+      {/* ── Role reveal modal (full-screen, shown once on first load) */}
+      {showRoleReveal && data && (
+        <RoleRevealModal
+          roleName={data.caller.role_name}
+          roleColor={data.caller.role_color}
+          roleDescription={data.caller.role_description}
+          teamName={
+            data.caller.team
+              ? data.caller.team === "team1"
+                ? data.game.team1_name
+                : data.game.team2_name
+              : null
+          }
+          onClose={handleRoleRevealClose}
+        />
       )}
 
       {/* ── Self-death modal ─────────────────────────────────── */}
@@ -1054,11 +1220,55 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           type="button"
           onClick={() => setShowGuessModal(true)}
           className="fixed right-6 z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          style={{ bottom: "calc(1.5rem + var(--safe-bottom))" }}
+          style={{
+            bottom: voteActive
+              ? "calc(5rem + var(--safe-bottom, 0px))"
+              : "calc(1.5rem + var(--safe-bottom, 0px))",
+          }}
           aria-label="Guess the killer"
         >
           <span aria-hidden="true">🔍</span> Guess the killer!
         </button>
+      )}
+
+      {/* ── Vote sticky bottom bar ────────────────────────────── */}
+      {data && voteActive && (
+        <div
+          className="fixed bottom-0 left-0 right-0 z-40 border-t border-gray-100 bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)]"
+          style={{ paddingBottom: "var(--safe-bottom, 0px)" }}
+          role="status"
+          aria-label={canVote ? "Daily vote is open" : "Voting in progress"}
+        >
+          <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                {canVote ? "Daily Vote" : "Voting in progress"}
+              </p>
+              <p className="text-sm text-gray-700 truncate">
+                Day {data.game.current_day}{" "}
+                {data.game.vote_window_end && (
+                  <span className="text-gray-500">
+                    · closes at{" "}
+                    <span className="font-semibold text-gray-800">
+                      {data.game.vote_window_end} UTC
+                    </span>
+                  </span>
+                )}
+              </p>
+            </div>
+            <Link
+              href={`/game/${gameId}/vote/${data.game.current_day}`}
+              className={`shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold text-white shadow-md transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
+                canVote
+                  ? "bg-indigo-600 hover:bg-indigo-700 focus:ring-indigo-500"
+                  : "bg-violet-600 hover:bg-violet-700 focus:ring-violet-500"
+              }`}
+            >
+              <span aria-hidden="true">{canVote ? "🗳" : "👁"}</span>
+              {canVote ? "Vote" : "Watch"}
+            </Link>
+          </div>
+        </div>
       )}
 
       {/* ── Game-ended modal ─────────────────────────────────── */}

@@ -35,6 +35,8 @@ interface OpenState {
   windowOpen: true;
   day: number;
   callerUserId: number;
+  /** False when the caller has the `see_killer` permission. */
+  canVote: boolean;
   vote_window_start: string;
   vote_window_end: string;
   callerVotedFor: number | null;
@@ -467,7 +469,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     );
   }
 
-  // ── Active vote window ──────────────────────────────────────
+  // ── Active vote window ──────────────────────────────────
 
   const openData = data as OpenState;
   const totalVotes = openData.players.reduce(
@@ -477,6 +479,61 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
   const hasConfirmedVote = openData.callerVotedFor !== null;
   const selectedChanged =
     selectedId !== null && selectedId !== openData.callerVotedFor;
+
+  // Players with see_killer permission observe votes but cannot cast one.
+  if (!openData.canVote) {
+    return (
+      <div
+        className="max-w-2xl mx-auto px-4 py-6 space-y-6"
+        style={{ transition: "opacity 0.3s ease", opacity: closing ? 0 : 1 }}
+      >
+        <div className="text-center space-y-1">
+          <h1 className="text-2xl font-bold text-gray-900">Vote</h1>
+          <p className="text-sm text-gray-500">Day {day}</p>
+          <VoteWindowCountdown endHhmm={openData.vote_window_end} />
+        </div>
+
+        <div
+          role="status"
+          className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-5 text-center space-y-1"
+        >
+          <p className="font-semibold text-amber-800">
+            🕵️ You are an observer — you cannot vote.
+          </p>
+          <p className="text-sm text-amber-600">
+            Your role grants you knowledge that would give an unfair advantage
+            in the vote. You may watch the vote unfold below.
+          </p>
+        </div>
+
+        {/* Read-only player grid showing live vote counts */}
+        <div className="player-grid">
+          {openData.players.map((player) => (
+            <PlayerTile
+              key={player.id}
+              player={player}
+              isSelected={false}
+              isSelf={player.id === openData.callerUserId}
+              totalVotes={totalVotes}
+              onClick={() => {}}
+            />
+          ))}
+        </div>
+
+        {/* Spy view: voter→target breakdown */}
+        {liveVotes.length > 0 && <SpyPanel votes={liveVotes} />}
+
+        <div className="flex justify-center">
+          <Link
+            href={`/game/${gameId}`}
+            className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+          >
+            ← Back to board
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
