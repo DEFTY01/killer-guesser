@@ -65,6 +65,7 @@ export const roles = sqliteTable("roles", {
   permissions: text("permissions"),
   color_hex: text("color_hex").notNull().default("#2E6DA4"),
   is_default: integer("is_default").notNull().default(0),
+  is_evil: integer("is_evil").notNull().default(0),
 });
 
 // ── game_players ──────────────────────────────────────────────────
