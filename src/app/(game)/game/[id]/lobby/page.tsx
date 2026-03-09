@@ -56,13 +56,9 @@ export default async function GameLobbyStatusPage({
   await activateGameIfReady(joinedGame.id);
 
   if (joinedGame.status === "scheduled") {
-    // Re-read status after potential activation
-    const [fresh] = await db
-      .select({ status: games.status })
-      .from(games)
-      .where(eq(games.id, joinedGame.id))
-      .limit(1);
-    if (fresh?.status === "active") {
+    const nowUnix = Math.floor(Date.now() / 1000);
+    if (joinedGame.startTime <= nowUnix) {
+      // Game was just activated by activateGameIfReady
       redirect(`/game/${joinedGame.id}`);
     }
   }
