@@ -1234,16 +1234,13 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       {/* ── Vote sticky bottom bar ────────────────────────────── */}
       {data && (
         <div
-          className="fixed bottom-0 left-0 right-0 z-40 border-t bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)]"
-          style={{
-            borderColor: voteActive ? "#a5b4fc" : "#e5e7eb",
-            paddingBottom: "var(--safe-bottom, 0px)",
-          }}
-          role="status"
-          aria-label={voteActive ? (canVote ? "Daily vote is open" : "Voting in progress") : "Voting not open yet"}
+          className={`fixed bottom-0 left-0 right-0 z-40 border-t bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)] transition-colors ${
+            voteActive ? "border-indigo-200" : "border-gray-100"
+          }`}
+          style={{ paddingBottom: "var(--safe-bottom, 0px)" }}
         >
           <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
-            {/* Pulsing dot indicator */}
+            {/* Status dot */}
             <span
               className={`shrink-0 w-2.5 h-2.5 rounded-full ${
                 voteActive ? "bg-indigo-500 animate-pulse" : "bg-gray-300"
@@ -1251,50 +1248,33 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               aria-hidden="true"
             />
             <div className="flex-1 min-w-0">
-              {voteActive ? (
-                <>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-indigo-500">
-                    {canVote ? "Daily Vote Open" : "Voting in progress"}
-                  </p>
-                  <p className="text-sm text-gray-700 truncate">
-                    Day {data.game.current_day}
-                    {data.game.vote_window_end && (
-                      <span className="text-gray-500">
-                        {" "}· closes at{" "}
-                        <span className="font-semibold text-gray-800">
-                          {data.game.vote_window_end} UTC
-                        </span>
-                      </span>
-                    )}
-                  </p>
-                </>
-              ) : (
-                <>
-                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-400">
-                    Daily Vote
-                  </p>
-                  <p className="text-sm text-gray-500 truncate">
-                    {data.game.vote_window_start
-                      ? `Opens at ${data.game.vote_window_start} UTC`
-                      : "No vote window set"}
-                  </p>
-                </>
-              )}
+              <p className={`text-xs font-semibold uppercase tracking-wide ${voteActive ? "text-indigo-500" : "text-gray-400"}`}>
+                {voteActive
+                  ? (canVote ? "Vote — window open!" : "Voting in progress")
+                  : "Daily Vote"}
+              </p>
+              <p className="text-sm text-gray-500 truncate">
+                {voteActive
+                  ? `Day ${data.game.current_day}${data.game.vote_window_end ? ` · closes ${data.game.vote_window_end} UTC` : ""}`
+                  : data.game.vote_window_start
+                    ? `Opens at ${data.game.vote_window_start} UTC`
+                    : `Day ${data.game.current_day}`}
+              </p>
             </div>
+            {/* The link ALWAYS navigates to the vote page — the vote page
+                itself handles the "window closed" state with a clear message. */}
             <Link
               href={`/game/${gameId}/vote/${data.game.current_day}`}
               className={`shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
                 voteActive && canVote
                   ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500"
-                  : voteActive && !canVote
+                  : voteActive
                     ? "bg-violet-600 text-white hover:bg-violet-700 focus:ring-violet-500"
-                    : "bg-gray-100 text-gray-600 hover:bg-gray-200 focus:ring-gray-400"
+                    : "bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 focus:ring-indigo-400"
               }`}
             >
-              <span aria-hidden="true">
-                {voteActive ? (canVote ? "🗳" : "👁") : "📊"}
-              </span>
-              {voteActive ? (canVote ? "Vote" : "Watch") : "Results"}
+              <span aria-hidden="true">🗳</span>
+              {voteActive ? (canVote ? "Vote" : "Watch") : "Go to vote"}
             </Link>
           </div>
         </div>
