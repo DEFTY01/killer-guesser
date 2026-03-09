@@ -1,6 +1,6 @@
 # AGENT_MAP.md — Project Navigation Index
 
-> **Last Updated:** 2026-03-09 (PROMPT 38 — Per-Team Role Selector, Evil Team Checkbox & Killer Cap Rules: added `is_evil` column to `roles` schema + migration 0005; `resolveKillerCap(playerCount, adminCap)` in assignTeamsAndRoles; `isEvilTeam1` + `isEvil` per RoleEntry in AssignmentInput; hard constraints (Killer must be in Evil team, Good team never gets is_evil role, Evil team cap ≥ 1); Evil team checkbox in wizard step 2 (mutually exclusive, one team is always Evil); step 3 columns now label Evil/Good dynamically and filter roles by is_evil; POST /api/admin/games Zod schema updated with `is_evil_team1` and `isEvil` per role entry; returns 400 on constraint errors; seed updated: Killer is_evil=1)
+> **Last Updated:** 2026-03-09 (PROMPT 38 — Per-Team Role Selector, Evil Team Checkbox & Killer Cap Rules: added `is_evil` column to `roles` schema + migration 0005; `resolveKillerCap(playerCount, adminCap)` in assignTeamsAndRoles; `isEvilTeam1` + `isEvil` per RoleEntry in AssignmentInput; hard constraints (Killer must be in Evil team, Good team never gets is_evil role, Evil team cap ≥ 1); Evil team checkbox in wizard step 2 (mutually exclusive, one team is always Evil); step 3 columns now label Evil/Good dynamically and filter roles by is_evil; POST /api/admin/games Zod schema updated with `is_evil_team1` and `isEvil` per role entry; returns 400 on constraint errors; seed updated: Killer is_evil=1; reroll route updated: ?type=teams uses resolveKillerCap with game_settings caps, ?type=roles enforces is_evil constraints with Killer-first assignment; TypeScript mock type errors in games.test.ts and players.test.ts fixed)
 >
 > **Rule:** Read this file first at the start of every prompt. Only open files
 > listed here **or** files explicitly mentioned in the current prompt.
@@ -264,7 +264,7 @@ killer-guesser/
 | `src/app/api/admin/games/route.ts` | GET (all games with player counts) + POST (create game in DB transaction with server-side team/role assignment via assignTeamsAndRoles: games + game_settings + game_players, Zod validation, per-team role config) — admin only |
 | `src/app/api/admin/games/[id]/route.ts` | GET (full game with settings + players including role data) + PATCH (action: close_voting / close / delete) — admin only |
 | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | PATCH (mark player dead / change role assignment) — admin only |
-| `src/app/api/admin/games/[id]/reroll/route.ts` | POST ?type=teams (random 50/50 split) or ?type=roles (weighted random by chance_percent) — admin only |
+| `src/app/api/admin/games/[id]/reroll/route.ts` | POST ?type=teams (Fisher-Yates split with resolveKillerCap, respects evil_team_is_team1) or ?type=roles (weighted random, is_evil constraints enforced: evil roles → evil team only, Killer always assigned first) — admin only |
 | `src/app/api/admin/settings/route.ts` | GET (bg_light_url + bg_dark_url from app_settings singleton) + PATCH (update URLs) — admin only |
 | `src/app/api/upload/avatar/route.ts` | POST: multipart form, validates webp/gif + 4 MB limit, uploads to Vercel Blob |
 | `src/app/api/upload/murder-item/route.ts` | POST: multipart form, validates jpeg/png/webp/gif + 4 MB limit, uploads to Vercel Blob with unique filename |
@@ -334,7 +334,7 @@ killer-guesser/
 | `GET` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Admin (403) | Get full game data (game + settings + players with role details) |
 | `PATCH` | `/api/admin/games/[id]` | `src/app/api/admin/games/[id]/route.ts` | Admin (403) | Update game state: action "update_vote_window" (set vote_window_start/end as HH:MM), "close_voting" (null vote window + publish VOTE_CLOSED with results), "close" (set status=closed), "delete" (hard delete + cascade) |
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Admin (403) | Update game player: is_dead (0/1) and/or role_id |
-| `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Admin (403) | Re-randomise teams (?type=teams, 50/50 Fisher-Yates) or roles (?type=roles, weighted random by chance_percent) |
+| `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Admin (403) | Re-randomise teams (?type=teams, resolveKillerCap-based evil split from game_settings) or roles (?type=roles, is_evil constraints: evil roles → evil team, good roles → good team, Killer always first) |
 | `GET` | `/api/admin/games/[id]/history` | `src/app/api/admin/games/[id]/history/route.ts` | Admin (403) | Game archive: game metadata + players (with died_location, died_time_of_day, role) + archived events (chronological) + anonymous vote tallies by day |
 | `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Admin (403) | Get global bg_light_url + bg_dark_url from app_settings singleton |
 | `PATCH` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Admin (403) | Upsert bg_light_url and/or bg_dark_url (pass null to clear) |
