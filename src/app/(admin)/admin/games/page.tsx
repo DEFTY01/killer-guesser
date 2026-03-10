@@ -7,6 +7,7 @@ import type { GameStatus } from "@/types";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { redirect } from "next/navigation";
 import { activateScheduledGames } from "@/lib/activateGame";
+import DeleteGameButton from "./DeleteGameButton";
 
 export const metadata: Metadata = { title: "Games" };
 
@@ -151,6 +152,7 @@ export default async function GamesPage({
                 <th className="px-4 py-3 text-left font-medium text-gray-600">
                   Winning Team
                 </th>
+                <th className="px-4 py-3" />
               </tr>
             </thead>
             <tbody>
@@ -185,6 +187,9 @@ export default async function GamesPage({
                       {new Date(game.start_time * 1000).toLocaleDateString()}
                     </td>
                     <td className="px-4 py-3 text-gray-500">{winnerLabel}</td>
+                    <td className="px-4 py-3 text-right">
+                      <DeleteGameButton gameId={game.id} gameName={game.name} />
+                    </td>
                   </tr>
                 );
               })}

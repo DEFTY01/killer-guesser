@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { games, game_settings, game_players, roles } from "@/db/schema";
-import { desc, eq, sql, inArray } from "drizzle-orm";
+import { desc, eq, sql, inArray, and } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { assignTeamsAndRoles } from "@/lib/assignTeamsAndRoles";
 
@@ -144,18 +144,17 @@ export async function POST(req: NextRequest) {
     revive_cooldown_seconds,
   } = parsed.data;
 
-  // ── Resolve Killer & Survivor role IDs from the database ──────
+  // ── Resolve Killer role ID from submitted roles ─────────────
   const allRoleIds = [
     ...team1Roles.map((r) => r.roleId),
     ...team2Roles.map((r) => r.roleId),
   ];
 
   let killerRoleId: number | null = null;
-  let survivorRoleId: number | null = null;
 
   if (allRoleIds.length > 0) {
     const dbRoles = await db
-      .select({ id: roles.id, name: roles.name, is_default: roles.is_default, is_evil: roles.is_evil })
+      .select({ id: roles.id, name: roles.name })
       .from(roles)
       .where(inArray(roles.id, allRoleIds));
 
@@ -163,11 +162,6 @@ export async function POST(req: NextRequest) {
       (r) => r.name.toLowerCase() === "killer",
     );
     killerRoleId = killerRole?.id ?? null;
-
-    const survivorRole = dbRoles.find(
-      (r) => r.name.toLowerCase() === "survivor" || r.is_default === 1,
-    );
-    survivorRoleId = survivorRole?.id ?? null;
   }
 
   // If no killer role was found, return an error
@@ -178,14 +172,25 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  // If no survivor role was found, try to find one globally
+  // ── Always resolve Survivor globally (is_evil=0, is_default=1) ──
+  // NOTE: Killer also carries is_default=1, so we must NOT look for
+  // the survivor inside the submitted role list — we query globally
+  // with the is_evil=0 guard so Killer can never be mistaken for it.
+  const [survivorRow] = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(and(eq(roles.is_evil, 0), eq(roles.is_default, 1)))
+    .limit(1);
+  let survivorRoleId: number | null = survivorRow?.id ?? null;
+
+  // Fallback: search by name in case is_default flag is not set
   if (survivorRoleId === null) {
-    const [survivorRow] = await db
+    const [byName] = await db
       .select({ id: roles.id })
       .from(roles)
       .where(eq(roles.name, "Survivor"))
       .limit(1);
-    survivorRoleId = survivorRow?.id ?? null;
+    survivorRoleId = byName?.id ?? null;
   }
 
   // ── Assign teams & roles server-side ─────────────────────────
