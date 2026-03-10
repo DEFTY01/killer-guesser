@@ -1,15 +1,14 @@
-import { cookies } from "next/headers";
+import { auth } from "@/lib/auth";
 
 /**
- * Verifies the incoming request carries an admin session cookie.
+ * Verifies the incoming request carries an admin NextAuth session.
  *
- * @returns `true` when the `admin_session` cookie is present,
- *          or `null` if the cookie is absent.
+ * @returns `true` when the session has role="admin",
+ *          or `null` if the session is absent or not admin.
  */
 export async function requireAdmin(): Promise<true | null> {
-  const jar = await cookies();
-  const session = jar.get("admin_session");
-  if (!session?.value) {
+  const session = await auth();
+  if (session?.user?.role !== "admin") {
     return null;
   }
   return true;
