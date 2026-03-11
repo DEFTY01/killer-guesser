@@ -4,6 +4,7 @@ import { useState, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { blobImageSrc } from "@/lib/blob-image";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -388,7 +389,7 @@ export default function LoginScreen({ players }: Props) {
 
                 {player.avatarUrl && isSafeAvatarUrl(player.avatarUrl) ? (
                   <img
-                    src={player.avatarUrl}
+                    src={blobImageSrc(player.avatarUrl)}
                     alt={player.nickname}
                     loading="eager"
                     width={64}

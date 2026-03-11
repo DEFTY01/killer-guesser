@@ -1,6 +1,7 @@
 "use client";
 
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -136,7 +137,7 @@ export function PlayerCard({
         >
           {player.avatar_url ? (
             <Image
-              src={player.avatar_url}
+              src={blobImageSrc(player.avatar_url)}
               alt={player.name}
               fill
               sizes="64px"
@@ -203,7 +204,7 @@ export function PlayerCard({
       >
         {player.avatar_url ? (
           <Image
-            src={player.avatar_url}
+            src={blobImageSrc(player.avatar_url)}
             alt={player.name}
             fill
             sizes="64px"

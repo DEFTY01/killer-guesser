@@ -1,0 +1,1 @@
+ALTER TABLE `games` ADD `timezone` text DEFAULT 'UTC' NOT NULL;

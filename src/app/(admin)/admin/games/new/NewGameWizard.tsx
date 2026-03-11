@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import type { User, Role } from "@/types";
 
 // ── Curated IANA timezone list with display names ─────────────────
@@ -150,7 +151,7 @@ function AvatarCircle({ user }: { user: User }) {
     <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-200 shrink-0 mx-auto">
       {user.avatar_url ? (
         <Image
-          src={user.avatar_url}
+          src={blobImageSrc(user.avatar_url)}
           alt={user.name}
           fill
           className="object-cover"
@@ -1136,7 +1137,7 @@ export function NewGameWizard({ players, roles }: Props) {
               {step3.murderItemUrl && (
                 <div className="relative w-20 h-20 rounded-lg border overflow-hidden bg-gray-50">
                   <Image
-                    src={step3.murderItemUrl}
+                    src={blobImageSrc(step3.murderItemUrl)}
                     alt="Murder item preview"
                     fill
                     className="object-contain p-1"
@@ -1266,7 +1267,7 @@ export function NewGameWizard({ players, roles }: Props) {
                   >
                     {p.avatar_url && (
                       <span className="relative w-4 h-4 rounded-full overflow-hidden inline-block">
-                        <Image src={p.avatar_url} alt="" fill sizes="16px" className="object-cover" unoptimized />
+                        <Image src={blobImageSrc(p.avatar_url)} alt="" fill sizes="16px" className="object-cover" unoptimized />
                       </span>
                     )}
                     {p.name}
@@ -1368,7 +1369,7 @@ export function NewGameWizard({ players, roles }: Props) {
                   {step3.murderItemUrl && (
                     <div className="relative w-12 h-12 rounded border overflow-hidden bg-white">
                       <Image
-                        src={step3.murderItemUrl}
+                        src={blobImageSrc(step3.murderItemUrl)}
                         alt="Murder item"
                         fill
                         className="object-contain"

@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import Link from "next/link";
 import { db } from "@/db";
 import { games, game_players, users, roles, events, votes } from "@/db/schema";
@@ -334,7 +335,7 @@ export default async function GameHistoryPage({
                               >
                                 {v.target_avatar && (
                                   <Image
-                                    src={v.target_avatar}
+                                    src={blobImageSrc(v.target_avatar)}
                                     alt={v.target_name}
                                     width={24}
                                     height={24}
@@ -425,7 +426,7 @@ export default async function GameHistoryPage({
                       <div className="flex items-center gap-3">
                         {p.avatar_url ? (
                           <Image
-                            src={p.avatar_url}
+                            src={blobImageSrc(p.avatar_url)}
                             alt={p.name}
                             width={32}
                             height={32}
@@ -553,7 +554,7 @@ export default async function GameHistoryPage({
                           >
                             {v.target_avatar && (
                               <Image
-                                src={v.target_avatar}
+                                src={blobImageSrc(v.target_avatar)}
                                 alt={v.target_name}
                                 width={28}
                                 height={28}

@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import { db } from "@/db";
 import { users } from "@/db/schema";
 import { asc } from "drizzle-orm";
@@ -57,7 +58,7 @@ export default async function PlayersPage() {
                   <td className="px-4 py-3">
                     {player.avatar_url ? (
                       <Image
-                        src={player.avatar_url}
+                        src={blobImageSrc(player.avatar_url)}
                         alt={`${player.name} avatar`}
                         width={40}
                         height={40}

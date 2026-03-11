@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useCallback, useEffect } from "react";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import type { GameStatus } from "@/types";
@@ -796,7 +797,7 @@ export default function GameEditorClient({
                         <div className="relative w-7 h-7 rounded-full overflow-hidden bg-gray-200 shrink-0">
                           {p.avatar_url ? (
                             <Image
-                              src={p.avatar_url}
+                              src={blobImageSrc(p.avatar_url)}
                               alt={p.name}
                               fill
                               className="object-cover"

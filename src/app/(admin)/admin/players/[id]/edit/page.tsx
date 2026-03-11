@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useState, useEffect } from "react";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import Link from "next/link";
 import { Button } from "@/components/ui/Button";
 import type { User } from "@/types";
@@ -365,7 +366,7 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
                 {avatarPreview ? (
                   <div className="relative h-40 w-40 rounded-full overflow-hidden border-4 border-indigo-200">
                     <Image
-                      src={avatarPreview}
+                      src={blobImageSrc(avatarPreview)}
                       alt={`${player.name} avatar`}
                       fill
                       className="object-cover"

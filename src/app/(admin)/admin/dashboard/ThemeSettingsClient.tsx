@@ -2,6 +2,7 @@
 
 import { useCallback, useRef, useState } from "react";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 
 interface ThemeSettingsClientProps {
   initialLightUrl: string | null;
@@ -174,7 +175,7 @@ function UploadZone({
         className="relative w-full h-36 flex items-center justify-center text-sm font-medium"
         style={{
           background: currentUrl ? undefined : defaultColor,
-          backgroundImage: currentUrl ? `url(${currentUrl})` : undefined,
+          backgroundImage: currentUrl ? `url(${blobImageSrc(currentUrl)})` : undefined,
           backgroundSize: "cover",
           backgroundPosition: "center",
           color: currentUrl ? "white" : "#6b7280",
@@ -182,7 +183,7 @@ function UploadZone({
       >
         {currentUrl ? (
           <Image
-            src={currentUrl}
+            src={blobImageSrc(currentUrl)}
             alt={`${label} preview`}
             fill
             style={{ objectFit: "cover" }}

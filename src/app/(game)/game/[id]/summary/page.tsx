@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
@@ -53,7 +54,7 @@ function PlayerRow({
       >
         {player.avatar_url ? (
           <Image
-            src={player.avatar_url}
+            src={blobImageSrc(player.avatar_url)}
             alt={player.name}
             fill
             sizes="48px"
@@ -345,7 +346,7 @@ export default async function GameSummaryPage({
                         <div className="relative w-7 h-7 rounded-full overflow-hidden bg-gray-100 shrink-0">
                           {v.target_avatar ? (
                             <Image
-                              src={v.target_avatar}
+                              src={blobImageSrc(v.target_avatar)}
                               alt={v.target_name}
                               fill
                               sizes="28px"

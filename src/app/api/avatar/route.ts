@@ -44,7 +44,7 @@ export async function POST(req: NextRequest) {
   const processed = await resizeAvatar(inputBuffer);
 
   const blob = await put(`avatars/player-${playerId}.png`, processed.buffer, {
-    access: "public",
+    access: "private",
     contentType: "image/png",
     addRandomSuffix: true,
   });

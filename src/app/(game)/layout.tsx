@@ -1,6 +1,7 @@
 import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import Link from "next/link";
 import SignOutButton from "@/components/SignOutButton";
 
@@ -39,7 +40,7 @@ export default async function GameLayout({
           <div className="flex items-center gap-3">
             {user.avatar_url ? (
               <Image
-                src={user.avatar_url}
+                src={blobImageSrc(user.avatar_url)}
                 alt={user.name ?? "Player"}
                 width={32}
                 height={32}

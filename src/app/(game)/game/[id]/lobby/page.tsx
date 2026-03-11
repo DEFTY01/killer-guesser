@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
@@ -167,7 +168,7 @@ function ScheduledLobby({
                 <div className="relative w-16 h-16 rounded-full overflow-hidden bg-indigo-100 shrink-0">
                   {player.avatar_url ? (
                     <Image
-                      src={player.avatar_url}
+                      src={blobImageSrc(player.avatar_url)}
                       alt={player.name}
                       fill
                       sizes="64px"

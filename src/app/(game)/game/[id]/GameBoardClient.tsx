@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Image from "next/image";
+import { blobImageSrc } from "@/lib/blob-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { VoteCountdown } from "@/components/game/VoteCountdown";
@@ -116,7 +117,7 @@ function MurderItemModal({
     >
       <div className="relative w-full h-full flex items-center justify-center p-6">
         <Image
-          src={url}
+          src={blobImageSrc(url)}
           alt={name ?? "Murder item"}
           fill
           sizes="100vw"
@@ -152,7 +153,7 @@ function MurderItemCard({ url, name }: { url: string | null; name: string | null
             className="relative w-full aspect-square bg-gray-50 block cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
           >
             <Image
-              src={url}
+              src={blobImageSrc(url)}
               alt={name ?? "Murder item"}
               fill
               sizes="(max-width: 320px) 100vw, 320px"
@@ -472,7 +473,7 @@ function KillerGuessModal({
                       <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-100">
                         {p.avatar_url ? (
                           <Image
-                            src={p.avatar_url}
+                            src={blobImageSrc(p.avatar_url)}
                             alt={p.name}
                             fill
                             sizes="48px"
@@ -514,7 +515,7 @@ function KillerGuessModal({
                 <div className="relative w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-4 border-gray-200">
                   {suspect.avatar_url ? (
                     <Image
-                      src={suspect.avatar_url}
+                      src={blobImageSrc(suspect.avatar_url)}
                       alt={suspect.name}
                       fill
                       sizes="80px"

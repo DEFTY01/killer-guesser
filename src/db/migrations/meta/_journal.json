@@ -64,6 +64,13 @@
       "when": 1773091005576,
       "tag": "0008_stiff_serpent_society",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1773242351539,
+      "tag": "0009_modern_moon_knight",
+      "breakpoints": true
     }
   ]
 }
