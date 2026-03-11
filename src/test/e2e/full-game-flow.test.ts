@@ -62,7 +62,10 @@ vi.mock("@/db", () => ({
       return { from };
     }),
     insert: vi.fn(() => ({
-      values: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 1 }]) })),
+      values: vi.fn(() => ({
+        returning: vi.fn().mockResolvedValue([{ id: 1 }]),
+        onConflictDoUpdate: vi.fn().mockResolvedValue([]),
+      })),
     })),
     update: vi.fn(() => ({
       set: vi.fn(() => ({

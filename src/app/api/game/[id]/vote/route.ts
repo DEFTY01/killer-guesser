@@ -217,12 +217,22 @@ export async function GET(
         .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
         .groupBy(votes.target_id, users.name);
 
-      // Find the plurality winner: the player with the most votes.
-      // If two or more players are tied for the top spot, no one is eliminated.
+      // Build a Map of vote counts for O(1) lookups and total-vote calculation.
+      const counts = new Map(tally.map((r) => [r.target_id, r.vote_count]));
+      const totalVotes = [...counts.values()].reduce((s, c) => s + c, 0);
+
+      // Sort descending by vote count.
       const sorted = [...tally].sort((a, b) => b.vote_count - a.vote_count);
       const top = sorted[0];
-      const hasTie = sorted.length >= 2 && sorted[1].vote_count === top?.vote_count;
-      const majority = top && !hasTie && top.vote_count > 0 ? top : undefined;
+
+      // A player is eliminated only when their count is STRICTLY GREATER than
+      // all other candidates AND greater than half of total votes cast.
+      const isStrictlyTop =
+        top !== undefined &&
+        (sorted.length < 2 || sorted[1].vote_count < top.vote_count);
+      const hasMajority =
+        top !== undefined && totalVotes > 0 && top.vote_count * 2 > totalVotes;
+      const majority = isStrictlyTop && hasMajority ? top : undefined;
 
       let eliminated: { id: number; name: string } | null = null;
 
@@ -651,29 +661,16 @@ export async function POST(
     Math.floor((nowUnix - game.start_time) / 86400) + 1,
   );
 
-  // ── Upsert vote ───────────────────────────────────────────────
-  const [existing] = await db
-    .select({ id: votes.id })
-    .from(votes)
-    .where(
-      and(
-        eq(votes.game_id, gameId),
-        eq(votes.day, day),
-        eq(votes.voter_id, userId),
-      ),
-    )
-    .limit(1);
-
-  if (existing) {
-    await db
-      .update(votes)
-      .set({ target_id: targetId })
-      .where(eq(votes.id, existing.id));
-  } else {
-    await db
-      .insert(votes)
-      .values({ game_id: gameId, day, voter_id: userId, target_id: targetId });
-  }
+  // ── Upsert vote (atomic: ON CONFLICT DO UPDATE) ──────────────
+  // Relies on the unique constraint votes_game_day_voter_unique
+  // (game_id, day, voter_id). Atomic — no TOCTOU race condition.
+  await db
+    .insert(votes)
+    .values({ game_id: gameId, day, voter_id: userId, target_id: targetId })
+    .onConflictDoUpdate({
+      target: [votes.game_id, votes.day, votes.voter_id],
+      set: { target_id: targetId },
+    });
 
   // ── Load voter and target names for Ably payload ──────────────
   const [[voterUser], [targetUser]] = await Promise.all([
