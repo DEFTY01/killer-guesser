@@ -242,7 +242,7 @@ killer-guesser/
 | `src/components/ui/ErrorBoundary.tsx` | Class-based React ErrorBoundary (client component): catches render errors, shows "Something went wrong. Please reload the page." + Retry button |
 | `src/components/game/PlayerCard.tsx` | Role-aware player card: Mayor view=flat grid (only avatar+name, no border/badge/labels); dead=grayscale+✕, undead=✕ removed+"Undead", killer (Seer view)=red border+"Killer", Healer view=Revive button; default=role color border+team badge; accepts `viewerRole`, `team1Name`, `team2Name`; `team` and `role_color` are optional (stripped server-side for Mayor) |
 | `src/components/game/VoteCountdown.tsx` | Countdown timer to vote window end with "Time remaining to vote:" label — hidden outside vote window |
-| `src/db/schema.ts` | Drizzle schema: 7 game tables (users, games, roles, game_players, votes, events, game_settings) + relations; games table includes `timezone` (IANA string, default "UTC"); game_settings includes revive_cooldown_seconds, team1_max_players, team2_max_players |
+| `src/db/schema.ts` | Drizzle schema: 8 game tables (users, games, roles, game_players, votes, events, game_settings, vote_window_overrides) + relations; games table includes `timezone` (IANA string, default "UTC"); game_settings includes revive_cooldown_seconds, team1_max_players, team2_max_players; `vote_window_overrides` has unique(game_id, day_date) constraint |
 | `src/db/index.ts` | Re-exports `db`, `client`, and `Db` from `src/lib/db.ts` for backward compatibility |
 | `src/db/seed.ts` | Idempotent seed script: inserts 6 default roles (Killer, Survivor, Seer, Healer, Mayor, Spy) — run with `npm run db:seed` |
 | `src/lib/db.ts` | Drizzle + Turso client using `DATABASE_URL` / `DATABASE_AUTH_TOKEN`; exports `db` and raw `client` |
@@ -257,6 +257,7 @@ killer-guesser/
 | `src/lib/assignTeamsAndRoles.ts` | Server-side team & role assignment: Fisher-Yates shuffle, fill team1 up to cap then team2, assign Killer to team1, weighted random special roles per team, Survivor default for team2 remainder |
 | `src/lib/roleUtils.ts` | Role utility helpers — `isKiller(playerId, killerId)` for testable killer identification |
 | `src/lib/timezone.ts` | Server-safe timezone utilities (no external deps) — `gameTimeToUtc(hhmm, tz)`, `nowInZone(tz)`, `formatInZone(utcMs, tz)`, `windowBoundariesUtc(start, end, tz)`. Used by the vote route for game-timezone-aware window checks. |
+| `src/lib/voteWindow.ts` | Vote window helpers — `resolveVoteWindow(gameId, date): Promise<{start,end}|null>` (priority: per-day override → game default → null); `isVoteWindowOpen(window, timezone): boolean` (returns false if window is null). Used by GET/POST /api/game/[id]/vote. |
 | `src/lib/clientTime.ts` | Client-only time display utilities — `toLocalTime(utcMs)`, `toLocalDateTime(utcMs)`, `msUntil(utcMs)`. Uses browser Intl.DateTimeFormat; never hard-codes a timezone. |
 | `src/lib/validations.ts` | Zod schemas (player nickname, avatar, etc.) |
 | `src/app/api/admin/players/route.ts` | GET (all players, ordered by name) + POST (create player with Zod validation) — admin only |
@@ -272,11 +273,12 @@ killer-guesser/
 | `src/app/api/upload/murder-item/route.ts` | POST: multipart form, validates jpeg/png/webp/gif + 4 MB limit, uploads to Vercel Blob with unique filename |
 | `src/app/api/upload/background/route.ts` | POST: multipart form, validates jpeg/png/webp + 8 MB limit, uploads to Vercel Blob under `backgrounds/` prefix |
 | `src/middleware.ts` | Route-protection: `/admin/login` → `/admin/dashboard` if admin; `/admin/*` → admin role required (→ `/admin/login`); `/game/*` → player role required (→ `/login`); `/login` → redirect to `/` if player session active |
-| `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 7 schema tables |
+| `src/types/index.ts` | Shared TypeScript types + Drizzle `$inferSelect`/`$inferInsert` types for all 8 schema tables (includes `VoteWindowOverride`, `NewVoteWindowOverride`) |
 | `src/db/migrations/0000_crazy_martin_li.sql` | Initial Drizzle migration: creates all 7 game tables |
 | `src/db/migrations/0001_confused_squadron_sinister.sql` | Migration: change `users.role` default from `'member'` to `'player'` |
 | `src/db/migrations/0002_revive_cooldown.sql` | Migration: add `revive_cooldown_seconds` integer column to `game_settings` |
 | `src/db/migrations/0003_stormy_cyclops.sql` | Migration: create `app_settings` singleton table (id=1, bg_light_url, bg_dark_url) |
+| `src/db/migrations/0010_vote_window_overrides.sql` | Migration: create `vote_window_overrides` table (id, game_id, day_date, window_start, window_end, created_at) with unique(game_id, day_date) and FK cascade to games |
 | `tests/unit/validations.test.ts` | Unit tests for Zod validation schemas |
 | `tests/unit/roleUtils.test.ts` | Unit tests for `isKiller` helper |
 | `tests/unit/gameEnd.test.ts` | Unit tests for all four game-end functions (DB transaction, archiving, deletion, Ably publish) |
@@ -296,6 +298,8 @@ killer-guesser/
 | `src/test/api/revive.test.ts` | POST revive: no permission, alive target, valid revive, cooldown, Ably publish |
 | `src/test/api/tip.test.ts` | POST tip: dead caller, already tipped, killer tries, wrong/correct guess |
 | `src/test/api/vote.test.ts` | GET/POST vote: window open/closed, Spy votes, lazy-close, dead player, upsert, Ably |
+| `src/test/api/vote-window-override.test.ts` | GET/POST/DELETE /api/admin/games/[id]/vote-window-override: auth, upsert (insert vs update), delete, sorted GET |
+| `src/test/unit/voteWindow.test.ts` | resolveVoteWindow: override present/absent, no default, null game; isVoteWindowOpen: null, open, before, after, overnight |
 | `src/test/api/tip-and-vote-isolation.test.ts` | Verifies tipping and voting are independent actions |
 | `src/test/ui/AdminLogin.test.tsx` | Admin login page: password input, submit, success redirect, error display |
 | `src/test/ui/LoginScreen.test.tsx` | Player login: Play Now, avatar picker, selection, Sign In, error handling |
@@ -338,6 +342,9 @@ killer-guesser/
 | `PATCH` | `/api/admin/games/[id]/players/[playerId]` | `src/app/api/admin/games/[id]/players/[playerId]/route.ts` | Admin (403) | Update game player: is_dead (0/1) and/or role_id |
 | `POST` | `/api/admin/games/[id]/reroll` | `src/app/api/admin/games/[id]/reroll/route.ts` | Admin (403) | Re-randomise teams (?type=teams, resolveKillerCap-based evil split from game_settings) or roles (?type=roles, is_evil constraints: evil roles → evil team, good roles → good team, Killer always first) |
 | `GET` | `/api/admin/games/[id]/history` | `src/app/api/admin/games/[id]/history/route.ts` | Admin (403) | Game archive: game metadata + players (with died_location, died_time_of_day, role) + archived events (chronological) + anonymous vote tallies by day |
+| `GET` | `/api/admin/games/[id]/vote-window-override` | `src/app/api/admin/games/[id]/vote-window-override/route.ts` | Admin (403) | List all per-day vote window overrides for a game, sorted by day_date desc |
+| `POST` | `/api/admin/games/[id]/vote-window-override` | `src/app/api/admin/games/[id]/vote-window-override/route.ts` | Admin (403) | Upsert a per-day vote window override (body: `{ day_date: YYYY-MM-DD, window_start: HH:MM, window_end: HH:MM }`) — updates existing row if (game_id, day_date) already exists |
+| `DELETE` | `/api/admin/games/[id]/vote-window-override/[day_date]` | `src/app/api/admin/games/[id]/vote-window-override/[day_date]/route.ts` | Admin (403) | Delete the per-day vote window override for (game_id, day_date) |
 | `GET` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Admin (403) | Get global bg_light_url + bg_dark_url from app_settings singleton |
 | `PATCH` | `/api/admin/settings` | `src/app/api/admin/settings/route.ts` | Admin (403) | Upsert bg_light_url and/or bg_dark_url (pass null to clear) |
 | `POST` | `/api/upload/avatar` | `src/app/api/upload/avatar/route.ts` | Admin (403) | Upload avatar to Vercel Blob (webp/gif only, max 4 MB) |
