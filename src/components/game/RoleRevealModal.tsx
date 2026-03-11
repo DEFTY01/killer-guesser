@@ -42,7 +42,7 @@ export function RoleRevealModal({
       <div className="flex flex-col items-center gap-6">
         {/* Flip card */}
         <div
-          style={{ perspective: "1200px", width: 240, height: 340 }}
+          style={{ perspective: "1200px", width: "min(240px, 70vw)", height: "min(340px, 75svh)" }}
           onClick={!flipped ? reveal : undefined}
           onKeyDown={(e) => {
             if (!flipped && (e.key === "Enter" || e.key === " ")) {

@@ -458,7 +458,7 @@ function KillerGuessModal({
                     {apiError}
                   </p>
                 )}
-                <div className="player-grid max-h-72 overflow-y-auto">
+                <div className="player-grid player-grid-vote max-h-72 overflow-y-auto">
                   {alivePlayers.map((p) => (
                     <button
                       key={p.id}
@@ -912,7 +912,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
       {/* ── Player grid ─────────────────────────────────────── */}
       {isLoading && (
-        <div className="player-grid">
+        <div className="player-grid player-grid-board">
           {Array.from({ length: 6 }).map((_, i) => (
             <SkeletonCard key={i} />
           ))}
@@ -924,7 +924,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       )}
 
       {data && data.players.length > 0 && (
-        <div className="player-grid">
+        <div className="player-grid player-grid-board">
           {data.players.map((player) => (
             <PlayerCard
               key={player.id}
@@ -1122,11 +1122,12 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         <button
           type="button"
           onClick={() => setShowGuessModal(true)}
-          className="fixed right-6 z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="fixed z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
           style={{
             bottom: data
               ? "calc(5rem + var(--safe-bottom, 0px))"
               : "calc(1.5rem + var(--safe-bottom, 0px))",
+            right: "calc(1.5rem + var(--safe-right, 0px))",
           }}
           aria-label="Guess the killer"
         >
@@ -1140,7 +1141,11 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           className={`fixed bottom-0 left-0 right-0 z-40 border-t bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)] transition-colors ${
             voteActive ? "border-indigo-200" : "border-gray-100"
           }`}
-          style={{ paddingBottom: "var(--safe-bottom, 0px)" }}
+          style={{
+            paddingBottom: "var(--safe-bottom, 0px)",
+            paddingLeft: "var(--safe-left, 0px)",
+            paddingRight: "var(--safe-right, 0px)",
+          }}
         >
           <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
             {/* Status dot */}

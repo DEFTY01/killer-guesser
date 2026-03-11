@@ -344,3 +344,86 @@ textarea {
 .modal-slide-screen {
   will-change: transform;
 }
+
+/* ── Safe-area padding for login-panel in portrait ──────────────── */
+
+.login-panel {
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+}
+
+/* ── Landscape phones (< 640 px wide): centered card, not bottom-sheet ─ */
+
+@media (orientation: landscape) and (max-width: 639px) {
+  .login-panel {
+    top: 50%;
+    left: 50%;
+    right: auto;
+    bottom: auto;
+    width: min(480px, 90vw);
+    max-width: 90vw;
+    max-height: 90svh;
+    border-radius: 20px;
+    padding-left: max(16px, var(--safe-left));
+    padding-right: max(16px, var(--safe-right));
+    transform: translate(-50%, calc(-50% + 28px));
+    opacity: 0;
+    pointer-events: none;
+    transition:
+      transform 0.45s cubic-bezier(0.32, 0, 0.17, 1),
+      opacity 0.4s ease;
+  }
+
+  .login-panel.panel-open {
+    transform: translate(-50%, -50%);
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+/* ── Landscape mobile: game-board cards → horizontal scroll row ─── */
+/* ── Landscape mobile: vote tiles → 4-column grid ───────────────── */
+
+@media (orientation: landscape) and (max-height: 500px) {
+  /* Game board player grid: single scrollable row */
+  .player-grid-board {
+    display: flex;
+    flex-direction: row;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x mandatory;
+    gap: 8px;
+    /* hide scrollbar on webkit while keeping scroll behavior */
+    scrollbar-width: none;
+  }
+
+  .player-grid-board::-webkit-scrollbar {
+    display: none;
+  }
+
+  .player-grid-board > * {
+    flex: 0 0 auto;
+    width: 88px;
+    scroll-snap-align: start;
+  }
+
+  /* Vote player-tile grid: 4 columns */
+  .player-grid-vote {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 8px;
+  }
+}
+
+/* ── Sub-320px overrides ─────────────────────────────────────────── */
+
+@media (max-width: 319px) {
+  .player-grid {
+    grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
+    gap: 8px;
+  }
+
+  .login-panel {
+    padding-left: max(12px, var(--safe-left));
+    padding-right: max(12px, var(--safe-right));
+  }
+}

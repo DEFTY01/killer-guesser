@@ -22,7 +22,11 @@ export default async function GameLayout({
       {/* ── Top header ─────────────────────────────────────────── */}
       <header
         className="fixed top-0 inset-x-0 z-40 border-b border-white/20 bg-white/80 backdrop-blur-md shadow-sm"
-        style={{ paddingTop: "var(--safe-top)" }}
+        style={{
+          paddingTop: "var(--safe-top)",
+          paddingLeft: "var(--safe-left)",
+          paddingRight: "var(--safe-right)",
+        }}
       >
         <div className="flex h-14 items-center justify-between px-4 max-w-2xl mx-auto w-full">
           <Link
