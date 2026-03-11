@@ -36,6 +36,7 @@ export default async function GameDetailPage({
         team: game_players.team,
         role_id: game_players.role_id,
         is_dead: game_players.is_dead,
+        is_revived: game_players.is_revived,
         died_at: game_players.died_at,
         has_tipped: game_players.has_tipped,
         name: users.name,

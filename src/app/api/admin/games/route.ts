@@ -52,6 +52,12 @@ const createGameSchema = z.object({
     .nonnegative("revive_cooldown_seconds must be a non-negative integer")
     .optional()
     .nullable(),
+  death_animation_delay_ms: z
+    .number()
+    .int()
+    .nonnegative("death_animation_delay_ms must be a non-negative integer")
+    .optional()
+    .nullable(),
 });
 
 // ── GET /api/admin/games ──────────────────────────────────────────
@@ -144,6 +150,7 @@ export async function POST(req: NextRequest) {
     murder_item_url,
     murder_item_name,
     revive_cooldown_seconds,
+    death_animation_delay_ms,
   } = parsed.data;
 
   // ── Resolve Killer role ID from submitted roles ─────────────
@@ -251,6 +258,7 @@ export async function POST(req: NextRequest) {
       revive_cooldown_seconds: revive_cooldown_seconds ?? null,
       team1_max_players,
       team2_max_players,
+      death_animation_delay_ms: death_animation_delay_ms ?? 2000,
     });
 
     if (playerAssignments.length > 0) {

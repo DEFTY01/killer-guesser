@@ -166,7 +166,7 @@ describe("PlayerCard", () => {
     expect(screen.getByText("Undead")).toBeInTheDocument();
   });
 
-  it("default view → border color matches player's role color", () => {
+  it("default view → gray border when showRoleBorder=true but not killer (no role-color borders)", () => {
     const player = makePlayer({ role_color: "#FF5733" });
     const { container } = render(
       <PlayerCard
@@ -179,6 +179,7 @@ describe("PlayerCard", () => {
     );
 
     const card = container.firstChild as HTMLElement;
-    expect(card.style.border).toContain("rgb(255, 87, 51)");
+    // Role-color borders are no longer applied; gray border is used for all non-killer cards.
+    expect(card.style.border).toContain("rgb(229, 231, 235)");
   });
 });

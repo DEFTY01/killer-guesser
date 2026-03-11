@@ -148,6 +148,7 @@ export const game_settings = sqliteTable("game_settings", {
   revive_cooldown_minutes: integer("revive_cooldown_minutes"),
   team1_max_players: integer("team1_max_players"),
   team2_max_players: integer("team2_max_players"),
+  death_animation_delay_ms: integer("death_animation_delay_ms").default(2000),
 });
 
 // ── app_settings (singleton — id is always 1) ────────────────────
