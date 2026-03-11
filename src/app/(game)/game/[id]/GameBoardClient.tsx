@@ -788,7 +788,9 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   // ── Derived values ──────────────────────────────────────────
 
-  const canRevive = data?.caller.permissions.includes("revive_dead") ?? false;
+  const canRevive =
+    data?.caller.is_dead === 0 &&
+    (data?.caller.permissions.includes("revive_dead") ?? false);
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
   const canSeeVotes = data?.caller.permissions.includes("see_votes") ?? false;
   const isMayor = data?.caller.role_name === "Mayor";
