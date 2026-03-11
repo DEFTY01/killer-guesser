@@ -1,32 +1,69 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-  --font-cinzel: "Cinzel";
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --safe-left: env(safe-area-inset-left, 0px);
-  --safe-right: env(safe-area-inset-right, 0px);
+@theme {
+  --color-surface: var(--bg-surface);
+  --color-text-primary: var(--text-primary);
+  --color-text-muted: var(--text-muted);
+  --color-border: var(--border);
 }
 
-/* System preference fallback */
-@media (prefers-color-scheme: dark) {
-  :root:not(.light) {
+@layer base {
+  :root {
+    --background: #ffffff;
+    --foreground: #171717;
+    --font-cinzel: "Cinzel";
+    --safe-top: env(safe-area-inset-top, 0px);
+    --safe-bottom: env(safe-area-inset-bottom, 0px);
+    --safe-left: env(safe-area-inset-left, 0px);
+    --safe-right: env(safe-area-inset-right, 0px);
+    --bg-primary: #F7FBFF;
+    --bg-surface: #FFFFFF;
+    --text-primary: #0D1B2A;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+    --bg-image: none;
+    --bg-image-opacity: 0.15;
+  }
+
+  /* System preference fallback */
+  @media (prefers-color-scheme: dark) {
+    :root:not(.light) {
+      --background: #0a0a0a;
+      --foreground: #ededed;
+      --bg-primary: #0D1B2A;
+      --bg-surface: #1A2B3C;
+      --text-primary: #F7FBFF;
+      --text-muted: #9CA3AF;
+      --border: #2D3F50;
+      --bg-image: none;
+      --bg-image-opacity: 0.25;
+    }
+  }
+
+  /* next-themes class-based overrides */
+  .dark {
     --background: #0a0a0a;
     --foreground: #ededed;
+    --bg-primary: #0D1B2A;
+    --bg-surface: #1A2B3C;
+    --text-primary: #F7FBFF;
+    --text-muted: #9CA3AF;
+    --border: #2D3F50;
+    --bg-image: none;
+    --bg-image-opacity: 0.25;
   }
-}
 
-/* next-themes class-based overrides */
-:root.dark {
-  --background: #0a0a0a;
-  --foreground: #ededed;
-}
-
-:root.light {
-  --background: #ffffff;
-  --foreground: #171717;
+  .light {
+    --background: #ffffff;
+    --foreground: #171717;
+    --bg-primary: #F7FBFF;
+    --bg-surface: #FFFFFF;
+    --text-primary: #0D1B2A;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+    --bg-image: none;
+    --bg-image-opacity: 0.15;
+  }
 }
 
 html {

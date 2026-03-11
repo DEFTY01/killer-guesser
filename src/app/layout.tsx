@@ -54,6 +54,12 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
+        {/* Blocking script to apply saved theme class before first paint (no-flash) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||t==="light"){document.documentElement.classList.add(t)}else if(!t||t==="system"){if(window.matchMedia("(prefers-color-scheme:dark)").matches){document.documentElement.classList.add("dark")}}}catch(e){}})()`,
+          }}
+        />
         {/* Cinzel display font for headings — loaded at runtime from Google Fonts */}
         <link rel="preconnect" href="https://fonts.googleapis.com" />
         <link
