@@ -56,6 +56,13 @@
   .light {
     --background: #ffffff;
     --foreground: #171717;
+    --bg-primary: #F7FBFF;
+    --bg-surface: #FFFFFF;
+    --text-primary: #0D1B2A;
+    --text-muted: #6B7280;
+    --border: #E5E7EB;
+    --bg-image: none;
+    --bg-image-opacity: 0.15;
   }
 }
 
