@@ -1,7 +1,8 @@
-import { auth, signOut } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
+import SignOutButton from "@/components/SignOutButton";
 
 export default async function GameLayout({
   children,
@@ -15,11 +16,6 @@ export default async function GameLayout({
   }
 
   const user = session.user;
-
-  async function handleSignOut() {
-    "use server";
-    await signOut({ redirectTo: "/login" });
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex flex-col">
@@ -50,14 +46,10 @@ export default async function GameLayout({
             <span className="hidden sm:block text-sm font-medium text-gray-700 max-w-[120px] truncate">
               {user.name}
             </span>
-            <form action={handleSignOut}>
-              <button
-                type="submit"
-                className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
-              >
-                Sign out
-              </button>
-            </form>
+            <SignOutButton
+              redirectTo="/login"
+              className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100 transition-colors"
+            />
           </div>
         </div>
       </header>

@@ -13,15 +13,20 @@ export const metadata: Metadata = { title: "Enter the Game" };
  * avatar-picker login flow.
  */
 export default async function LoginPage() {
-  const allPlayers = await db
-    .select({
-      id: users.id,
-      nickname: users.name,
-      avatarUrl: users.avatar_url,
-    })
-    .from(users)
-    .where(eq(users.is_active, 1))
-    .then((rows) => rows.map((r) => ({ ...r, id: String(r.id) })));
+  let allPlayers: { id: string; nickname: string; avatarUrl: string | null }[] = [];
+  try {
+    allPlayers = await db
+      .select({
+        id: users.id,
+        nickname: users.name,
+        avatarUrl: users.avatar_url,
+      })
+      .from(users)
+      .where(eq(users.is_active, 1))
+      .then((rows) => rows.map((r) => ({ ...r, id: String(r.id) })));
+  } catch {
+    // Non-fatal: render with empty list so the page doesn't 500.
+  }
 
   return <LoginScreen players={allPlayers} />;
 }

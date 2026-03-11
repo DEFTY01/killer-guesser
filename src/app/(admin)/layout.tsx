@@ -1,7 +1,8 @@
-import { auth, signOut } from "@/lib/auth";
+import { auth } from "@/lib/auth";
 import { redirect } from "next/navigation";
 import Link from "next/link";
 import type { UserRole } from "@/types";
+import SignOutButton from "@/components/SignOutButton";
 
 const NAV_ITEMS = [
   { label: "Dashboard", href: "/admin/dashboard" },
@@ -22,11 +23,6 @@ export default async function AdminLayout({
     redirect("/");
   }
 
-  async function handleSignOut() {
-    "use server";
-    await signOut({ redirectTo: "/admin/login" });
-  }
-
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
       {/* ── Top header ─────────────────────────────────────────────── */}
@@ -43,14 +39,10 @@ export default async function AdminLayout({
             <span className="hidden sm:block text-sm text-gray-500">
               {session.user?.email}
             </span>
-            <form action={handleSignOut}>
-              <button
-                type="submit"
-                className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
-              >
-                Sign out
-              </button>
-            </form>
+            <SignOutButton
+              redirectTo="/admin/login"
+              className="min-h-[44px] rounded-lg border border-gray-200 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-100 transition-colors"
+            />
           </div>
         </div>
       </header>
