@@ -226,7 +226,8 @@ export async function GET(
       const top = sorted[0];
 
       // A player is eliminated only when their count is STRICTLY GREATER than
-      // all other candidates AND greater than half of total votes cast.
+      // all other candidates AND strictly greater than half of total votes cast
+      // (i.e. vote_count > 50%, so vote_count * 2 > totalVotes).
       const isStrictlyTop =
         top !== undefined &&
         (sorted.length < 2 || sorted[1].vote_count < top.vote_count);
