@@ -118,16 +118,17 @@ export function weightedRandomSelect(
 /**
  * Resolves the effective Evil team cap for a given player count.
  *
- * Player-count-based maximums:
- *   players >= 15 → max 3
- *   players >= 9  → max 2
- *   players >= 6  → max 1
- *   players < 6   → max 1 (floor)
+ * Player-count-based rules:
+ *   players ≤ 6  → exactly 1 Killer  (min 1, max 1)
+ *   players ≤ 9  → exactly 2 Killers (min 2, max 2)
+ *   players > 9  → 2–3 Killers       (min 2, max 3)
  *
- * The resolved cap is min(adminCap, killerMaxByCount), further capped to
- * totalPlayers - 1 to ensure at least one player remains on the Good team.
+ * The resolved cap is clamped to [killerMinByCount, killerMaxByCount], then
+ * further capped to totalPlayers - 1 to ensure at least one player remains
+ * on the Good team.
  *
- * If adminCap > resolvedCap, a console.warn is emitted — no exception thrown.
+ * If adminCap differs from the resolved cap, a console.warn is emitted —
+ * no exception is thrown.
  *
  * @param playerCount - Total number of players in the game.
  * @param adminCap    - The cap requested by the admin.
@@ -137,17 +138,24 @@ export function resolveKillerCap(
   playerCount: number,
   adminCap: number,
 ): number {
+  let killerMinByCount: number;
   let killerMaxByCount: number;
-  if (playerCount >= 15) {
-    killerMaxByCount = 3;
-  } else if (playerCount >= 9) {
+
+  if (playerCount <= 6) {
+    killerMinByCount = 1;
+    killerMaxByCount = 1;
+  } else if (playerCount <= 9) {
+    killerMinByCount = 2;
     killerMaxByCount = 2;
   } else {
-    killerMaxByCount = 1;
+    // 10+ players (covers ≤ 15 and beyond)
+    killerMinByCount = 2;
+    killerMaxByCount = 3;
   }
 
-  // Cap to player-count-based maximum
+  // Clamp to player-count-based [min, max]
   let resolvedCap = Math.min(adminCap, killerMaxByCount);
+  resolvedCap = Math.max(resolvedCap, killerMinByCount);
 
   // Always leave at least 1 player in the Good team
   resolvedCap = Math.min(resolvedCap, playerCount - 1);
@@ -155,11 +163,10 @@ export function resolveKillerCap(
   // Ensure at least 1
   resolvedCap = Math.max(resolvedCap, 1);
 
-  if (adminCap > resolvedCap) {
+  if (adminCap !== resolvedCap) {
     console.warn(
-      `[resolveKillerCap] Admin requested Evil team cap of ${adminCap} but it was reduced to ${resolvedCap} ` +
-        `(player-count-based max for ${playerCount} players: ${killerMaxByCount}, ` +
-        `must leave at least 1 player in Good team).`,
+      `[resolveKillerCap] Admin requested Evil team cap of ${adminCap} but it was adjusted to ${resolvedCap} ` +
+        `(player-count-based range for ${playerCount} players: ${killerMinByCount}–${killerMaxByCount}).`,
     );
   }
 

@@ -73,20 +73,35 @@ describe("weightedRandomSelect", () => {
 // ── resolveKillerCap ──────────────────────────────────────────────
 
 describe("resolveKillerCap", () => {
-  it("returns 1 for 4 players (< 6)", () => {
+  // ≤ 6 players: exactly 1 killer
+  it("returns 1 for 4 players (≤ 6)", () => {
     expect(resolveKillerCap(4, 3)).toBe(1);
   });
 
-  it("returns 1 for 6 players (>= 6)", () => {
+  it("returns 1 for 6 players (≤ 6)", () => {
     expect(resolveKillerCap(6, 5)).toBe(1);
   });
 
-  it("returns max 2 for 9 players", () => {
+  // 7–9 players: exactly 2 killers (min 2, max 2)
+  it("returns 2 for 7 players even when adminCap is 1 (minimum enforced)", () => {
+    expect(resolveKillerCap(7, 1)).toBe(2);
+  });
+
+  it("returns 2 for 9 players when adminCap is 5 (max 2 for ≤ 9)", () => {
     expect(resolveKillerCap(9, 5)).toBe(2);
   });
 
-  it("returns max 3 for 15 players", () => {
+  it("returns 2 for 9 players even when adminCap is 1 (minimum enforced)", () => {
+    expect(resolveKillerCap(9, 1)).toBe(2);
+  });
+
+  // 10+ players: min 2, max 3
+  it("returns 3 for 15 players when adminCap is 5", () => {
     expect(resolveKillerCap(15, 5)).toBe(3);
+  });
+
+  it("returns 2 for 10 players when adminCap is 1 (minimum enforced)", () => {
+    expect(resolveKillerCap(10, 1)).toBe(2);
   });
 
   it("returns max 3 for 20 players", () => {
@@ -104,9 +119,16 @@ describe("resolveKillerCap", () => {
     expect(resolveKillerCap(9, 9)).toBe(2);
   });
 
-  it("emits console.warn when adminCap is overridden", () => {
+  it("emits console.warn when adminCap exceeds resolved cap", () => {
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
     resolveKillerCap(6, 5); // adminCap 5 > resolved 1
+    expect(warnSpy).toHaveBeenCalled();
+    warnSpy.mockRestore();
+  });
+
+  it("emits console.warn when adminCap is below minimum", () => {
+    const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {});
+    resolveKillerCap(9, 1); // adminCap 1 < min 2, raised to 2
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });

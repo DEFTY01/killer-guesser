@@ -232,6 +232,29 @@ export function NewGameWizard({ players, roles }: Props) {
     return null;
   }
 
+  /**
+   * Returns the allowed Killer (Evil team) size range for the current player
+   * count, matching the server-side resolveKillerCap rules:
+   *   ≤ 6  → exactly 1
+   *   ≤ 9  → exactly 2
+   *   10+  → 2–3
+   */
+  function getKillerCapRange(): { min: number; max: number } | null {
+    const total = step2.selectedIds.length;
+    if (total === 0) return null;
+    if (total <= 6) return { min: 1, max: 1 };
+    if (total <= 9) return { min: 2, max: 2 };
+    return { min: 2, max: 3 };
+  }
+
+  /** Returns a hint string for the Evil team cap input. */
+  function getEvilCapHint(): string | null {
+    const range = getKillerCapRange();
+    if (!range) return null;
+    if (range.min === range.max) return `Must be exactly ${range.min} for ${step2.selectedIds.length} players`;
+    return `${range.min}–${range.max} for ${step2.selectedIds.length} players`;
+  }
+
   function handleStep2Next() {
     if (step2.selectedIds.length === 0) {
       setStep2Error("Select at least one player.");
@@ -607,7 +630,7 @@ export function NewGameWizard({ players, roles }: Props) {
                 htmlFor="team1-max"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Max players in {step2.team1Name || "Team 1"}
+                {step2.isEvilTeam1 ? "☠ " : ""}Max players in {step2.team1Name || "Team 1"}
               </label>
               <input
                 id="team1-max"
@@ -622,13 +645,16 @@ export function NewGameWizard({ players, roles }: Props) {
                 }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
+              {step2.isEvilTeam1 && getEvilCapHint() && (
+                <p className="mt-1 text-xs text-gray-500">{getEvilCapHint()}</p>
+              )}
             </div>
             <div>
               <label
                 htmlFor="team2-max"
                 className="block text-sm font-medium text-gray-700 mb-1"
               >
-                Max players in {step2.team2Name || "Team 2"}
+                {!step2.isEvilTeam1 ? "☠ " : ""}Max players in {step2.team2Name || "Team 2"}
               </label>
               <input
                 id="team2-max"
@@ -643,6 +669,9 @@ export function NewGameWizard({ players, roles }: Props) {
                 }
                 className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
               />
+              {!step2.isEvilTeam1 && getEvilCapHint() && (
+                <p className="mt-1 text-xs text-gray-500">{getEvilCapHint()}</p>
+              )}
             </div>
           </div>
 
