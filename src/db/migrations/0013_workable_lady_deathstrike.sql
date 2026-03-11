@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX `votes_game_day_voter_unique` ON `votes` (`game_id`,`day`,`voter_id`);
