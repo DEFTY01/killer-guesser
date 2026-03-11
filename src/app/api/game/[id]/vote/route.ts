@@ -13,16 +13,16 @@ import { checkGameOver } from "@/lib/gameEnd";
 // once) we would otherwise fire a separate VOTE_CAST publish for each.  The
 // 500 ms debounce collapses those into a single message per game/day,
 // significantly reducing Ably message volume.
-const _voteCastDebounce = new Map<string, ReturnType<typeof setTimeout>>();
+const voteCastDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
 
 function debounceVoteCast(key: string, callback: () => void): void {
-  const existing = _voteCastDebounce.get(key);
+  const existing = voteCastDebounceTimers.get(key);
   if (existing !== undefined) clearTimeout(existing);
   const timer = setTimeout(() => {
-    _voteCastDebounce.delete(key);
+    voteCastDebounceTimers.delete(key);
     callback();
   }, 500);
-  _voteCastDebounce.set(key, timer);
+  voteCastDebounceTimers.set(key, timer);
 }
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -652,11 +652,13 @@ export async function POST(
     const targetName = targetUser?.name ?? "Unknown";
     debounceVoteCast(debounceKey, () => {
       const channel = ablyServer.channels.get(ABLY_CHANNELS.vote(gameId, day));
-      void channel.publish(ABLY_EVENTS.vote_cast, {
+      channel.publish(ABLY_EVENTS.vote_cast, {
         voterId: userId,
         voterName,
         targetId,
         targetName,
+      }).catch((err: unknown) => {
+        console.error("[vote] VOTE_CAST publish failed:", err);
       });
     });
   }

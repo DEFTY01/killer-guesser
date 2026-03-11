@@ -142,8 +142,10 @@ describe("handleGoodWins", () => {
     await handleGoodWins("game123");
     // archiveAndCleanEvents now runs outside the transaction via db.update
     expect(mockDbUpdate).toHaveBeenCalled();
-    const setArg = mockDbUpdate.mock.results[0]?.value as { set: ReturnType<typeof vi.fn> } | undefined;
-    expect(setArg?.set).toHaveBeenCalledWith(expect.objectContaining({ is_archived: 1 }));
+    const callResult = mockDbUpdate.mock.results[0];
+    expect(callResult).toBeDefined();
+    const setFn = (callResult?.value as { set: ReturnType<typeof vi.fn> }).set;
+    expect(setFn).toHaveBeenCalledWith(expect.objectContaining({ is_archived: 1 }));
   });
 
   it("closes the game (set status = 'closed')", async () => {
@@ -198,8 +200,10 @@ describe("handleEvilWins", () => {
     await handleEvilWins("game456");
     // archiveAndCleanEvents now runs outside the transaction via db.update
     expect(mockDbUpdate).toHaveBeenCalled();
-    const setArg = mockDbUpdate.mock.results[0]?.value as { set: ReturnType<typeof vi.fn> } | undefined;
-    expect(setArg?.set).toHaveBeenCalledWith(expect.objectContaining({ is_archived: 1 }));
+    const callResult = mockDbUpdate.mock.results[0];
+    expect(callResult).toBeDefined();
+    const setFn = (callResult?.value as { set: ReturnType<typeof vi.fn> }).set;
+    expect(setFn).toHaveBeenCalledWith(expect.objectContaining({ is_archived: 1 }));
   });
 
   it("closes the game (set status = 'closed')", async () => {
