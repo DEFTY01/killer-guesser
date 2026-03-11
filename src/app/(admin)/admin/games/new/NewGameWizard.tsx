@@ -3,8 +3,64 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
-import { fromZonedTime } from "date-fns-tz";
 import type { User, Role } from "@/types";
+
+// ── Curated IANA timezone list with display names ─────────────────
+
+const IANA_TIMEZONES = [
+  "UTC",
+  "Europe/London",
+  "Europe/Dublin",
+  "Europe/Lisbon",
+  "Europe/Paris",
+  "Europe/Berlin",
+  "Europe/Rome",
+  "Europe/Madrid",
+  "Europe/Amsterdam",
+  "Europe/Brussels",
+  "Europe/Vienna",
+  "Europe/Budapest",
+  "Europe/Warsaw",
+  "Europe/Prague",
+  "Europe/Stockholm",
+  "Europe/Helsinki",
+  "Europe/Athens",
+  "Europe/Istanbul",
+  "Europe/Moscow",
+  "America/New_York",
+  "America/Chicago",
+  "America/Denver",
+  "America/Los_Angeles",
+  "America/Toronto",
+  "America/Sao_Paulo",
+  "America/Buenos_Aires",
+  "America/Mexico_City",
+  "Asia/Dubai",
+  "Asia/Kolkata",
+  "Asia/Bangkok",
+  "Asia/Singapore",
+  "Asia/Tokyo",
+  "Asia/Seoul",
+  "Asia/Shanghai",
+  "Australia/Sydney",
+  "Pacific/Auckland",
+] as const;
+
+/** Format UTC offset for a timezone at the current instant, e.g. "UTC+2". */
+function fmtOffset(tz: string): string {
+  try {
+    const now = new Date();
+    const parts = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      timeZoneName: "shortOffset",
+    }).formatToParts(now);
+    const offset = parts.find((p) => p.type === "timeZoneName")?.value ?? "";
+    // shortOffset returns e.g. "GMT+2" — convert to "UTC+2"
+    return offset.replace("GMT", "UTC");
+  } catch {
+    return "UTC";
+  }
+}
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -12,6 +68,7 @@ interface Step1State {
   name: string;
   startDate: string; // YYYY-MM-DD
   startTime: string; // HH:MM
+  timezone: string;  // IANA timezone
   voteStart: string; // "HH:MM"
   voteEnd: string;   // "HH:MM"
 }
@@ -127,6 +184,7 @@ export function NewGameWizard({ players, roles }: Props) {
     name: "",
     startDate: "",
     startTime: "",
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     voteStart: "",
     voteEnd: "",
   });
@@ -297,15 +355,37 @@ export function NewGameWizard({ players, roles }: Props) {
     setSubmitError(null);
     setSubmitting(true);
 
-    // Convert Budapest time to UTC
+    // Convert local datetime to UTC using the selected timezone
     const dateTimeStr = `${step1.startDate}T${step1.startTime}`;
-    const budapestDate = new Date(dateTimeStr);
-    const utcDate = fromZonedTime(budapestDate, "Europe/Budapest");
-    const startTime = Math.floor(utcDate.getTime() / 1000);
+    // Parse as wall-clock time in the selected timezone by leveraging
+    // Intl.DateTimeFormat offset computation.
+    const naiveDate = new Date(dateTimeStr);
+    // Get the UTC offset for this timezone at the given instant.
+    const tzParts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: step1.timezone,
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+      second: "2-digit",
+      hour12: false,
+    }).formatToParts(naiveDate);
+    const localY = parseInt(tzParts.find((p) => p.type === "year")?.value ?? "2000", 10);
+    const localMo = parseInt(tzParts.find((p) => p.type === "month")?.value ?? "1", 10);
+    const localD = parseInt(tzParts.find((p) => p.type === "day")?.value ?? "1", 10);
+    const localH = parseInt(tzParts.find((p) => p.type === "hour")?.value ?? "0", 10) % 24;
+    const localMi = parseInt(tzParts.find((p) => p.type === "minute")?.value ?? "0", 10);
+    const localS = parseInt(tzParts.find((p) => p.type === "second")?.value ?? "0", 10);
+    const localAsUtcMs = Date.UTC(localY, localMo - 1, localD, localH, localMi, localS);
+    const offsetMs = localAsUtcMs - naiveDate.getTime();
+    const utcMs = naiveDate.getTime() - offsetMs;
+    const startTime = Math.floor(utcMs / 1000);
 
     const body = {
       name: step1.name.trim(),
       start_time: startTime,
+      timezone: step1.timezone,
       vote_window_start: step1.voteStart || null,
       vote_window_end: step1.voteEnd || null,
       team1_name: step2.team1Name.trim() || "Evil",
@@ -452,8 +532,35 @@ export function NewGameWizard({ players, roles }: Props) {
               </div>
             </div>
             <p className="text-xs text-gray-500 -mt-2">
-              Times in Europe/Budapest timezone
+              Times interpreted in the selected timezone below
             </p>
+
+            {/* Timezone picker */}
+            <div>
+              <label
+                htmlFor="timezone"
+                className="block text-sm font-medium text-gray-700 mb-1"
+              >
+                Game timezone
+              </label>
+              <select
+                id="timezone"
+                value={step1.timezone}
+                onChange={(e) =>
+                  setStep1((p) => ({ ...p, timezone: e.target.value }))
+                }
+                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              >
+                {IANA_TIMEZONES.map((tz) => (
+                  <option key={tz} value={tz}>
+                    {tz} ({fmtOffset(tz)})
+                  </option>
+                ))}
+              </select>
+              <p className="mt-1 text-xs text-gray-500">
+                Start time and vote window are interpreted in this timezone.
+              </p>
+            </div>
 
             {/* Vote window */}
             <div className="grid grid-cols-2 gap-4">

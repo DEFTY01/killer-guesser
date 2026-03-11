@@ -29,6 +29,10 @@ const patchGameSchema = z.discriminatedUnion("action", [
       .nullable(),
   }),
   z.object({
+    action: z.literal("update_timezone"),
+    timezone: z.string().min(1).max(100),
+  }),
+  z.object({
     action: z.literal("close_voting"),
   }),
   z.object({ action: z.literal("start") }),
@@ -197,6 +201,16 @@ export async function PATCH(
     const [updated] = await db
       .update(games)
       .set({ vote_window_start, vote_window_end })
+      .where(eq(games.id, id))
+      .returning();
+    return NextResponse.json({ success: true, data: updated });
+  }
+
+  if (action === "update_timezone") {
+    const { timezone } = parsed.data;
+    const [updated] = await db
+      .update(games)
+      .set({ timezone })
       .where(eq(games.id, id))
       .returning();
     return NextResponse.json({ success: true, data: updated });

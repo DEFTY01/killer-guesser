@@ -105,6 +105,7 @@ export async function GET(
       team2_name: games.team2_name,
       vote_window_start: games.vote_window_start,
       vote_window_end: games.vote_window_end,
+      timezone: games.timezone,
     })
     .from(games)
     .where(eq(games.id, gameId))
@@ -220,6 +221,7 @@ export async function GET(
       vote_window_start: string | null;
       vote_window_end: string | null;
       current_day: number;
+      game_timezone: string;
     };
     settings: {
       murder_item_url: string | null;
@@ -257,6 +259,7 @@ export async function GET(
       vote_window_start: game.vote_window_start,
       vote_window_end: game.vote_window_end,
       current_day: currentDay,
+      game_timezone: game.timezone,
     },
     settings: {
       murder_item_url: settings?.murder_item_url ?? null,
