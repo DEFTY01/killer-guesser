@@ -41,35 +41,40 @@ export function useAbly(
   eventName: string,
   onMessage: (message: Message) => void,
 ): void {
-  // Keep a ref to the latest callback so that the subscription never needs
-  // to be re-established when the caller's closure changes between renders.
   const callbackRef = useRef(onMessage);
   useEffect(() => {
     callbackRef.current = onMessage;
   });
 
-  // A stable wrapper that always delegates to the latest callback reference.
   const stableCallback = useCallback(
     (message: Message) => callbackRef.current(message),
     [],
   );
 
+  const activeSubRef = useRef<{ channelName: string; eventName: string } | null>(null);
+
   useEffect(() => {
+    if (
+      activeSubRef.current?.channelName === channelName &&
+      activeSubRef.current?.eventName === eventName
+    ) {
+      return undefined;
+    }
+
     let channel: ReturnType<InstanceType<typeof Ably.Realtime>["channels"]["get"]> | null = null;
     try {
       const client = getAblyClient();
       channel = client.channels.get(channelName);
       channel.subscribe(eventName, stableCallback);
+      activeSubRef.current = { channelName, eventName };
     } catch {
-      // Ably is unavailable (e.g. missing API key in this environment).
-      // Fail silently — real-time updates won't arrive but the board is
-      // still fully usable via manual refresh.
-      return;
+      return undefined;
     }
 
     return () => {
       try {
         channel?.unsubscribe(eventName, stableCallback);
+        activeSubRef.current = null;
       } catch {
         // Ignore cleanup errors
       }

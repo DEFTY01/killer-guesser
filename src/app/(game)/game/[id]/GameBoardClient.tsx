@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -757,6 +757,10 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
     });
   }, []);
 
+  const handleSelfTap = useCallback(() => setShowDeathModal(true), []);
+
+  const memoizedPlayers = useMemo(() => data?.players ?? [], [data?.players]);
+
   // ── Ably: PLAYER_DIED ───────────────────────────────────────
 
   useAbly(
@@ -919,13 +923,13 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         </div>
       )}
 
-      {data && data.players.length === 0 && (
+      {data && memoizedPlayers.length === 0 && (
         <p className="text-center text-gray-400 py-12">No players found</p>
       )}
 
-      {data && data.players.length > 0 && (
+      {data && memoizedPlayers.length > 0 && (
         <div className="player-grid player-grid-board">
-          {data.players.map((player) => (
+          {memoizedPlayers.map((player) => (
             <PlayerCard
               key={player.id}
               player={player}
@@ -936,7 +940,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               showRoleBorder={canSeeColors}
               team1Name={data.game.team1_name}
               team2Name={data.game.team2_name}
-              onSelfTap={() => setShowDeathModal(true)}
+              onSelfTap={handleSelfTap}
               onRevive={handleRevive}
             />
           ))}
