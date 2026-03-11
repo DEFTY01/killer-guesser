@@ -99,22 +99,28 @@ export const game_players = sqliteTable("game_players", {
 
 // ── votes ─────────────────────────────────────────────────────────
 
-export const votes = sqliteTable("votes", {
-  id: integer("id").primaryKey({ autoIncrement: true }),
-  game_id: text("game_id")
-    .notNull()
-    .references(() => games.id, { onDelete: "cascade" }),
-  day: integer("day").notNull(),
-  voter_id: integer("voter_id")
-    .notNull()
-    .references(() => users.id),
-  target_id: integer("target_id")
-    .notNull()
-    .references(() => users.id),
-  created_at: integer("created_at")
-    .notNull()
-    .default(sql`(unixepoch())`),
-});
+export const votes = sqliteTable(
+  "votes",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    game_id: text("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    day: integer("day").notNull(),
+    voter_id: integer("voter_id")
+      .notNull()
+      .references(() => users.id),
+    target_id: integer("target_id")
+      .notNull()
+      .references(() => users.id),
+    created_at: integer("created_at")
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [
+    unique("votes_game_day_voter_unique").on(t.game_id, t.day, t.voter_id),
+  ],
+);
 
 // ── events ────────────────────────────────────────────────────────
 

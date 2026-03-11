@@ -85,6 +85,13 @@
       "when": 1741700000000,
       "tag": "0011_death_animation_delay",
       "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "6",
+      "when": 1741800000000,
+      "tag": "0012_votes_unique_voter_per_day",
+      "breakpoints": true
     }
   ]
 }
