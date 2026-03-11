@@ -6,26 +6,31 @@ A real-time social deduction game for ski trip groups. Players are secretly spli
 
 ## How It Works
 
-1. **Admin creates a game** — the admin assigns players to two teams, picks a
-   secret murder weapon, sets a daily voting window (HH:MM UTC), and rolls
-   hidden roles for each player (Killer, Seer, Healer, Mayor, …).
-2. **Players join the lobby** — each player logs in by clicking their avatar,
-   then sees which game they belong to and who their team-mates are.
-3. **The game begins** — players can see the murder-weapon card and the live
-   player grid.  Each night one player can die; during the day players try to
-   identify the killer.
+1. **Admin creates a game** — assigns players to two teams (Evil / Good), picks a
+   secret murder weapon (image + name), sets a daily vote window (HH:MM in the
+   game's IANA timezone), and rolls hidden roles server-side (Killer, Survivor,
+   Seer, Healer, Mayor, Spy).
+2. **Players join the lobby** — each player signs in by clicking their avatar;
+   the lobby shows active games, upcoming games with a live countdown, and past
+   games with a win/loss indicator.
+3. **The game begins** — on first join each player sees a tap-to-flip role reveal
+   card (shows role name, team, and description).  They can then view the
+   murder-weapon card and the live player grid.
 4. **Role abilities** (resolved server-side, never exposed to unauthorized callers):
-   - **Killer** — wins when all opposing players are eliminated.
-   - **Seer** — can see the killer's identity on the board.
-   - **Healer** — can revive one dead player (subject to a cooldown).
-   - **Mayor** — strips role/team info from the board (can't reveal allegiances).
-   - **Spy** — can see all votes cast during the vote window.
-5. **Voting** — during the configured vote window players cast one vote per day.
-   The player with the majority of votes is eliminated.  The Killer can also be
-   identified directly by a living player's **Guess the Killer** tip (one per player).
-6. **Game ends** — either the killer is voted out / correctly tipped, or the
-   killer eliminates all opposing players.  Results are published over Ably in
-   real time and a results modal is shown to all players.
+   - **Killer** — evil team; wins when all good team members are eliminated.
+   - **Survivor** — good team default; no special abilities.
+   - **Seer** — sees the Killer highlighted on the board.
+   - **Healer** — can revive dead players (configurable cooldown); revived players
+     become Undead and can be re-killed.
+   - **Mayor** — sees an anonymous board (no role colors or team info).
+   - **Spy** — sees a live vote-cast list during the vote window via Ably.
+5. **Voting & tips** — during the vote window players cast one vote per day; most
+   votes eliminates a player.  Any living non-Killer player can also make a
+   one-time daytime **Guess the Killer** tip: correct → Killer eliminated and Good
+   wins; wrong → the accuser dies.
+6. **Game ends** — when all Evil or all Good players are eliminated, results are
+   broadcast over Ably in real time.  Players are taken to a post-game summary
+   showing the winner, full role/fate table, and day-by-day vote history.
 
 ---
 
@@ -41,7 +46,7 @@ A real-time social deduction game for ski trip groups. Players are secretly spli
 - Medic revival with configurable cooldown; Undead status; re-death supported
 - Seer sees all Killer cards; Mayor sees anonymous board; Spy sees live vote breakdown
 - Multi-killer win condition: Good team wins only when all Evil team members are eliminated
-- Role reveal card on first game join (flip animation, DB-persisted show-once)
+- Role reveal card on first game join (flip animation, sessionStorage show-once per browser session)
 
 ### Admin Panel
 
@@ -139,35 +144,40 @@ npm run dev
 
 ### Admin panel (`/admin`)
 
-- **Player management** — create, edit, soft-delete player accounts; upload 500 × 500 px avatars to Vercel Blob.
-- **Role management** — create / edit roles with name, team affiliation, weighted chance percentage, color, description, and permission flags (`see_killer`, `revive_dead`, `see_votes`, `extra_vote`, `immunity_once`).
-- **Game creation wizard** — 4-step wizard: game details (name, start time, vote window), player–team assignment (avatar grid + randomize), role/settings (murder item image + name, revive cooldown), summary + submit.  Entire creation is atomic (single DB transaction).
-- **Live game editor** — status bar, inline role selector per player, mark-player-dead toggle, vote-window editor, team/role re-roll, close-voting action (computes results + publishes Ably event), end/delete game.
-- **Game history** — read-only post-game archive: header card, day-by-day event timeline, player fates table (avatar/role/team/death), per-day anonymous vote bar charts.
-- **Theme settings** — upload light/dark background images; reset to default.
+- **Player management** — create, edit, soft-delete player accounts; upload avatars (webp / gif / png / jpeg, max 4 MB) resized to 500 × 500 px PNG via Sharp and stored in Vercel Blob.
+- **Role management** — create / edit roles with name, evil flag (`is_evil`), weighted chance percentage, color, description, and permission flags (`see_killer`, `revive_dead`, `see_votes`, `extra_vote`, `immunity_once`).
+- **Game creation wizard** — 4-step: ① game details (name, start time, IANA timezone, vote window), ② player–team assignment (avatar grid + randomize, Evil team checkbox), ③ role config (murder item image + name, per-team role selector with chance sliders, revive cooldown, team size caps), ④ summary + submit.  Entire creation is a single atomic DB transaction.
+- **Live game editor** — status bar, inline role selector per player, mark-player-dead toggle, per-day vote-window override, team/role re-roll (Killer cap rules enforced), close-voting action (computes results + publishes `VOTE_CLOSED`), spoiler toggle, end/delete game.
+- **Game history** — read-only post-game archive: header card, day-by-day event timeline, player fates table (avatar/role/team/dead/undead), per-day anonymous vote bar charts.
+- **Theme settings** — upload global light/dark background images (stored in `app_settings`); per-game light/dark backgrounds override the global default.
 
 ### Player game (`/game`)
 
-- **Avatar-click login** — players sign in by clicking their avatar; Auth.js JWT session issued with role + game assignment.
-- **Lobby** — active, upcoming (with countdown), and past games (win/loss indicator); skeleton loading states.
-- **Participants page** — pre-game avatar grid with team badges (no role or dead info exposed).
-- **Game board** — murder-weapon card (fullscreen modal), live player grid (dead overlay, killer border for Seer, revive button for Healer), self-death modal (location + time-of-day).
-  - **Seer** 👁️ — sees `killer_id` and killer border on board.
-  - **Mayor** ⚖️ — stripped board (no role colors, no team).
-  - **Healer** 💊 — revive button on dead players (cooldown enforced server-side).
-  - **Guess the Killer** 🔍 FAB — visible for living non-killer players who haven't tipped yet.
-- **Voting page** — vote for a suspect; collapsible "Secret Info 🕵️" panel for Spy (live vote list via Ably); results view when vote is closed.
-- **Real-time events** — `PLAYER_DIED`, `PLAYER_REVIVED`, `VOTE_CAST`, `VOTE_CLOSED`, `GAME_ENDED` all delivered over Ably and reflected instantly in the UI.
+- **Avatar-click login** — players sign in by clicking their avatar; NextAuth v5 JWT session issued with role + active game ID.
+- **Lobby** — active games (direct link), upcoming games (live countdown), and past games (win/loss indicator); skeleton loading states.
+- **Pre-game waiting room** — `/game/[id]/lobby`; shows scheduled start time, live participant avatar grid, auto-redirects when game activates.
+- **Participants page** — `/participants`; avatar grid with team badges (no role or death info exposed).
+- **Game board** (`/game/[id]`):
+  - **Role reveal modal** — tap-to-flip card on first join; shows role name, team name, and description; shown once per browser session (stored in sessionStorage per game ID).
+  - **Murder weapon card** — image + name; tap for fullscreen modal.
+  - **Player grid** — dead overlay, self-death modal (location + time-of-day picker).
+  - **Seer** 👁️ — sees `killer_id` and killer red border on board.
+  - **Mayor** ⚖️ — stripped board (no role colors, no team info).
+  - **Healer** 💊 — revive button on dead players (cooldown enforced server-side); revived players shown as Undead.
+  - **Guess the Killer** 🔍 FAB — 3-screen modal: select suspect → confirm ("if you're wrong, you die!") → result; one-time use per player.
+- **Voting page** (`/game/[id]/vote/[day]`) — vote for a suspect; Spy sees a live vote-cast list via Ably (`VOTE_CAST` events); closed window shows ranked results.
+- **Post-game summary** (`/game/[id]/summary`) — winner banner with personal win/loss, full player list (role, team, dead/undead/survived, death location + accused name), vote history by day.
+- **Real-time events** — `PLAYER_DIED`, `PLAYER_REVIVED`, `VOTE_CAST`, `VOTE_CLOSED`, `GAME_ENDED` delivered over Ably and reflected instantly in the UI.
 
 ### Security
 
-- All admin API routes require an `admin_session` httpOnly cookie; absence returns 403.
-- Admin password comparison uses `crypto.timingSafeEqual` over SHA-256 hashes — no timing side-channel.
-- `ADMIN_PASSWORD` is never logged or stored in the database.
-- The admin identity is never included in player lists (admin is not a DB user).
+- All admin API routes require a valid NextAuth session with `role = "admin"`; absence returns 403.
+- Admin password comparison uses `crypto.timingSafeEqual` over SHA-256 hashes — prevents timing side-channel attacks.
+- `ADMIN_PASSWORD` is never logged or stored in the database; admin identity is never included in player lists.
 - `killer_id` is only returned to callers whose role has the `see_killer` permission.
 - Vote details are only returned to callers whose role has the `see_votes` permission.
 - Every POST/PATCH body is validated with Zod before any database write.
+- Upload routes (`/api/upload/avatar`, `/api/upload/background`, `/api/upload/murder-item`) require admin session; enforce 4 MB size limit and MIME-type allowlist.
 
 ---
 
@@ -178,12 +188,27 @@ npm run dev
 > Planned screenshots:
 > - Landing / home page
 > - Player avatar-click login
-> - Game board (player view)
-> - Voting page
-> - Admin dashboard
-> - Admin game creation wizard
+> - Lobby (active, upcoming with countdown, past games)
+> - Pre-game waiting room with participant grid
+> - Role reveal card (tap-to-flip)
+> - Game board — murder weapon card (fullscreen)
+> - Game board — Seer view (killer highlighted)
+> - Game board — Healer view (revive buttons)
+> - Self-death modal (location + time-of-day)
+> - Killer Guess modal (3-screen flow)
+> - Voting page — open window
+> - Voting page — Spy live vote list
+> - Voting page — results view
+> - Post-game summary (winner banner + role/fate table)
+> - Participants page
+> - Admin login
+> - Admin dashboard (stats + theme settings)
+> - Admin player management
+> - Admin role management
+> - Admin games list
+> - 4-step game creation wizard
 > - Live game editor
-> - Post-game history viewer
+> - Post-game archive (history viewer)
 
 ---
 
