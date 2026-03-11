@@ -82,7 +82,7 @@ export async function resizeAvatar(input: Buffer): Promise<ProcessedAvatar> {
     // Crop to a centred square, then resize — preserves faces.
     .resize(AVATAR_SIZE, AVATAR_SIZE, {
       fit: "cover",
-      position: "attention", // libvips smart-crop: keeps the most interesting region
+      position: "centre", // fixed center-crop for predictable framing
       kernel: sharp.kernel.lanczos3,
     })
     .png()
