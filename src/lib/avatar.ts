@@ -19,6 +19,42 @@ import sharp from "sharp";
 
 export const AVATAR_SIZE = 500;
 
+/**
+ * The intermediate grid size used for pixel-art downscaling.
+ * 500 / 64 ≈ 7.8 px per "pixel block" — gives a classic 16-bit sprite look.
+ */
+const PIXEL_GRID = 64;
+
+/**
+ * Apply a 16-bit style pixel art effect to an already-sized 500 × 500 PNG buffer.
+ *
+ * Process:
+ *  1. Shrink to PIXEL_GRID × PIXEL_GRID with nearest-neighbour (creates blocks).
+ *  2. Upscale back to AVATAR_SIZE × AVATAR_SIZE with nearest-neighbour
+ *     (preserves hard pixel edges — no anti-aliasing).
+ *  3. Quantise to a 256-colour palette (simulates 8-bit per channel / 16-bit total).
+ *
+ * @param input - PNG buffer at AVATAR_SIZE × AVATAR_SIZE.
+ * @returns Pixel-art PNG buffer at AVATAR_SIZE × AVATAR_SIZE.
+ */
+export async function applyPixelArtEffect(input: Buffer): Promise<Buffer> {
+  const small = await sharp(input)
+    .resize(PIXEL_GRID, PIXEL_GRID, {
+      fit: "fill",
+      kernel: sharp.kernel.nearest,
+    })
+    .png()
+    .toBuffer();
+
+  return sharp(small)
+    .resize(AVATAR_SIZE, AVATAR_SIZE, {
+      fit: "fill",
+      kernel: sharp.kernel.nearest,
+    })
+    .png({ palette: true, colors: 256 })
+    .toBuffer();
+}
+
 export interface ProcessedAvatar {
   /** PNG buffer, exactly AVATAR_SIZE × AVATAR_SIZE */
   buffer: Buffer;
@@ -41,15 +77,19 @@ export interface ProcessedAvatar {
  * @returns Processed PNG buffer and metadata.
  */
 export async function resizeAvatar(input: Buffer): Promise<ProcessedAvatar> {
-  const buffer = await sharp(input)
+  // Step 1 — Lanczos3 high-quality resize (neural-quality resampling).
+  const resized = await sharp(input)
     // Crop to a centred square, then resize — preserves faces.
     .resize(AVATAR_SIZE, AVATAR_SIZE, {
       fit: "cover",
       position: "attention", // libvips smart-crop: keeps the most interesting region
       kernel: sharp.kernel.lanczos3,
     })
-    .png({ quality: 90, compressionLevel: 8 })
+    .png()
     .toBuffer();
+
+  // Step 2 — Convert to 16-bit style pixel art.
+  const buffer = await applyPixelArtEffect(resized);
 
   return {
     buffer,

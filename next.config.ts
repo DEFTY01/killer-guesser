@@ -14,8 +14,10 @@ const nextConfig: NextConfig = {
         hostname: "**.turso.io",
       },
       {
+        // Matches both public (*.public.blob.vercel-storage.com) and
+        // private (*.private.blob.vercel-storage.com) Vercel Blob stores.
         protocol: "https",
-        hostname: "blob.vercel-storage.com",
+        hostname: "**.blob.vercel-storage.com",
       },
     ],
   },

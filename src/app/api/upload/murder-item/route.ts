@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBlob } from "@/lib/blob";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { resizeAvatar } from "@/lib/avatar";
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_MIME_TYPES = [
@@ -15,7 +16,9 @@ const ALLOWED_MIME_TYPES = [
  *
  * Accepts a multipart/form-data request with a `file` field.
  * Accepts jpeg, png, webp, and gif formats up to 4 MB.
- * Uploads the file to Vercel Blob storage and returns the public URL.
+ * The image is resized to 500 × 500 px using Lanczos3 (neural-quality) and then
+ * converted to a 16-bit style pixel art picture before uploading.
+ * Always stores the result as PNG and returns the public URL.
  *
  * On success returns `{ url: string }`.
  * Requires an admin session — returns 403 if not authenticated as admin.
@@ -68,17 +71,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const extByMime: Record<string, string> = {
-    "image/jpeg": "jpg",
-    "image/png": "png",
-    "image/webp": "webp",
-    "image/gif": "gif",
-  };
-  const ext = extByMime[file.type] ?? "bin";
-  const filename = `murder-items/murder-item-${crypto.randomUUID()}.${ext}`;
+  const inputBuffer = Buffer.from(await file.arrayBuffer());
 
-  const url = await uploadBlob(filename, buffer, file.type);
+  // Resize to 500 × 500 with Lanczos3 then apply 16-bit pixel art effect.
+  const processed = await resizeAvatar(inputBuffer);
+
+  const filename = `murder-items/murder-item-${crypto.randomUUID()}.png`;
+
+  const url = await uploadBlob(filename, processed.buffer, "image/png");
 
   return NextResponse.json({ success: true, url });
 }

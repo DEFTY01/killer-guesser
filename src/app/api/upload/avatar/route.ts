@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { uploadBlob } from "@/lib/blob";
 import { requireAdmin } from "@/lib/auth-helpers";
+import { resizeAvatar } from "@/lib/avatar";
 
 const MAX_FILE_SIZE = 4 * 1024 * 1024; // 4 MB
 const ALLOWED_MIME_TYPES = ["image/webp", "image/gif", "image/png", "image/jpeg"] as const;
@@ -65,17 +66,14 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const buffer = Buffer.from(await file.arrayBuffer());
-  const extMap: Record<string, string> = {
-    "image/webp": "webp",
-    "image/gif": "gif",
-    "image/png": "png",
-    "image/jpeg": "jpg",
-  };
-  const ext = extMap[file.type] || "webp";
-  const filename = `avatars/avatar.${ext}`;
+  const inputBuffer = Buffer.from(await file.arrayBuffer());
 
-  const url = await uploadBlob(filename, buffer, file.type);
+  // Resize to 500 × 500 with Lanczos3 then apply 16-bit pixel art effect.
+  const processed = await resizeAvatar(inputBuffer);
+
+  const filename = `avatars/avatar-${crypto.randomUUID()}.png`;
+
+  const url = await uploadBlob(filename, processed.buffer, "image/png");
 
   return NextResponse.json({ success: true, url });
 }
