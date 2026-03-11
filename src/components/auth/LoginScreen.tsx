@@ -195,7 +195,7 @@ export default function LoginScreen({ players }: Props) {
             fontFamily: "var(--font-cinzel), serif",
             fontSize: "clamp(2rem, 5vw, 3.5rem)",
             fontWeight: 700,
-            color: "#e8e0ff",
+            color: "var(--login-title-color)",
             letterSpacing: "0.04em",
             lineHeight: 1.15,
             marginBottom: "16px",
@@ -210,7 +210,7 @@ export default function LoginScreen({ players }: Props) {
         <p
           style={{
             fontSize: "clamp(0.95rem, 2.5vw, 1.15rem)",
-            color: "rgba(200, 190, 240, 0.8)",
+            color: "var(--login-subtitle-color)",
             marginBottom: "40px",
             maxWidth: 420,
             lineHeight: 1.6,
@@ -260,7 +260,7 @@ export default function LoginScreen({ players }: Props) {
           style={{
             marginTop: "16px",
             fontSize: "0.82rem",
-            color: "rgba(200, 190, 240, 0.5)",
+            color: "var(--login-admin-link-color)",
             textDecoration: "none",
             letterSpacing: "0.06em",
             animation: "fadeInUp 0.7s ease both",
@@ -268,11 +268,11 @@ export default function LoginScreen({ players }: Props) {
           }}
           onMouseEnter={(e) => {
             (e.currentTarget as HTMLAnchorElement).style.color =
-              "rgba(200, 190, 240, 0.85)";
+              "var(--login-title-color)";
           }}
           onMouseLeave={(e) => {
             (e.currentTarget as HTMLAnchorElement).style.color =
-              "rgba(200, 190, 240, 0.5)";
+              "var(--login-admin-link-color)";
           }}
         >
           Admin Panel
@@ -299,7 +299,7 @@ export default function LoginScreen({ players }: Props) {
             width: 44,
             height: 4,
             borderRadius: 2,
-            background: "rgba(255,255,255,0.2)",
+            background: "var(--login-panel-handle)",
             margin: "14px auto 0",
             flexShrink: 0,
           }}
@@ -320,7 +320,7 @@ export default function LoginScreen({ players }: Props) {
               fontFamily: "var(--font-cinzel), serif",
               fontSize: "1.35rem",
               fontWeight: 700,
-              color: "#e8e0ff",
+              color: "var(--login-heading-color)",
               letterSpacing: "0.03em",
             }}
           >
@@ -334,7 +334,7 @@ export default function LoginScreen({ players }: Props) {
             style={{
               background: "transparent",
               border: "none",
-              color: "rgba(200, 190, 240, 0.6)",
+              color: "var(--login-close-btn-color)",
               cursor: loading ? "not-allowed" : "pointer",
               padding: 4,
               borderRadius: 6,
@@ -365,7 +365,7 @@ export default function LoginScreen({ players }: Props) {
             <p
               style={{
                 gridColumn: "1 / -1",
-                color: "rgba(200, 190, 240, 0.5)",
+                color: "var(--login-empty-color)",
                 textAlign: "center",
                 padding: "24px 0",
                 fontSize: "0.9rem",
@@ -416,7 +416,7 @@ export default function LoginScreen({ players }: Props) {
                   style={{
                     display: "block",
                     fontSize: "0.72rem",
-                    color: "rgba(220, 210, 255, 0.85)",
+                    color: "var(--login-nickname-color)",
                     overflow: "hidden",
                     textOverflow: "ellipsis",
                     whiteSpace: "nowrap",
@@ -460,7 +460,7 @@ export default function LoginScreen({ players }: Props) {
           <p
             style={{
               fontSize: "0.82rem",
-              color: "rgba(200, 190, 240, 0.55)",
+              color: "var(--login-hint-color)",
               textAlign: "center",
               minHeight: "1.2em",
             }}
@@ -469,7 +469,7 @@ export default function LoginScreen({ players }: Props) {
             {selectedPlayer ? (
               <>
                 Signing in as{" "}
-                <strong style={{ color: "rgba(200, 190, 240, 0.85)" }}>
+                <strong style={{ color: "var(--login-hint-selected-color)" }}>
                   {selectedPlayer.nickname}
                 </strong>
               </>

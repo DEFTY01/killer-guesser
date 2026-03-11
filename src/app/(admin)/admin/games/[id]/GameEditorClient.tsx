@@ -86,10 +86,10 @@ function nowUnix(): number {
 }
 
 const STATUS_STYLES: Record<GameStatus, string> = {
-  scheduled: "bg-yellow-50 text-yellow-700 border-yellow-200",
-  active: "bg-green-50 text-green-700 border-green-200",
-  closed: "bg-gray-50 text-gray-600 border-gray-200",
-  deleted: "bg-red-50 text-red-400 border-red-200",
+  scheduled: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800/50",
+  active: "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800/50",
+  closed: "bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600",
+  deleted: "bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-300 border-red-200 dark:border-red-800/50",
 };
 
 function StatusBadge({ status }: { status: GameStatus }) {
@@ -471,37 +471,37 @@ export default function GameEditorClient({
   return (
     <div className="max-w-5xl space-y-6">
       {/* ── Status bar ───────────────────────────────────────── */}
-      <div className="rounded-xl border bg-white p-5 shadow-sm flex flex-wrap items-center gap-4">
-        <h1 className="text-xl font-bold text-gray-900 flex-1 min-w-0 truncate">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm flex flex-wrap items-center gap-4">
+        <h1 className="text-xl font-bold text-gray-900 dark:text-white flex-1 min-w-0 truncate">
           {game.name}
         </h1>
         <StatusBadge status={game.status} />
-        <span className="text-sm text-gray-500">
+        <span className="text-sm text-gray-500 dark:text-gray-400">
           Start:{" "}
-          <span className="font-medium text-gray-700">
+          <span className="font-medium text-gray-700 dark:text-gray-200">
             {new Date(game.start_time * 1000).toLocaleString()}
           </span>
         </span>
         {game.vote_window_start ? (
-          <span className="text-sm text-gray-500">
+          <span className="text-sm text-gray-500 dark:text-gray-400">
             Vote window:{" "}
-            <span className="font-medium text-gray-700">
+            <span className="font-medium text-gray-700 dark:text-gray-200">
               {game.vote_window_start} – {game.vote_window_end} ({game.timezone})
             </span>
           </span>
         ) : (
-          <span className="text-sm text-gray-400 italic">No vote window</span>
+          <span className="text-sm text-gray-400 dark:text-gray-500 italic">No vote window</span>
         )}
       </div>
 
       {/* ── Timezone editor ───────────────────────────────────── */}
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
           Game Timezone
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <label htmlFor="game-timezone" className="flex flex-col gap-1 flex-1 min-w-[200px]">
-            <span className="text-xs text-gray-500">IANA timezone</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">IANA timezone</span>
             <input
               id="game-timezone"
               type="text"
@@ -509,7 +509,7 @@ export default function GameEditorClient({
               onChange={(e) => setTimezone(e.target.value)}
               placeholder="e.g. Europe/Budapest"
               aria-label="Game timezone (IANA string)"
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>
           <Button
@@ -522,37 +522,37 @@ export default function GameEditorClient({
             Save timezone
           </Button>
         </div>
-        <p className="mt-2 text-xs text-gray-400">
+        <p className="mt-2 text-xs text-gray-400 dark:text-gray-500">
           Vote window HH:MM times are interpreted in this timezone.
         </p>
       </div>
 
       {/* ── Vote window editor ────────────────────────────────── */}
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-700 mb-3">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-3">
           Vote Window ({game.timezone}, HH:MM)
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <label htmlFor="vote-window-start" className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">Start</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">Start</span>
             <input
               id="vote-window-start"
               type="time"
               value={voteStart}
               onChange={(e) => setVoteStart(e.target.value)}
               aria-label="Vote window start time (game timezone)"
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>
           <label htmlFor="vote-window-end" className="flex flex-col gap-1">
-            <span className="text-xs text-gray-500">End</span>
+            <span className="text-xs text-gray-500 dark:text-gray-400">End</span>
             <input
               id="vote-window-end"
               type="time"
               value={voteEnd}
               onChange={(e) => setVoteEnd(e.target.value)}
               aria-label="Vote window end time (game timezone)"
-              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>
           <Button
@@ -571,7 +571,7 @@ export default function GameEditorClient({
                 setVoteStart("");
                 setVoteEnd("");
               }}
-              className="text-xs text-gray-400 hover:text-gray-600 underline"
+              className="text-xs text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300 underline"
             >
               Clear
             </button>
@@ -715,10 +715,10 @@ export default function GameEditorClient({
           </div>
         )}
         {overridesLoading && (
-          <p className="text-xs text-gray-400">Loading overrides…</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">Loading overrides…</p>
         )}
         {!overridesLoading && overrides.length === 0 && (
-          <p className="text-xs text-gray-400">No overrides set.</p>
+          <p className="text-xs text-gray-400 dark:text-gray-500">No overrides set.</p>
         )}
       </div>
 
@@ -740,9 +740,9 @@ export default function GameEditorClient({
       )}
 
       {/* ── Players panel ────────────────────────────────────── */}
-      <div className="rounded-xl border bg-white overflow-hidden shadow-sm">
-        <div className="px-5 py-4 border-b bg-gray-50 flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-gray-700">
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden shadow-sm">
+        <div className="px-5 py-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex items-center justify-between">
+          <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200">
             Players ({players.length})
           </h2>
           <button
@@ -750,8 +750,8 @@ export default function GameEditorClient({
             onClick={() => setShowSpoilers((s) => !s)}
             className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 ${
               showSpoilers
-                ? "border-indigo-300 bg-indigo-50 text-indigo-700"
-                : "border-gray-300 bg-white text-gray-600 hover:bg-gray-50"
+                ? "border-indigo-300 dark:border-indigo-600 bg-indigo-50 dark:bg-indigo-900/30 text-indigo-700 dark:text-indigo-300"
+                : "border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700"
             }`}
             aria-pressed={showSpoilers}
             aria-label={showSpoilers ? "Hide team and role assignments" : "Show team and role assignments"}
@@ -761,25 +761,25 @@ export default function GameEditorClient({
         </div>
 
         {players.length === 0 ? (
-          <p className="px-5 py-4 text-sm text-gray-500">No players.</p>
+          <p className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">No players.</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="min-w-full text-sm">
               <thead>
-                <tr className="border-b bg-gray-50/50">
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">
+                <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50/50 dark:bg-gray-700/50">
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
                     Player
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
                     Team
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
                     Role
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
                     Status
                   </th>
-                  <th className="px-4 py-3 text-left font-medium text-gray-600 whitespace-nowrap">
+                  <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300 whitespace-nowrap">
                     Actions
                   </th>
                 </tr>
@@ -788,14 +788,14 @@ export default function GameEditorClient({
                 {players.map((p) => (
                   <tr
                     key={p.id}
-                    className={`border-b last:border-0 transition-colors ${
-                      p.is_dead ? "bg-gray-50/70 opacity-70" : "hover:bg-gray-50"
+                    className={`border-b border-gray-200 dark:border-gray-700 last:border-0 transition-colors ${
+                      p.is_dead ? "bg-gray-50/70 dark:bg-gray-700/30 opacity-70" : "hover:bg-gray-50 dark:hover:bg-gray-700/50"
                     }`}
                   >
                     {/* Player */}
                     <td className="px-4 py-3">
                       <div className="flex items-center gap-2">
-                        <div className="relative w-7 h-7 rounded-full overflow-hidden bg-gray-200 shrink-0">
+                        <div className="relative w-7 h-7 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-600 shrink-0">
                           {p.avatar_url ? (
                             <Image
                               src={blobImageSrc(p.avatar_url)}
@@ -806,19 +806,19 @@ export default function GameEditorClient({
                               unoptimized
                             />
                           ) : (
-                            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-500">
+                            <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-500 dark:text-gray-300">
                               {p.name[0]?.toUpperCase()}
                             </span>
                           )}
                         </div>
-                        <span className="font-medium text-gray-900">
+                        <span className="font-medium text-gray-900 dark:text-gray-100">
                           {p.name}
                         </span>
                       </div>
                     </td>
 
                     {/* Team */}
-                    <td className="px-4 py-3 text-gray-500 whitespace-nowrap">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400 whitespace-nowrap">
                       {showSpoilers
                         ? (p.team === "team1"
                             ? game.team1_name
@@ -849,7 +849,7 @@ export default function GameEditorClient({
                                 e.target.value === "" ? null : Number(e.target.value),
                               )
                             }
-                            className="rounded border border-gray-300 bg-white px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
+                            className="rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-indigo-500 disabled:opacity-50"
                           >
                             <option value="">— No role —</option>
                             {allRoles
@@ -871,7 +871,7 @@ export default function GameEditorClient({
                           </select>
                         </div>
                       ) : (
-                        <span className="text-gray-500">—</span>
+                        <span className="text-gray-500 dark:text-gray-400">—</span>
                       )}
                     </td>
 
@@ -882,11 +882,11 @@ export default function GameEditorClient({
                           <span aria-hidden="true">☠</span> Dead
                         </span>
                       ) : p.is_revived ? (
-                        <span className="inline-flex items-center gap-1 text-green-600 font-medium text-xs">
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-medium text-xs">
                           <span aria-hidden="true">✨</span> Undead
                         </span>
                       ) : (
-                        <span className="inline-flex items-center gap-1 text-green-600 font-medium text-xs">
+                        <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400 font-medium text-xs">
                           <span aria-hidden="true">♥</span> Alive
                         </span>
                       )}
@@ -899,8 +899,8 @@ export default function GameEditorClient({
                         disabled={deadBusy.has(p.id)}
                         className={`rounded px-2.5 py-1 text-xs font-medium transition-colors focus:outline-none focus:ring-2 focus:ring-offset-1 disabled:opacity-50 ${
                           p.is_dead
-                            ? "bg-green-100 text-green-700 hover:bg-green-200 focus:ring-green-500"
-                            : "bg-red-100 text-red-700 hover:bg-red-200 focus:ring-red-500"
+                            ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-green-200 dark:hover:bg-green-900/50 focus:ring-green-500"
+                            : "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300 hover:bg-red-200 dark:hover:bg-red-900/50 focus:ring-red-500"
                         }`}
                         aria-label={
                           p.is_dead ? `Revive ${p.name}` : `Mark ${p.name} as dead`
@@ -918,8 +918,8 @@ export default function GameEditorClient({
       </div>
 
       {/* ── Actions panel ────────────────────────────────────── */}
-      <div className="rounded-xl border bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold text-gray-700 mb-4">Actions</h2>
+      <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-700 dark:text-gray-200 mb-4">Actions</h2>
         <div className="flex flex-wrap gap-3">
           <Button
             variant="secondary"

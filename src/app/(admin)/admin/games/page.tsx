@@ -24,10 +24,10 @@ const TABS: { key: GameStatus; label: string }[] = [
 
 function StatusBadge({ status }: { status: GameStatus }) {
   const styles: Record<GameStatus, string> = {
-    scheduled: "bg-yellow-50 text-yellow-700 border-yellow-200",
-    active: "bg-green-50 text-green-700 border-green-200",
-    closed: "bg-gray-50 text-gray-600 border-gray-200",
-    deleted: "bg-red-50 text-red-400 border-red-200",
+    scheduled: "bg-yellow-50 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-300 border-yellow-200 dark:border-yellow-800/50",
+    active: "bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 border-green-200 dark:border-green-800/50",
+    closed: "bg-gray-50 dark:bg-gray-700 text-gray-600 dark:text-gray-300 border-gray-200 dark:border-gray-600",
+    deleted: "bg-red-50 dark:bg-red-900/20 text-red-400 dark:text-red-300 border-red-200 dark:border-red-800/50",
   };
   return (
     <span
@@ -89,7 +89,7 @@ export default async function GamesPage({
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Games</h1>
+        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">Games</h1>
         <Link
           href="/admin/games/new"
           className="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 transition-colors"
@@ -99,7 +99,7 @@ export default async function GamesPage({
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 mb-6 border-b border-gray-200">
+      <div className="flex gap-1 mb-6 border-b border-gray-200 dark:border-gray-700">
         {TABS.map(({ key, label }) => {
           const isActive = key === activeTab;
           return (
@@ -108,8 +108,8 @@ export default async function GamesPage({
               href={`/admin/games?tab=${key}`}
               className={`px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${
                 isActive
-                  ? "border-indigo-600 text-indigo-600"
-                  : "border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300"
+                  ? "border-indigo-600 text-indigo-600 dark:text-indigo-400"
+                  : "border-transparent text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:border-gray-300 dark:hover:border-gray-500"
               }`}
             >
               {label}
@@ -117,8 +117,8 @@ export default async function GamesPage({
                 <span
                   className={`ml-2 rounded-full px-2 py-0.5 text-xs font-semibold ${
                     isActive
-                      ? "bg-indigo-100 text-indigo-700"
-                      : "bg-gray-100 text-gray-600"
+                      ? "bg-indigo-100 dark:bg-indigo-900/40 text-indigo-700 dark:text-indigo-300"
+                      : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300"
                   }`}
                 >
                   {counts[key]}
@@ -131,25 +131,25 @@ export default async function GamesPage({
 
       {/* Table */}
       {tabGames.length === 0 ? (
-        <p className="text-sm text-gray-500">No {activeTab} games.</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">No {activeTab} games.</p>
       ) : (
-        <div className="rounded-xl border bg-white overflow-hidden shadow-sm">
+        <div className="rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 overflow-hidden shadow-sm">
           <table className="min-w-full text-sm">
             <thead>
-              <tr className="border-b bg-gray-50">
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
+              <tr className="border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">
                   Name
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">
                   Status
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">
                   Players
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">
                   Start Date
                 </th>
-                <th className="px-4 py-3 text-left font-medium text-gray-600">
+                <th className="px-4 py-3 text-left font-medium text-gray-600 dark:text-gray-300">
                   Winning Team
                 </th>
                 <th className="px-4 py-3" />
@@ -167,12 +167,12 @@ export default async function GamesPage({
                 return (
                   <tr
                     key={game.id}
-                    className="border-b last:border-0 hover:bg-gray-50"
+                    className="border-b border-gray-200 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50"
                   >
                     <td className="px-4 py-3 font-medium">
                       <Link
                         href={href}
-                        className="text-indigo-600 hover:text-indigo-800 hover:underline"
+                        className="text-indigo-600 dark:text-indigo-400 hover:text-indigo-800 dark:hover:text-indigo-300 hover:underline"
                       >
                         {game.name}
                       </Link>
@@ -180,13 +180,13 @@ export default async function GamesPage({
                     <td className="px-4 py-3">
                       <StatusBadge status={game.status as GameStatus} />
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
                       {game.player_count}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">
                       {new Date(game.start_time * 1000).toLocaleDateString()}
                     </td>
-                    <td className="px-4 py-3 text-gray-500">{winnerLabel}</td>
+                    <td className="px-4 py-3 text-gray-500 dark:text-gray-400">{winnerLabel}</td>
                     <td className="px-4 py-3 text-right">
                       <DeleteGameButton gameId={game.id} gameName={game.name} />
                     </td>

@@ -66,14 +66,14 @@ export default async function GameDetailPage({
       <div className="flex items-center gap-3 mb-6">
         <Link
           href="/admin/games"
-          className="text-sm text-gray-500 hover:text-gray-700"
+          className="text-sm text-gray-500 dark:text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
         >
           ← Games
         </Link>
-        <span className="text-gray-300" aria-hidden="true">
+        <span className="text-gray-300 dark:text-gray-600" aria-hidden="true">
           /
         </span>
-        <span className="text-sm font-mono text-gray-500">{id}</span>
+        <span className="text-sm font-mono text-gray-500 dark:text-gray-400">{id}</span>
       </div>
 
       <GameEditorClient

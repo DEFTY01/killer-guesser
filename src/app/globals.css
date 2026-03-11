@@ -23,6 +23,17 @@
     --border: #E5E7EB;
     --bg-image: none;
     --bg-image-opacity: 0.15;
+    /* ── Login page text colors (light mode defaults) ── */
+    --login-title-color: #1a1a2e;
+    --login-subtitle-color: #4b5563;
+    --login-admin-link-color: #9ca3af;
+    --login-panel-handle: rgba(0, 0, 0, 0.12);
+    --login-heading-color: #1a1a2e;
+    --login-close-btn-color: rgba(0, 0, 0, 0.4);
+    --login-empty-color: rgba(0, 0, 0, 0.4);
+    --login-nickname-color: rgba(0, 0, 0, 0.65);
+    --login-hint-color: rgba(0, 0, 0, 0.45);
+    --login-hint-selected-color: rgba(0, 0, 0, 0.7);
   }
 
   /* System preference fallback */
@@ -37,6 +48,17 @@
       --border: #2D3F50;
       --bg-image: none;
       --bg-image-opacity: 0.25;
+      /* ── Login page text colors (dark mode) ── */
+      --login-title-color: #e8e0ff;
+      --login-subtitle-color: rgba(200, 190, 240, 0.8);
+      --login-admin-link-color: rgba(200, 190, 240, 0.5);
+      --login-panel-handle: rgba(255, 255, 255, 0.2);
+      --login-heading-color: #e8e0ff;
+      --login-close-btn-color: rgba(200, 190, 240, 0.6);
+      --login-empty-color: rgba(200, 190, 240, 0.5);
+      --login-nickname-color: rgba(220, 210, 255, 0.85);
+      --login-hint-color: rgba(200, 190, 240, 0.55);
+      --login-hint-selected-color: rgba(200, 190, 240, 0.85);
     }
   }
 
@@ -51,6 +73,17 @@
     --border: #2D3F50;
     --bg-image: none;
     --bg-image-opacity: 0.25;
+    /* ── Login page text colors (dark mode) ── */
+    --login-title-color: #e8e0ff;
+    --login-subtitle-color: rgba(200, 190, 240, 0.8);
+    --login-admin-link-color: rgba(200, 190, 240, 0.5);
+    --login-panel-handle: rgba(255, 255, 255, 0.2);
+    --login-heading-color: #e8e0ff;
+    --login-close-btn-color: rgba(200, 190, 240, 0.6);
+    --login-empty-color: rgba(200, 190, 240, 0.5);
+    --login-nickname-color: rgba(220, 210, 255, 0.85);
+    --login-hint-color: rgba(200, 190, 240, 0.55);
+    --login-hint-selected-color: rgba(200, 190, 240, 0.85);
   }
 
   .light {
@@ -360,6 +393,24 @@ textarea {
   box-shadow:
     0 0 0 2px rgba(124, 58, 237, 0.3),
     0 0 18px rgba(124, 58, 237, 0.35);
+}
+
+/* ── Light mode overrides for login panel & avatar cards ─────────── */
+
+.light .login-panel,
+:root:not(.dark):not([class~="dark"]) .login-panel {
+  background: rgba(248, 246, 255, 0.98);
+  border: 1px solid rgba(124, 58, 237, 0.15);
+}
+
+.light .avatar-card,
+:root:not(.dark):not([class~="dark"]) .avatar-card {
+  background: rgba(0, 0, 0, 0.03);
+}
+
+.light .avatar-card:hover,
+:root:not(.dark):not([class~="dark"]) .avatar-card:hover {
+  background: rgba(0, 0, 0, 0.06);
 }
 
 /* ── Sign-in button state ────────────────────────────────────────── */
