@@ -156,6 +156,7 @@ function AvatarCircle({ user }: { user: User }) {
           fill
           className="object-cover"
           sizes="48px"
+          unoptimized
         />
       ) : (
         <span className="absolute inset-0 flex items-center justify-center text-sm font-bold text-gray-500">
@@ -1142,6 +1143,7 @@ export function NewGameWizard({ players, roles }: Props) {
                     fill
                     className="object-contain p-1"
                     sizes="80px"
+                    unoptimized
                   />
                 </div>
               )}

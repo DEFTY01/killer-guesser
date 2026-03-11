@@ -802,6 +802,7 @@ export default function GameEditorClient({
                               fill
                               className="object-cover"
                               sizes="28px"
+                              unoptimized
                             />
                           ) : (
                             <span className="absolute inset-0 flex items-center justify-center text-xs font-bold text-gray-500">
