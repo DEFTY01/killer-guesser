@@ -207,6 +207,7 @@ export async function POST(
         died_time_of_day: "day",
         has_tipped: 1,
         tipped_user_id: suspectId,
+        death_reason: `accused:${suspectId}`,
       })
       .where(eq(game_players.id, callerPlayer.id));
   });

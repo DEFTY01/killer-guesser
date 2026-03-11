@@ -20,10 +20,12 @@ interface SummaryPlayer {
   died_location: string | null;
   died_time_of_day: string | null;
   revived_at: number | null;
+  death_reason: string | null;
   name: string;
   avatar_url: string | null;
   role_name: string | null;
   role_color: string | null;
+  role_id: number | null;
 }
 
 // ── PlayerRow ─────────────────────────────────────────────────────
@@ -32,14 +34,19 @@ function PlayerRow({
   player,
   teamName,
   isCallerTeam,
+  isKiller,
+  accusedPlayerName,
 }: {
   player: SummaryPlayer;
   teamName: string;
   isCallerTeam: boolean;
+  isKiller: boolean;
+  accusedPlayerName: string | null;
 }) {
   const isDead = player.is_dead === 1 && player.revived_at === null;
   const isUndead = player.is_dead === 1 && player.revived_at !== null;
-  const borderColor = player.role_color ?? "#2E6DA4";
+  // Seer (see_killer): use red border for Killers, otherwise use role color
+  const borderColor = isKiller ? "#c0392b" : (player.role_color ?? "#2E6DA4");
 
   return (
     <div
@@ -85,6 +92,11 @@ function PlayerRow({
           <p className="text-xs text-red-500 mt-0.5">
             ✝ {player.died_location}
             {player.died_time_of_day ? ` (${player.died_time_of_day})` : ""}
+          </p>
+        )}
+        {isDead && accusedPlayerName && (
+          <p className="text-xs text-orange-500 mt-0.5">
+            Died because accused {accusedPlayerName}
           </p>
         )}
       </div>
@@ -172,8 +184,13 @@ export default async function GameSummaryPage({
 
   // ── Verify caller is a participant ────────────────────────────
   const [callerRow] = await db
-    .select({ id: game_players.id, team: game_players.team })
+    .select({
+      id: game_players.id,
+      team: game_players.team,
+      permissions: roles.permissions,
+    })
     .from(game_players)
+    .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(
       and(eq(game_players.game_id, id), eq(game_players.user_id, userId)),
     )
@@ -195,16 +212,42 @@ export default async function GameSummaryPage({
       died_location: game_players.died_location,
       died_time_of_day: game_players.died_time_of_day,
       revived_at: game_players.revived_at,
+      death_reason: game_players.death_reason,
       name: users.name,
       avatar_url: users.avatar_url,
       role_name: roles.name,
       role_color: roles.color_hex,
+      role_id: game_players.role_id,
     })
     .from(game_players)
     .innerJoin(users, eq(game_players.user_id, users.id))
     .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(eq(game_players.game_id, id))
     .orderBy(users.name);
+
+  // ── Determine if caller can see Killers (see_killer permission) ──
+  const callerPermissions: string[] = (() => {
+    try {
+      return JSON.parse(callerRow.permissions ?? "[]") as string[];
+    } catch {
+      return [];
+    }
+  })();
+  const canSeeKiller = callerPermissions.includes("see_killer");
+
+  // ── Identify killer role ID ───────────────────────────────────
+  const killerRoleRow = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.name, "Killer"))
+    .limit(1);
+  const killerRoleId = killerRoleRow[0]?.id ?? null;
+
+  // ── Build lookup: userId → player name (for accused death reason) ─
+  const userNameById = new Map<number, string>();
+  for (const p of players) {
+    userNameById.set(p.user_id, p.name);
+  }
 
   // ── Vote tallies per day ──────────────────────────────────────
   const voteRows = await db
@@ -311,12 +354,23 @@ export default async function GameSummaryPage({
                 : p.team === "team2"
                   ? game.team2_name
                   : "Unknown";
+            const isKiller = canSeeKiller && killerRoleId !== null && p.role_id === killerRoleId;
+            // Parse accused user ID from death_reason like "accused:123"
+            let accusedPlayerName: string | null = null;
+            if (p.death_reason?.startsWith("accused:")) {
+              const accusedId = Number(p.death_reason.slice("accused:".length));
+              if (!isNaN(accusedId)) {
+                accusedPlayerName = userNameById.get(accusedId) ?? null;
+              }
+            }
             return (
               <PlayerRow
                 key={p.id}
                 player={p}
                 teamName={teamName}
                 isCallerTeam={callerTeam != null && p.team === callerTeam}
+                isKiller={isKiller}
+                accusedPlayerName={accusedPlayerName}
               />
             );
           })}

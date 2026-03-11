@@ -75,8 +75,13 @@ export async function GET(
 
   // ── Verify caller is a participant ────────────────────────────
   const [callerRow] = await db
-    .select({ id: game_players.id, team: game_players.team })
+    .select({
+      id: game_players.id,
+      team: game_players.team,
+      permissions: roles.permissions,
+    })
     .from(game_players)
+    .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(
       and(eq(game_players.game_id, id), eq(game_players.user_id, userId)),
     )
@@ -99,16 +104,26 @@ export async function GET(
       died_location: game_players.died_location,
       died_time_of_day: game_players.died_time_of_day,
       revived_at: game_players.revived_at,
+      death_reason: game_players.death_reason,
       name: users.name,
       avatar_url: users.avatar_url,
       role_name: roles.name,
       role_color: roles.color_hex,
+      role_id: game_players.role_id,
     })
     .from(game_players)
     .innerJoin(users, eq(game_players.user_id, users.id))
     .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(eq(game_players.game_id, id))
     .orderBy(users.name);
+
+  // ── Identify killer role ──────────────────────────────────────
+  const killerRoleRow = await db
+    .select({ id: roles.id })
+    .from(roles)
+    .where(eq(roles.name, "Killer"))
+    .limit(1);
+  const killerRoleId = killerRoleRow[0]?.id ?? null;
 
   // ── Vote tallies per day ──────────────────────────────────────
   const voteRows = await db
@@ -153,6 +168,8 @@ export async function GET(
       players,
       votes_by_day,
       caller_team: callerRow.team,
+      caller_permissions: callerRow.permissions ?? null,
+      killerRoleId,
     },
   });
 }

@@ -1392,32 +1392,32 @@ export function NewGameWizard({ players, roles }: Props) {
             </div>
 
             {/* Murder item */}
-            {(step3.murderItemName || step3.murderItemUrl) && (
-              <div className="px-4 py-3">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
-                  Murder Item
-                </p>
-                <div className="flex items-center gap-3">
-                  {step3.murderItemUrl && (
-                    <div className="relative w-12 h-12 rounded border overflow-hidden bg-white">
-                      <Image
-                        src={blobImageSrc(step3.murderItemUrl)}
-                        alt="Murder item"
-                        fill
-                        className="object-contain"
-                        sizes="48px"
-                        unoptimized
-                      />
-                    </div>
-                  )}
-                  {step3.murderItemName && (
-                    <span className="text-sm font-medium">
-                      {step3.murderItemName}
-                    </span>
-                  )}
-                </div>
+            <div className="px-4 py-3">
+              <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">
+                Murder Item
+              </p>
+              <div className="flex items-center gap-3">
+                {step3.murderItemUrl ? (
+                  <div className="w-12 h-12 rounded border overflow-hidden bg-white flex items-center justify-center shrink-0">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={step3.murderItemUrl}
+                      alt="Murder item"
+                      className="object-contain w-full h-full"
+                    />
+                  </div>
+                ) : (
+                  <div className="w-12 h-12 rounded border overflow-hidden bg-gray-50 flex items-center justify-center shrink-0">
+                    <span className="text-[10px] text-gray-400 text-center leading-tight px-1">No image uploaded</span>
+                  </div>
+                )}
+                {step3.murderItemName && (
+                  <span className="text-sm font-medium">
+                    {step3.murderItemName}
+                  </span>
+                )}
               </div>
-            )}
+            </div>
           </div>
 
           {submitError && (
