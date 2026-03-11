@@ -24,6 +24,7 @@ interface GameInfo {
   vote_window_start: string | null;
   vote_window_end: string | null;
   current_day: number;
+  game_timezone: string;
 }
 
 interface SettingsInfo {
@@ -71,27 +72,86 @@ interface VoteLogEntry {
 // ── Helpers ────────────────────────────────────────────────────────
 
 /**
- * Converts a stored UTC "HH:MM" string to the browser's local time string
- * (e.g. "22:45" for a user in UTC+1 when the UTC value is "21:45").
+ * Converts a HH:MM string stored in the game's timezone to a display string
+ * in the browser's local timezone.
+ *
+ * e.g. "17:45" in Europe/Budapest (UTC+1) → "17:45" for Budapest users,
+ *      or "16:45" for UTC users.
  */
-function utcHhmmToLocal(hhmm: string): string {
+function gameHhmmToLocalString(hhmm: string, gameTimezone: string): string {
   const [h, m] = hhmm.split(":").map(Number);
-  const d = new Date();
-  d.setUTCHours(h, m, 0, 0);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  if (isNaN(h) || isNaN(m)) return hhmm;
+
+  // Get today's date in the game timezone.
+  const now = new Date();
+  const gameDateStr = new Intl.DateTimeFormat("en-CA", {
+    timeZone: gameTimezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).format(now); // e.g. "2026-03-11"
+
+  const [yearStr, monthStr, dayStr] = gameDateStr.split("-");
+  const candidateUtcMs = Date.UTC(
+    parseInt(yearStr ?? "2000"),
+    parseInt(monthStr ?? "1") - 1,
+    parseInt(dayStr ?? "1"),
+    h,
+    m,
+    0,
+    0,
+  );
+
+  // Measure what time the candidate shows in the game timezone,
+  // then subtract the offset to get the true UTC instant.
+  const candidateDate = new Date(candidateUtcMs);
+  const gameParts = new Intl.DateTimeFormat("en-US", {
+    timeZone: gameTimezone,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(candidateDate);
+  const dispH =
+    parseInt(gameParts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+  const dispM = parseInt(
+    gameParts.find((p) => p.type === "minute")?.value ?? "0",
+  );
+  const offsetMs = (dispH * 60 + dispM - h * 60 - m) * 60 * 1000;
+
+  const actualDate = new Date(candidateUtcMs - offsetMs);
+  return actualDate.toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 function isVoteWindowActive(
   start: string | null,
   end: string | null,
+  timezone: string,
 ): boolean {
   if (!start || !end) return false;
+  // Check current time in the game's timezone (not UTC).
   const now = new Date();
-  const currentMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: timezone,
+    hour: "numeric",
+    minute: "numeric",
+    hour12: false,
+  }).formatToParts(now);
+  const h = parseInt(parts.find((p) => p.type === "hour")?.value ?? "0") % 24;
+  const m = parseInt(parts.find((p) => p.type === "minute")?.value ?? "0");
+  const currentMin = h * 60 + m;
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return false;
-  return currentMin >= sh * 60 + sm && currentMin < eh * 60 + em;
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  // Handle overnight windows (e.g. 22:00–02:00).
+  if (endMin <= startMin) {
+    return currentMin >= startMin || currentMin < endMin;
+  }
+  return currentMin >= startMin && currentMin < endMin;
 }
 
 // ── Murder item fullscreen modal ──────────────────────────────────
@@ -665,9 +725,9 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       cleanupPoller(gameId);
       return;
     }
-    const { vote_window_start, vote_window_end } = data.game;
+    const { vote_window_start, vote_window_end, game_timezone } = data.game;
     function checkWindow() {
-      setVoteActive(isVoteWindowActive(vote_window_start, vote_window_end));
+      setVoteActive(isVoteWindowActive(vote_window_start, vote_window_end, game_timezone));
     }
     checkWindow();
     const id = setInterval(checkWindow, 5000);
@@ -1168,9 +1228,9 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               </p>
               <p className="text-sm text-gray-500 truncate">
                 {voteActive
-                  ? `Day ${data.game.current_day}${data.game.vote_window_end ? ` · closes ${utcHhmmToLocal(data.game.vote_window_end)}` : ""}`
+                  ? `Day ${data.game.current_day}${data.game.vote_window_end ? ` · closes ${gameHhmmToLocalString(data.game.vote_window_end, data.game.game_timezone)}` : ""}`
                   : data.game.vote_window_start
-                    ? `Opens at ${utcHhmmToLocal(data.game.vote_window_start)}`
+                    ? `Opens at ${gameHhmmToLocalString(data.game.vote_window_start, data.game.game_timezone)}`
                     : `Day ${data.game.current_day}`}
               </p>
             </div>

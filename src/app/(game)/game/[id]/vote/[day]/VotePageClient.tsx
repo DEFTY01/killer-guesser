@@ -37,8 +37,8 @@ interface OpenState {
   callerUserId: number;
   /** False when the caller has the `see_killer` permission. */
   canVote: boolean;
-  vote_window_start: string;
-  vote_window_end: string;
+  window_open_utc_ms: number;
+  window_close_utc_ms: number;
   callerVotedFor: number | null;
   players: VotePlayer[];
   votes?: VoteEntry[];
@@ -48,8 +48,8 @@ interface ClosedState {
   windowOpen: false;
   day: number;
   callerUserId: number;
-  vote_window_start: string | null;
-  vote_window_end: string | null;
+  window_open_utc_ms?: number;
+  window_close_utc_ms?: number;
   eliminated?: { id: number; name: string } | null;
   results: VoteResult[];
   votes?: VoteEntry[];
@@ -59,17 +59,12 @@ type VoteData = OpenState | ClosedState;
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-/** Build a Date for today at the given UTC HH:MM. */
-function todayAt(hhmm: string): Date {
-  const [h, m] = hhmm.split(":").map(Number);
-  const d = new Date();
-  d.setUTCHours(h, m, 0, 0);
-  return d;
-}
-
-/** Converts a stored UTC "HH:MM" string to the browser's local time string. */
-function utcHhmmToLocal(hhmm: string): string {
-  return todayAt(hhmm).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+/** Formats a UTC millisecond timestamp as a local time string (HH:MM). */
+function utcMsToLocalTime(utcMs: number): string {
+  return new Date(utcMs).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 // ── PlayerTile ────────────────────────────────────────────────────
@@ -172,8 +167,8 @@ const VoteTileRow = memo(function VoteTileRow({
 
 // ── Countdown display ─────────────────────────────────────────────
 
-function VoteWindowCountdown({ endHhmm }: { endHhmm: string }) {
-  const target = todayAt(endHhmm);
+function VoteWindowCountdown({ endUtcMs }: { endUtcMs: number }) {
+  const target = new Date(endUtcMs);
   const { hours, minutes, seconds, isExpired } = useCountdown(target);
 
   if (isExpired) return null;
@@ -389,6 +384,39 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     );
   }
 
+  // ── Window not open – show before-window message or results ──────
+
+  if (!data.windowOpen) {
+    const nowMs = Date.now();
+    const opensMs = data.window_open_utc_ms;
+    const isBeforeWindow = opensMs !== undefined && nowMs < opensMs;
+
+    if (isBeforeWindow) {
+      return (
+        <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
+          <div className="text-center space-y-1">
+            <h1 className="text-2xl font-bold text-gray-900">Daily Vote</h1>
+            <p className="text-sm text-gray-500">Day {day}</p>
+          </div>
+          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-6 text-center text-amber-800 space-y-1">
+            <p className="font-semibold">Voting is not open yet.</p>
+            <p className="text-sm text-amber-600">
+              Opens at {utcMsToLocalTime(opensMs)}
+            </p>
+          </div>
+          <div className="flex justify-center">
+            <Link
+              href={`/game/${gameId}`}
+              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+            >
+              ← Back to board
+            </Link>
+          </div>
+        </div>
+      );
+    }
+  }
+
   // ── Closed results ──────────────────────────────────────────
 
   if (results !== null) {
@@ -526,7 +554,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         <div className="text-center space-y-1">
           <h1 className="text-2xl font-bold text-gray-900">Vote</h1>
           <p className="text-sm text-gray-500">Day {day}</p>
-          <VoteWindowCountdown endHhmm={openData.vote_window_end} />
+          <VoteWindowCountdown endUtcMs={openData.window_close_utc_ms} />
         </div>
 
         <div
@@ -580,7 +608,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
       <div className="text-center space-y-1">
         <h1 className="text-2xl font-bold text-gray-900">Vote</h1>
         <p className="text-sm text-gray-500">Day {day}</p>
-        <VoteWindowCountdown endHhmm={openData.vote_window_end} />
+        <VoteWindowCountdown endUtcMs={openData.window_close_utc_ms} />
       </div>
 
       {voteError && (
