@@ -92,7 +92,7 @@ export function AvatarUpload({
             fill
             className="object-cover"
             sizes="160px"
-            unoptimized={preview.startsWith("blob:")}
+            unoptimized
           />
         ) : (
           <span className="absolute inset-0 flex items-center justify-center text-4xl">

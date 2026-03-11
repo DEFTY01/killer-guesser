@@ -370,10 +370,7 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
                       alt={`${player.name} avatar`}
                       fill
                       className="object-cover"
-                      unoptimized={
-                        avatarPreview.startsWith("blob:") ||
-                        avatarPreview.startsWith("data:")
-                      }
+                      unoptimized
                     />
                   </div>
                 ) : (
