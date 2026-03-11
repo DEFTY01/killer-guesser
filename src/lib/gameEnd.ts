@@ -2,9 +2,7 @@ import { db } from "@/db";
 import { events, game_players, games } from "@/db/schema";
 import { and, eq, gt, lte, sql } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-
-/** Type of the transaction object passed by Drizzle to `db.transaction()`. */
-type DbTx = Parameters<Parameters<(typeof db)["transaction"]>[0]>[0];
+import { cleanupPoller } from "@/lib/pollers";
 
 // ── Internal helpers ──────────────────────────────────────────────
 
@@ -29,11 +27,14 @@ async function publishGameEnded(
 }
 
 /**
- * Archives past events and deletes future events for a game within a transaction.
+ * Archives past events and deletes future events for a game.
+ * Runs non-transactionally after the critical game-status update has committed,
+ * so it does not hold a write lock on the events table for the duration of the
+ * game-close transaction.
  */
-async function archiveAndCleanEvents(tx: DbTx, gameId: string): Promise<void> {
+async function archiveAndCleanEvents(gameId: string): Promise<void> {
   // Archive past events.
-  await tx
+  await db
     .update(events)
     .set({ is_archived: 1 })
     .where(
@@ -44,7 +45,7 @@ async function archiveAndCleanEvents(tx: DbTx, gameId: string): Promise<void> {
     );
 
   // Delete future scheduled events.
-  await tx
+  await db
     .delete(events)
     .where(
       and(
@@ -90,7 +91,8 @@ export async function checkGameOver(gameId: string): Promise<void> {
   const allPlayers = await db
     .select({ team: game_players.team, is_dead: game_players.is_dead })
     .from(game_players)
-    .where(eq(game_players.game_id, gameId));
+    .where(eq(game_players.game_id, gameId))
+    .limit(50);
 
   const aliveEvil = allPlayers.filter(
     (p) => p.team === evilTeamId && p.is_dead === 0,
@@ -127,14 +129,19 @@ export async function handleGoodWins(
   gameId: string,
   goodTeamId: "team1" | "team2" = "team2",
 ): Promise<void> {
+  // Atomically close the game — status update only, no archival in the tx.
   await db.transaction(async (tx) => {
-    await archiveAndCleanEvents(tx, gameId);
     await tx
       .update(games)
       .set({ status: "closed", winner_team: goodTeamId })
       .where(eq(games.id, gameId));
   });
 
+  // Archive events non-transactionally so the write lock is not held
+  // for the duration of the (slower) archival queries.
+  await archiveAndCleanEvents(gameId);
+
+  cleanupPoller(gameId);
   await publishGameEnded(gameId, goodTeamId);
 }
 
@@ -157,14 +164,19 @@ export async function handleEvilWins(
   gameId: string,
   evilTeamId: "team1" | "team2" = "team1",
 ): Promise<void> {
+  // Atomically close the game — status update only, no archival in the tx.
   await db.transaction(async (tx) => {
-    await archiveAndCleanEvents(tx, gameId);
     await tx
       .update(games)
       .set({ status: "closed", winner_team: evilTeamId })
       .where(eq(games.id, gameId));
   });
 
+  // Archive events non-transactionally so the write lock is not held
+  // for the duration of the (slower) archival queries.
+  await archiveAndCleanEvents(gameId);
+
+  cleanupPoller(gameId);
   await publishGameEnded(gameId, evilTeamId);
 }
 
@@ -212,5 +224,6 @@ export async function closeGame(gameId: string): Promise<void> {
       .where(eq(games.id, gameId));
   });
 
+  cleanupPoller(gameId);
   await publishGameEnded(gameId, null);
 }

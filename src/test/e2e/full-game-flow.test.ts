@@ -43,8 +43,9 @@ vi.mock("@/db", () => ({
       const result = dbState.selectResults[dbState.callIndex] ?? [];
       dbState.callIndex++;
       const limit = vi.fn().mockResolvedValue(result);
-      const orderBy = vi.fn().mockResolvedValue(result);
-      const groupBy = vi.fn(() => ({ orderBy: vi.fn().mockResolvedValue(result) }));
+      const orderByResult = Object.assign(Promise.resolve(result), { limit });
+      const orderBy = vi.fn(() => orderByResult);
+      const groupBy = vi.fn(() => ({ orderBy: vi.fn(() => Object.assign(Promise.resolve(result), { limit })) }));
       const where = vi.fn(() => {
         const p = Promise.resolve(result);
         return Object.assign(p, { limit, orderBy, groupBy });
@@ -64,6 +65,9 @@ vi.mock("@/db", () => ({
           return Object.assign(p, { returning: vi.fn().mockResolvedValue([]) });
         }),
       })),
+    })),
+    delete: vi.fn(() => ({
+      where: vi.fn().mockResolvedValue([]),
     })),
     transaction: vi.fn(async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => {
       const txUpdate = vi.fn(() => ({

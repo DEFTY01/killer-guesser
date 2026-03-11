@@ -1,29 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { games, game_players, users, roles, events, votes } from "@/db/schema";
-import { and, asc, count, eq } from "drizzle-orm";
+import { and, asc, count, eq, gt } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 // ── GET /api/admin/games/[id]/history ─────────────────────────────
 
 /**
- * GET /api/admin/games/[id]/history
+ * GET /api/admin/games/[id]/history[?cursor=<event_id>]
  *
  * Returns the full archived record of a game, intended for read-only
  * post-game review. The response includes:
  *
  * - **game** — Full game metadata (name, status, start_time, winner_team, etc.)
- * - **players** — All participants with their user info (name, avatar_url),
- *   team assignment, role details (name, color), and fate data
+ * - **players** — All participants (up to 50) with their user info (name,
+ *   avatar_url), team assignment, role details (name, color), and fate data
  *   (is_dead, died_at, died_location, died_time_of_day, revived_at).
- * - **events** — All archived events (`is_archived = 1`) in chronological
- *   order (ascending by `created_at`), each with day, type, and payload.
- * - **votes_by_day** — All votes grouped by day. Each day entry contains
- *   anonymous tallies: the target player's id, name, and avatar, plus the
- *   total vote count for that target on that day. Voter identities are
- *   intentionally omitted.
+ * - **events** — Archived events (`is_archived = 1`) in chronological order,
+ *   up to 500 per page.  Use `?cursor=<last_event_id>` for subsequent pages.
+ *   `nextCursor` in the response is `null` when no more events exist.
+ * - **votes_by_day** — All votes grouped by day (up to 200 vote-tally rows).
+ *   Each day entry contains anonymous tallies: the target player's id, name,
+ *   avatar, and total vote count.  Voter identities are intentionally omitted.
  *
- * @returns `{ success: true; data: { game, players, events, votes_by_day } }` or
+ * @returns `{ success: true; data: { game, players, events, nextCursor, votes_by_day } }` or
  *          `{ success: false; error: string }`
  *
  * Requires an admin session — returns 403 if not authenticated as admin.
@@ -43,6 +43,11 @@ export async function GET(
 
   const { id } = await params;
 
+  // Cursor-based pagination for events: ?cursor=<last_event_id>
+  const cursorParam = _req.nextUrl.searchParams.get("cursor");
+  const cursor = cursorParam ? Number(cursorParam) : null;
+  const EVENTS_PAGE_SIZE = 500;
+
   // Fetch game metadata.
   const [game] = await db
     .select()
@@ -59,7 +64,7 @@ export async function GET(
 
   // Fetch all data in parallel.
   const [players, archivedEvents, voteRows] = await Promise.all([
-    // Players with user info and role details.
+    // Players with user info and role details (max 50).
     db
       .select({
         id: game_players.id,
@@ -84,9 +89,10 @@ export async function GET(
       .from(game_players)
       .innerJoin(users, eq(game_players.user_id, users.id))
       .leftJoin(roles, eq(game_players.role_id, roles.id))
-      .where(eq(game_players.game_id, id)),
+      .where(eq(game_players.game_id, id))
+      .limit(50),
 
-    // All archived events in chronological order.
+    // Archived events in chronological order, cursor-paginated (max 500).
     db
       .select({
         id: events.id,
@@ -96,10 +102,15 @@ export async function GET(
         created_at: events.created_at,
       })
       .from(events)
-      .where(and(eq(events.game_id, id), eq(events.is_archived, 1)))
-      .orderBy(asc(events.created_at)),
+      .where(
+        cursor !== null
+          ? and(eq(events.game_id, id), eq(events.is_archived, 1), gt(events.id, cursor))
+          : and(eq(events.game_id, id), eq(events.is_archived, 1)),
+      )
+      .orderBy(asc(events.created_at))
+      .limit(EVENTS_PAGE_SIZE),
 
-    // Vote tallies per target per day (anonymous — no voter identities).
+    // Vote tallies per target per day — anonymous, max 200 tally rows.
     db
       .select({
         day: votes.day,
@@ -112,8 +123,15 @@ export async function GET(
       .innerJoin(users, eq(votes.target_id, users.id))
       .where(eq(votes.game_id, id))
       .groupBy(votes.day, votes.target_id, users.name, users.avatar_url)
-      .orderBy(asc(votes.day)),
+      .orderBy(asc(votes.day))
+      .limit(200),
   ]);
+
+  // Cursor for the next page of events (null = no more pages).
+  const nextCursor =
+    archivedEvents.length === EVENTS_PAGE_SIZE
+      ? (archivedEvents[archivedEvents.length - 1]?.id ?? null)
+      : null;
 
   // Group vote tallies by day.
   const votes_by_day: Record<
@@ -143,6 +161,7 @@ export async function GET(
       game,
       players,
       events: archivedEvents,
+      nextCursor,
       votes_by_day,
     },
   });

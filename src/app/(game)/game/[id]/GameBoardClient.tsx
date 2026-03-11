@@ -11,6 +11,7 @@ import type { RolePermission } from "@/lib/role-constants";
 import { isKiller } from "@/lib/roleUtils";
 import { useAbly } from "@/hooks/useAbly";
 import { ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
+import { activePollers, cleanupPoller } from "@/lib/pollers";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -658,15 +659,23 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   // ── Track vote window ───────────────────────────────────────
 
   useEffect(() => {
-    if (!data) return;
+    // Stop the interval immediately when the game has ended.
+    if (!data || gameEnded !== false) {
+      cleanupPoller(gameId);
+      return;
+    }
     const { vote_window_start, vote_window_end } = data.game;
     function checkWindow() {
       setVoteActive(isVoteWindowActive(vote_window_start, vote_window_end));
     }
     checkWindow();
     const id = setInterval(checkWindow, 5000);
-    return () => clearInterval(id);
-  }, [data]);
+    activePollers.set(gameId, id);
+    return () => {
+      clearInterval(id);
+      activePollers.delete(gameId);
+    };
+  }, [data, gameEnded, gameId]);
 
   // ── Optimistic death update ─────────────────────────────────
 
@@ -803,12 +812,13 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
     useCallback(
       (msg) => {
         const { winner_team } = msg.data as { winner_team: string | null };
+        cleanupPoller(gameId);
         setGameEnded(winner_team ?? null);
         setTimeout(() => {
           router.push("/");
         }, 3000);
       },
-      [router],
+      [router, gameId],
     ),
   );
 

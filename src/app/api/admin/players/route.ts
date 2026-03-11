@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { users } from "@/db/schema";
-import { asc } from "drizzle-orm";
+import { asc, count, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 
 /** Zod schema for POST /api/admin/players body. */
@@ -11,14 +11,21 @@ const createPlayerSchema = z.object({
   avatar_url: z.string().url().optional().nullable(),
 });
 
+const DEFAULT_PAGE_LIMIT = 20;
+const MAX_PAGE_LIMIT = 100;
+
 /**
- * GET /api/admin/players
+ * GET /api/admin/players[?page=1&limit=20]
  *
- * Returns all player accounts ordered by name (ascending).
+ * Returns player accounts ordered by name (ascending), paginated.
  * The admin account is never stored in the database and will never appear here.
  * Requires an admin session — returns 403 if not authenticated as admin.
+ *
+ * Query params:
+ *  - `page`  — 1-based page number (default: 1)
+ *  - `limit` — records per page (default: 20, max: 100)
  */
-export async function GET() {
+export async function GET(req: NextRequest) {
   const session = await requireAdmin();
   if (!session) {
     return NextResponse.json(
@@ -27,12 +34,33 @@ export async function GET() {
     );
   }
 
-  const players = await db
-    .select()
-    .from(users)
-    .orderBy(asc(users.name));
+  const pageParam = req.nextUrl.searchParams.get("page");
+  const limitParam = req.nextUrl.searchParams.get("limit");
 
-  return NextResponse.json({ success: true, data: players });
+  const limit = Math.min(
+    Math.max(1, Number(limitParam) || DEFAULT_PAGE_LIMIT),
+    MAX_PAGE_LIMIT,
+  );
+  const page = Math.max(1, Number(pageParam) || 1);
+  const offset = (page - 1) * limit;
+
+  const [players, [totalRow]] = await Promise.all([
+    db.select().from(users).orderBy(asc(users.name)).limit(limit).offset(offset),
+    db.select({ total: count(users.id) }).from(users),
+  ]);
+
+  const total = totalRow?.total ?? 0;
+
+  return NextResponse.json({
+    success: true,
+    data: players,
+    pagination: {
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+    },
+  });
 }
 
 /**

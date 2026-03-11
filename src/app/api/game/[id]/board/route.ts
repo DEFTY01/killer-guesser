@@ -86,6 +86,11 @@ export async function GET(
 
   const { id: gameId } = await params;
 
+  // ?slim=1 returns a reduced player list (id, name, avatar_url, is_dead,
+  // is_revived only) for components that do not need role colour or tips.
+  const slimParam = _req.nextUrl.searchParams.get("slim");
+  const slim = slimParam === "1" || slimParam === "true";
+
   // Auto-activate if start_time has passed
   await activateGameIfReady(gameId);
 
@@ -170,7 +175,8 @@ export async function GET(
     .innerJoin(users, eq(game_players.user_id, users.id))
     .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(eq(game_players.game_id, gameId))
-    .orderBy(users.name);
+    .orderBy(users.name)
+    .limit(50);
 
   // Normalise: replace null role_color with the default blue
   const normalizedPlayers = players.map((p) => ({
@@ -182,7 +188,10 @@ export async function GET(
   // The Mayor's view is deliberately equalized — they cannot see role colours.
   // Strip every field except the bare minimum needed to render a face-and-name card.
   const isMayor = callerRow.role_name === "Mayor";
-  const responsePlayers = isMayor
+
+  // ?slim reduces the player list to the minimum fields needed for lightweight
+  // components (e.g. a live score card or dead-player overlay).
+  const responsePlayers = (slim || isMayor)
     ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, is_revived, revived_at }) => ({
         id,
         user_id,
@@ -291,7 +300,8 @@ export async function GET(
         target_id: votes.target_id,
       })
       .from(votes)
-      .where(and(eq(votes.game_id, gameId), eq(votes.day, currentDay)));
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, currentDay)))
+      .limit(200);
 
     data.votes = todayVotes;
 

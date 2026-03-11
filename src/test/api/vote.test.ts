@@ -25,8 +25,8 @@ const dbMock = vi.hoisted(() => {
   const makeMockChain = () => {
     const returning = vi.fn().mockResolvedValue([]);
     const limit = vi.fn().mockResolvedValue([]);
-    const orderBy = vi.fn().mockResolvedValue([]);
-    const groupBy = vi.fn(() => ({ orderBy }));
+    const orderBy = vi.fn(() => Object.assign(Promise.resolve([]), { limit }));
+    const groupBy = vi.fn(() => Object.assign(Promise.resolve([]), { orderBy, limit }));
     const where = vi.fn(() => {
       const result = Promise.resolve([]);
       return Object.assign(result, { limit, orderBy, returning, groupBy });
@@ -52,10 +52,12 @@ vi.mock("@/db", () => {
         dbMock.callIndex++;
         const returning = vi.fn().mockResolvedValue(resultForThisCall);
         const limit = vi.fn().mockResolvedValue(resultForThisCall);
-        const orderBy = vi.fn().mockResolvedValue(resultForThisCall);
+        const orderBy = vi.fn(() => Object.assign(Promise.resolve(resultForThisCall), { limit }));
         const groupBy = vi.fn(() => {
-          const p = Promise.resolve(resultForThisCall);
-          return Object.assign(p, { orderBy: vi.fn().mockResolvedValue(resultForThisCall) });
+          return Object.assign(Promise.resolve(resultForThisCall), {
+            orderBy: vi.fn(() => Object.assign(Promise.resolve(resultForThisCall), { limit })),
+            limit,
+          });
         });
         const where = vi.fn(() => {
           const result = Promise.resolve(resultForThisCall);
@@ -582,6 +584,7 @@ describe("POST /api/game/[id]/vote", () => {
   });
 
   it("valid vote with ABLY_API_KEY → publishes VOTE_CAST event", async () => {
+    vi.useFakeTimers();
     process.env.ABLY_API_KEY = "test-key";
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
 
@@ -594,8 +597,8 @@ describe("POST /api/game/[id]/vote", () => {
       [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
       [{ id: 1, is_dead: 0, revived_at: null }],
       [], // no existing vote
-      [{ name: "Alice", avatar_url: null }],
-      [{ name: "Bob", avatar_url: null }],
+      [{ name: "Alice" }],
+      [{ name: "Bob" }],
     ];
 
     const req = new NextRequest("http://localhost/api/game/G1/vote", {
@@ -605,9 +608,13 @@ describe("POST /api/game/[id]/vote", () => {
     });
     const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
 
+    // Advance fake timers to fire the debounce callback
+    vi.runAllTimers();
+
     expect(res.status).toBe(200);
     expect(mockChannelGet).toHaveBeenCalled();
     delete process.env.ABLY_API_KEY;
+    vi.useRealTimers();
   });
 
   it("invalid session userId → 401", async () => {
