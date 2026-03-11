@@ -15,6 +15,7 @@ interface GameRow {
   start_time: number;
   vote_window_start: string | null;
   vote_window_end: string | null;
+  timezone: string;
   team1_name: string;
   team2_name: string;
   winner_team: string | null;
@@ -108,6 +109,10 @@ export default function GameEditorClient({
   const [voteStart, setVoteStart] = useState(initialGame.vote_window_start ?? "");
   const [voteEnd, setVoteEnd] = useState(initialGame.vote_window_end ?? "");
   const [voteWindowSaving, setVoteWindowSaving] = useState(false);
+
+  // Timezone editing state
+  const [timezone, setTimezone] = useState(initialGame.timezone ?? "UTC");
+  const [timezoneSaving, setTimezoneSaving] = useState(false);
 
   // Per-row busy states
   const [deadBusy, setDeadBusy] = useState<Set<number>>(new Set());
@@ -333,6 +338,30 @@ export default function GameEditorClient({
     }
   }, [game.id, voteStart, voteEnd]);
 
+  // ── Timezone update ────────────────────────────────────────────
+
+  const updateTimezone = useCallback(async () => {
+    setActionError(null);
+    setTimezoneSaving(true);
+    try {
+      const res = await fetch(`/api/admin/games/${game.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_timezone", timezone }),
+      });
+      const json = await res.json();
+      if (!json.success) {
+        setActionError(json.error ?? "Unknown error");
+        return;
+      }
+      setGame(json.data);
+    } catch {
+      setActionError("Failed to update timezone. Please try again.");
+    } finally {
+      setTimezoneSaving(false);
+    }
+  }, [game.id, timezone]);
+
   // ── Render ─────────────────────────────────────────────────────
 
   return (
@@ -351,9 +380,9 @@ export default function GameEditorClient({
         </span>
         {game.vote_window_start ? (
           <span className="text-sm text-gray-500">
-            Votes:{" "}
+            Vote window:{" "}
             <span className="font-medium text-gray-700">
-              {game.vote_window_start} – {game.vote_window_end}
+              {game.vote_window_start} – {game.vote_window_end} ({game.timezone})
             </span>
           </span>
         ) : (
@@ -361,10 +390,43 @@ export default function GameEditorClient({
         )}
       </div>
 
+      {/* ── Timezone editor ───────────────────────────────────── */}
+      <div className="rounded-xl border bg-white p-5 shadow-sm">
+        <h2 className="text-sm font-semibold text-gray-700 mb-3">
+          Game Timezone
+        </h2>
+        <div className="flex flex-wrap items-end gap-3">
+          <label htmlFor="game-timezone" className="flex flex-col gap-1 flex-1 min-w-[200px]">
+            <span className="text-xs text-gray-500">IANA timezone</span>
+            <input
+              id="game-timezone"
+              type="text"
+              value={timezone}
+              onChange={(e) => setTimezone(e.target.value)}
+              placeholder="e.g. Europe/Budapest"
+              aria-label="Game timezone (IANA string)"
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={timezoneSaving}
+            onClick={updateTimezone}
+            aria-label="Save timezone"
+          >
+            Save timezone
+          </Button>
+        </div>
+        <p className="mt-2 text-xs text-gray-400">
+          Vote window HH:MM times are interpreted in this timezone.
+        </p>
+      </div>
+
       {/* ── Vote window editor ────────────────────────────────── */}
       <div className="rounded-xl border bg-white p-5 shadow-sm">
         <h2 className="text-sm font-semibold text-gray-700 mb-3">
-          Vote Window (UTC, HH:MM)
+          Vote Window ({game.timezone}, HH:MM)
         </h2>
         <div className="flex flex-wrap items-end gap-3">
           <label htmlFor="vote-window-start" className="flex flex-col gap-1">
@@ -374,7 +436,7 @@ export default function GameEditorClient({
               type="time"
               value={voteStart}
               onChange={(e) => setVoteStart(e.target.value)}
-              aria-label="Vote window start time (UTC)"
+              aria-label="Vote window start time (game timezone)"
               className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>
@@ -385,7 +447,7 @@ export default function GameEditorClient({
               type="time"
               value={voteEnd}
               onChange={(e) => setVoteEnd(e.target.value)}
-              aria-label="Vote window end time (UTC)"
+              aria-label="Vote window end time (game timezone)"
               className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
             />
           </label>

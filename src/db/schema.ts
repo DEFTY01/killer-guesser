@@ -46,6 +46,8 @@ export const games = sqliteTable("games", {
   start_time: integer("start_time").notNull(),
   vote_window_start: text("vote_window_start"),
   vote_window_end: text("vote_window_end"),
+  /** IANA timezone string for the game, e.g. "Europe/Budapest". Defaults to "UTC". */
+  timezone: text("timezone").notNull().default("UTC"),
   team1_name: text("team1_name").notNull().default("Good"),
   team2_name: text("team2_name").notNull().default("Evil"),
   /** 1 = team1 is the Evil team (default). 0 = team2 is the Evil team. */

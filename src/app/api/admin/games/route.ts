@@ -30,6 +30,7 @@ const createGameSchema = z.object({
     .regex(/^\d{2}:\d{2}$/, "vote_window_end must be HH:MM")
     .optional()
     .nullable(),
+  timezone: z.string().min(1).max(100).default("UTC"),
   team1_name: z.string().min(1, "team1_name is required").default("Evil"),
   team2_name: z.string().min(1, "team2_name is required").default("Good"),
   /** True if team1 is the Evil team. Defaults to true (team1 is always Evil). */
@@ -129,6 +130,7 @@ export async function POST(req: NextRequest) {
     start_time,
     vote_window_start,
     vote_window_end,
+    timezone,
     team1_name,
     team2_name,
     is_evil_team1,
@@ -232,6 +234,7 @@ export async function POST(req: NextRequest) {
         start_time,
         vote_window_start: vote_window_start ?? null,
         vote_window_end: vote_window_end ?? null,
+        timezone,
         team1_name,
         team2_name,
         evil_team_is_team1: is_evil_team1 ? 1 : 0,

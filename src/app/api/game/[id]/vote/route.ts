@@ -7,6 +7,7 @@ import { and, count, eq, sql } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
+import { nowInZone, windowBoundariesUtc } from "@/lib/timezone";
 
 // ── Server-side Ably debounce ─────────────────────────────────────
 // When multiple clients vote within a short window (e.g. 3 phones tapping at
@@ -37,25 +38,36 @@ function parsePermissions(raw: string | null | undefined): RolePermission[] {
   }
 }
 
-/** Returns true if the current UTC time (HH:MM) is within [start, end). */
+/**
+ * Returns true if the current time in the game's timezone is within the
+ * [start, end) vote window.  HH:MM strings are interpreted in game.timezone.
+ */
 function isWindowOpen(
   start: string | null,
   end: string | null,
+  timezone: string,
 ): boolean {
   if (!start || !end) return false;
-  const now = new Date();
-  const currentMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const currentMin = nowInZone(timezone);
   const [sh, sm] = start.split(":").map(Number);
   const [eh, em] = end.split(":").map(Number);
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return false;
-  return currentMin >= sh * 60 + sm && currentMin < eh * 60 + em;
+  const startMin = sh * 60 + sm;
+  const endMin = eh * 60 + em;
+  // Handle overnight windows (e.g. 22:00–02:00)
+  if (endMin <= startMin) {
+    return currentMin >= startMin || currentMin < endMin;
+  }
+  return currentMin >= startMin && currentMin < endMin;
 }
 
-/** Returns true if the current UTC time is at or past vote_window_end. */
-function isWindowEnded(end: string | null): boolean {
+/**
+ * Returns true if the current time in the game's timezone is at or past
+ * vote_window_end and the window is no longer open.
+ */
+function isWindowEnded(end: string | null, timezone: string): boolean {
   if (!end) return false;
-  const now = new Date();
-  const currentMin = now.getUTCHours() * 60 + now.getUTCMinutes();
+  const currentMin = nowInZone(timezone);
   const [eh, em] = end.split(":").map(Number);
   if (isNaN(eh) || isNaN(em)) return false;
   return currentMin >= eh * 60 + em;
@@ -120,6 +132,7 @@ export async function GET(
       vote_window_end: games.vote_window_end,
       team1_name: games.team1_name,
       team2_name: games.team2_name,
+      timezone: games.timezone,
     })
     .from(games)
     .where(eq(games.id, gameId))
@@ -164,14 +177,14 @@ export async function GET(
     Math.floor((nowUnix - game.start_time) / 86400) + 1,
   );
 
-  const { vote_window_start, vote_window_end } = game;
+  const { vote_window_start, vote_window_end, timezone } = game;
 
   // ── Lazy close: process if window has ended ──────────────────
   if (
     vote_window_start &&
     vote_window_end &&
-    isWindowEnded(vote_window_end) &&
-    !isWindowOpen(vote_window_start, vote_window_end)
+    isWindowEnded(vote_window_end, timezone) &&
+    !isWindowOpen(vote_window_start, vote_window_end, timezone)
   ) {
     // Atomically clear the window to prevent concurrent re-processing.
     const [cleared] = await db
@@ -294,8 +307,13 @@ export async function GET(
       callerUserId: userId,
       eliminated: eliminatedFromDb,
       results,
-      vote_window_start: reloaded?.vote_window_start ?? null,
-      vote_window_end: reloaded?.vote_window_end ?? null,
+      game_timezone: timezone,
+      ...(reloaded?.vote_window_start && reloaded?.vote_window_end
+        ? {
+            window_open_utc_ms: windowBoundariesUtc(reloaded.vote_window_start, reloaded.vote_window_end, timezone).openMs,
+            window_close_utc_ms: windowBoundariesUtc(reloaded.vote_window_start, reloaded.vote_window_end, timezone).closeMs,
+          }
+        : {}),
     };
 
     if (canSeeVotes) {
@@ -331,7 +349,7 @@ export async function GET(
   }
 
   // ── Window open: return alive players ────────────────────────
-  if (isWindowOpen(vote_window_start, vote_window_end)) {
+  if (isWindowOpen(vote_window_start, vote_window_end, timezone)) {
     const players = await db
       .select({
         id: game_players.user_id,
@@ -377,13 +395,23 @@ export async function GET(
 
     const canVote = !callerPermissions.includes("see_killer");
 
+    const windowBounds =
+      vote_window_start && vote_window_end
+        ? windowBoundariesUtc(vote_window_start, vote_window_end, timezone)
+        : null;
+
     const responseData: Record<string, unknown> = {
       windowOpen: true,
       day,
       callerUserId: userId,
       canVote,
-      vote_window_start,
-      vote_window_end,
+      game_timezone: timezone,
+      ...(windowBounds
+        ? {
+            window_open_utc_ms: windowBounds.openMs,
+            window_close_utc_ms: windowBounds.closeMs,
+          }
+        : {}),
       callerVotedFor: existingVote?.target_id ?? null,
       players: alivePlayers.map((p) => ({
         id: p.id,
@@ -438,12 +466,22 @@ export async function GET(
     voteCount: r.vote_count,
   }));
 
+  const notYetOpenBounds =
+    vote_window_start && vote_window_end
+      ? windowBoundariesUtc(vote_window_start, vote_window_end, timezone)
+      : null;
+
   const responseData: Record<string, unknown> = {
     windowOpen: false,
     day,
     callerUserId: userId,
-    vote_window_start,
-    vote_window_end,
+    game_timezone: timezone,
+    ...(notYetOpenBounds
+      ? {
+          window_open_utc_ms: notYetOpenBounds.openMs,
+          window_close_utc_ms: notYetOpenBounds.closeMs,
+        }
+      : {}),
     results,
   };
 
@@ -539,6 +577,7 @@ export async function POST(
       start_time: games.start_time,
       vote_window_start: games.vote_window_start,
       vote_window_end: games.vote_window_end,
+      timezone: games.timezone,
     })
     .from(games)
     .where(eq(games.id, gameId))
@@ -552,7 +591,7 @@ export async function POST(
   }
 
   // ── Check vote window is open ─────────────────────────────────
-  if (!isWindowOpen(game.vote_window_start, game.vote_window_end)) {
+  if (!isWindowOpen(game.vote_window_start, game.vote_window_end, game.timezone)) {
     return NextResponse.json(
       { success: false, error: "Voting is closed" },
       { status: 403 },

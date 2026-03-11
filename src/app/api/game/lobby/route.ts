@@ -13,6 +13,7 @@ function buildSelect() {
     name: games.name,
     status: games.status,
     start_time: games.start_time,
+    timezone: games.timezone,
     team1_name: games.team1_name,
     team2_name: games.team2_name,
     winner_team: games.winner_team,
