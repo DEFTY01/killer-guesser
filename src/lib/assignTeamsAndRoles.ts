@@ -267,11 +267,7 @@ export function assignTeamsAndRoles(
 
   // ── Minimum Evil role count guard ─────────────────────────────
 
-  if (filteredEvilRoles.length < resolvedEvilCap) {
-    throw new Error(
-      "Not enough Evil roles to fill the Evil team. Add more Evil roles or reduce the Evil team cap.",
-    );
-  }
+  // If fewer evil roles than evil players, roles will be cycled (see step 4).
 
   // ── 1. Shuffle ────────────────────────────────────────────────
   const shuffled = fisherYatesShuffle([...playerIds]);
@@ -297,20 +293,19 @@ export function assignTeamsAndRoles(
   }
 
   // ── 4. Evil team: assign additional is_evil special roles ─────
+  // Cycle through non-Killer evil roles; fall back to all evil roles
+  // (including Killer) if no others are defined.
   const evilNonKillerRoles = filteredEvilRoles.filter(
     (r) => r.roleId !== killerRoleId,
   );
-  const evilSpecialRoles = weightedRandomSelect(
-    evilNonKillerRoles,
-    Math.min(evilSpecialCount, remainingEvil.length),
-  );
+  const evilRolePool = evilNonKillerRoles.length > 0 ? evilNonKillerRoles : filteredEvilRoles;
 
   for (let i = 0; i < remainingEvil.length; i++) {
-    const specialRole = evilSpecialRoles[i];
+    const roleId = evilRolePool[i % evilRolePool.length].roleId;
     assignments.push({
       userId: remainingEvil[i],
       team: isEvilTeam1 ? "team1" : "team2",
-      roleId: specialRole ? specialRole.roleId : null,
+      roleId,
     });
   }
 
