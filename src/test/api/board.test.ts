@@ -18,7 +18,7 @@ vi.mock("@/lib/auth", () => ({
 function makeChain(defaultResult: unknown[] = []) {
   const returning = vi.fn().mockResolvedValue(defaultResult);
   const limit = vi.fn().mockResolvedValue(defaultResult);
-  const orderBy = vi.fn().mockResolvedValue(defaultResult);
+  const orderBy = vi.fn(() => Object.assign(Promise.resolve(defaultResult), { limit }));
   const where = vi.fn(() => ({ limit, returning, orderBy }));
   const leftJoin = vi.fn(() => ({ where, orderBy }));
   const innerJoin = vi.fn(() => ({ where, leftJoin }));
@@ -73,7 +73,7 @@ function setupDbSelectChain(callResults: unknown[][]) {
     const resultForThisCall = callResults[callIndex] ?? [];
     callIndex++;
     const limit = vi.fn().mockResolvedValue(resultForThisCall);
-    const orderBy = vi.fn().mockResolvedValue(resultForThisCall);
+    const orderBy = vi.fn(() => Object.assign(Promise.resolve(resultForThisCall), { limit }));
     const where = vi.fn(() => {
       const result = Promise.resolve(resultForThisCall);
       return Object.assign(result, { limit, orderBy, returning: vi.fn().mockResolvedValue(resultForThisCall) });

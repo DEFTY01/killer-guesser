@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 // ── vi.hoisted: hoist shared mock variables so vi.mock factories can use them
-const { mockPublish, mockChannelGet, txMock, mockTransaction, mockSelect } = vi.hoisted(
+const { mockPublish, mockChannelGet, txMock, mockTransaction, mockSelect, mockDbUpdate, mockDbDelete } = vi.hoisted(
   () => {
     const publish = vi.fn().mockResolvedValue(undefined);
     const get = vi.fn(() => ({ publish }));
@@ -32,12 +32,26 @@ const { mockPublish, mockChannelGet, txMock, mockTransaction, mockSelect } = vi.
       where2: vi.fn().mockResolvedValue([]),
     }));
 
+    // Top-level db.update mock (for archiveAndCleanEvents outside transaction).
+    const dbUpdate = vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn().mockResolvedValue([]),
+      })),
+    }));
+
+    // Top-level db.delete mock (for archiveAndCleanEvents outside transaction).
+    const dbDelete = vi.fn(() => ({
+      where: vi.fn().mockResolvedValue([]),
+    }));
+
     return {
       mockPublish: publish,
       mockChannelGet: get,
       txMock: tx,
       mockTransaction: transaction,
       mockSelect: sel,
+      mockDbUpdate: dbUpdate,
+      mockDbDelete: dbDelete,
     };
   }
 );
@@ -47,6 +61,8 @@ vi.mock("@/db", () => ({
   db: {
     transaction: mockTransaction,
     select: mockSelect,
+    update: mockDbUpdate,
+    delete: mockDbDelete,
   },
 }));
 
@@ -63,6 +79,10 @@ vi.mock("@/lib/ably", () => ({
     game_ended: "game_ended",
     player_revived: "player_revived",
   },
+}));
+
+vi.mock("@/lib/pollers", () => ({
+  cleanupPoller: vi.fn(),
 }));
 
 import {
@@ -100,6 +120,16 @@ beforeEach(() => {
     async (fn: (arg: typeof txMock) => Promise<unknown>) => fn(txMock)
   );
 
+  mockDbUpdate.mockImplementation(() => ({
+    set: vi.fn(() => ({
+      where: vi.fn().mockResolvedValue([]),
+    })),
+  }));
+
+  mockDbDelete.mockImplementation(() => ({
+    where: vi.fn().mockResolvedValue([]),
+  }));
+
   mockChannelGet.mockReturnValue({ publish: mockPublish });
   mockPublish.mockResolvedValue(undefined);
 });
@@ -130,13 +160,18 @@ describe("handleGoodWins", () => {
 
   it("archives events (is_archived=1)", async () => {
     await handleGoodWins("game123");
-    const call = findSetCall((a) => a.is_archived === 1);
-    expect(call).toBeDefined();
+    // archiveAndCleanEvents now runs outside the transaction via db.update
+    expect(mockDbUpdate).toHaveBeenCalled();
+    const callResult = mockDbUpdate.mock.results[0];
+    expect(callResult).toBeDefined();
+    const setFn = (callResult?.value as { set: ReturnType<typeof vi.fn> }).set;
+    expect(setFn).toHaveBeenCalledWith(expect.objectContaining({ is_archived: 1 }));
   });
 
   it("deletes future events", async () => {
     await handleGoodWins("game123");
-    expect(txMock.delete).toHaveBeenCalled();
+    // archiveAndCleanEvents now runs outside the transaction via db.delete
+    expect(mockDbDelete).toHaveBeenCalled();
   });
 
   it("publishes GAME_ENDED Ably event with winner_team='team2'", async () => {
@@ -177,8 +212,12 @@ describe("handleEvilWins", () => {
 
   it("archives events", async () => {
     await handleEvilWins("game456");
-    const call = findSetCall((a) => a.is_archived === 1);
-    expect(call).toBeDefined();
+    // archiveAndCleanEvents now runs outside the transaction via db.update
+    expect(mockDbUpdate).toHaveBeenCalled();
+    const callResult = mockDbUpdate.mock.results[0];
+    expect(callResult).toBeDefined();
+    const setFn = (callResult?.value as { set: ReturnType<typeof vi.fn> }).set;
+    expect(setFn).toHaveBeenCalledWith(expect.objectContaining({ is_archived: 1 }));
   });
 
   it("publishes GAME_ENDED with winner_team='team1'", async () => {
@@ -214,10 +253,12 @@ describe("checkGameOver", () => {
           }),
         };
       }
-      // Second call: db.select({ team, is_dead }).from(game_players).where(...)
+      // Second call: db.select({ team, is_dead }).from(game_players).where(...).limit(50)
       return {
         from: () => ({
-          where: vi.fn().mockResolvedValue(players),
+          where: () => ({
+            limit: vi.fn().mockResolvedValue(players),
+          }),
         }),
       };
     });

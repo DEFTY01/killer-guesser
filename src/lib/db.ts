@@ -27,11 +27,28 @@ if (
   );
 }
 
-export const client = createClient({
-  url,
-  authToken,
-});
+// ── Singleton guard ───────────────────────────────────────────────
+// In serverless environments a single Lambda invocation can receive several
+// concurrent requests, each of which would otherwise create its own libsql
+// client.  Storing the instance on `globalThis` ensures that the same process
+// always reuses one connection regardless of how many times this module is
+// evaluated.
+type GlobalWithDb = typeof globalThis & {
+  __tursoClient?: ReturnType<typeof createClient>;
+  __tursoDb?: ReturnType<typeof drizzle<typeof schema>>;
+};
 
-export const db = drizzle(client, { schema });
+const g = globalThis as GlobalWithDb;
+
+if (!g.__tursoClient) {
+  g.__tursoClient = createClient({ url, authToken });
+}
+
+if (!g.__tursoDb) {
+  g.__tursoDb = drizzle(g.__tursoClient, { schema });
+}
+
+export const client = g.__tursoClient;
+export const db = g.__tursoDb;
 export type Db = typeof db;
 

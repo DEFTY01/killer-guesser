@@ -8,6 +8,23 @@ import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
 
+// ── Server-side Ably debounce ─────────────────────────────────────
+// When multiple clients vote within a short window (e.g. 3 phones tapping at
+// once) we would otherwise fire a separate VOTE_CAST publish for each.  The
+// 500 ms debounce collapses those into a single message per game/day,
+// significantly reducing Ably message volume.
+const voteCastDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
+function debounceVoteCast(key: string, callback: () => void): void {
+  const existing = voteCastDebounceTimers.get(key);
+  if (existing !== undefined) clearTimeout(existing);
+  const timer = setTimeout(() => {
+    voteCastDebounceTimers.delete(key);
+    callback();
+  }, 500);
+  voteCastDebounceTimers.set(key, timer);
+}
+
 // ── Helpers ────────────────────────────────────────────────────────
 
 function parsePermissions(raw: string | null | undefined): RolePermission[] {
@@ -290,23 +307,23 @@ export async function GET(
         })
         .from(votes)
         .innerJoin(users, eq(votes.voter_id, users.id))
-        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
+        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+        .limit(200);
 
       const playerMap = new Map(
         (await db
-          .select({ user_id: game_players.user_id, avatar_url: users.avatar_url, name: users.name })
+          .select({ user_id: game_players.user_id, name: users.name })
           .from(game_players)
           .innerJoin(users, eq(game_players.user_id, users.id))
-          .where(eq(game_players.game_id, gameId))).map((p) => [p.user_id, p]),
+          .where(eq(game_players.game_id, gameId))
+          .limit(50)).map((p) => [p.user_id, p]),
       );
 
       responseData.votes = enriched.map((v) => ({
         voterId: v.voter_id,
         voterName: v.voter_name,
-        voterAvatarUrl: playerMap.get(v.voter_id)?.avatar_url ?? null,
         targetId: v.target_id,
         targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
-        targetAvatarUrl: playerMap.get(v.target_id)?.avatar_url ?? null,
       }));
     }
 
@@ -319,14 +336,14 @@ export async function GET(
       .select({
         id: game_players.user_id,
         name: users.name,
-        avatarUrl: users.avatar_url,
         is_dead: game_players.is_dead,
         revived_at: game_players.revived_at,
       })
       .from(game_players)
       .innerJoin(users, eq(game_players.user_id, users.id))
       .where(eq(game_players.game_id, gameId))
-      .orderBy(users.name);
+      .orderBy(users.name)
+      .limit(50);
 
     const alivePlayers = players.filter(
       (p) => p.is_dead === 0,
@@ -340,7 +357,8 @@ export async function GET(
       })
       .from(votes)
       .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-      .groupBy(votes.target_id);
+      .groupBy(votes.target_id)
+      .limit(200);
 
     const tallyMap = new Map(tally.map((r) => [r.target_id, r.vote_count]));
 
@@ -370,7 +388,6 @@ export async function GET(
       players: alivePlayers.map((p) => ({
         id: p.id,
         name: p.name,
-        avatarUrl: p.avatarUrl,
         voteCount: tallyMap.get(p.id) ?? 0,
       })),
     };
@@ -384,7 +401,8 @@ export async function GET(
         })
         .from(votes)
         .innerJoin(users, eq(votes.voter_id, users.id))
-        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
+        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+        .limit(200);
 
       const playerMap = new Map(
         alivePlayers.map((p) => [p.id, p]),
@@ -393,10 +411,8 @@ export async function GET(
       responseData.votes = enriched.map((v) => ({
         voterId: v.voter_id,
         voterName: v.voter_name,
-        voterAvatarUrl: playerMap.get(v.voter_id)?.avatarUrl ?? null,
         targetId: v.target_id,
         targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
-        targetAvatarUrl: playerMap.get(v.target_id)?.avatarUrl ?? null,
       }));
     }
 
@@ -413,7 +429,8 @@ export async function GET(
     .from(votes)
     .innerJoin(users, eq(votes.target_id, users.id))
     .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-    .groupBy(votes.target_id, users.name);
+    .groupBy(votes.target_id, users.name)
+    .limit(200);
 
   const results = tally.map((r) => ({
     playerId: r.target_id,
@@ -439,23 +456,23 @@ export async function GET(
       })
       .from(votes)
       .innerJoin(users, eq(votes.voter_id, users.id))
-      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)));
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+      .limit(200);
 
     const playerMap = new Map(
       (await db
-        .select({ user_id: game_players.user_id, avatar_url: users.avatar_url, name: users.name })
+        .select({ user_id: game_players.user_id, name: users.name })
         .from(game_players)
         .innerJoin(users, eq(game_players.user_id, users.id))
-        .where(eq(game_players.game_id, gameId))).map((p) => [p.user_id, p]),
+        .where(eq(game_players.game_id, gameId))
+        .limit(50)).map((p) => [p.user_id, p]),
     );
 
     responseData.votes = enriched.map((v) => ({
       voterId: v.voter_id,
       voterName: v.voter_name,
-      voterAvatarUrl: playerMap.get(v.voter_id)?.avatar_url ?? null,
       targetId: v.target_id,
       targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
-      targetAvatarUrl: playerMap.get(v.target_id)?.avatar_url ?? null,
     }));
   }
 
@@ -615,27 +632,34 @@ export async function POST(
   // ── Load voter and target names for Ably payload ──────────────
   const [[voterUser], [targetUser]] = await Promise.all([
     db
-      .select({ name: users.name, avatar_url: users.avatar_url })
+      .select({ name: users.name })
       .from(users)
       .where(eq(users.id, userId))
       .limit(1),
     db
-      .select({ name: users.name, avatar_url: users.avatar_url })
+      .select({ name: users.name })
       .from(users)
       .where(eq(users.id, targetId))
       .limit(1),
   ]);
 
-  // ── Publish VOTE_CAST ─────────────────────────────────────────
+  // ── Publish VOTE_CAST (debounced) ─────────────────────────────
+  // Debouncing collapses rapid bursts from multiple concurrent voters into a
+  // single Ably message per game/day, preventing message storms.
   if (process.env.ABLY_API_KEY) {
-    const channel = ablyServer.channels.get(ABLY_CHANNELS.vote(gameId, day));
-    await channel.publish(ABLY_EVENTS.vote_cast, {
-      voterId: userId,
-      voterName: voterUser?.name ?? "Unknown",
-      voterAvatarUrl: voterUser?.avatar_url ?? null,
-      targetId,
-      targetName: targetUser?.name ?? "Unknown",
-      targetAvatarUrl: targetUser?.avatar_url ?? null,
+    const debounceKey = `${gameId}:${day}`;
+    const voterName = voterUser?.name ?? "Unknown";
+    const targetName = targetUser?.name ?? "Unknown";
+    debounceVoteCast(debounceKey, () => {
+      const channel = ablyServer.channels.get(ABLY_CHANNELS.vote(gameId, day));
+      channel.publish(ABLY_EVENTS.vote_cast, {
+        voterId: userId,
+        voterName,
+        targetId,
+        targetName,
+      }).catch((err: unknown) => {
+        console.error("[vote] VOTE_CAST publish failed:", err);
+      });
     });
   }
 

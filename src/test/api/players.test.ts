@@ -5,11 +5,13 @@ const { mockRequireAdmin, mockDbSelect, mockDbInsert, mockDbUpdate, mockDbDelete
   const returning = vi.fn().mockResolvedValue([]);
   const values = vi.fn(() => ({ returning }));
   const set = vi.fn(() => ({ where: vi.fn(() => ({ returning })) }));
-  const limit = vi.fn().mockResolvedValue([]);
-  const orderBy = vi.fn().mockResolvedValue([]);
+  // limit: supports both .limit() as a terminal (resolves) and .limit().offset() chain
+  const offset = vi.fn().mockResolvedValue([]);
+  const limit = vi.fn(() => Object.assign(Promise.resolve([]), { offset }));
+  const orderBy = vi.fn(() => Object.assign(Promise.resolve([]), { limit }));
   const groupBy = vi.fn(() => ({ orderBy }));
   const leftJoin = vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy }));
-  const where = vi.fn(() => ({ limit, returning, orderBy }));
+  const where = vi.fn(() => Object.assign(Promise.resolve([]), { limit, returning, orderBy }));
   const from = vi.fn(() => ({ where, orderBy, leftJoin, groupBy }));
   const select = vi.fn(() => ({ from }));
   const insert = vi.fn(() => ({ values }));
@@ -102,24 +104,33 @@ describe("GET /api/admin/players", () => {
   it("no session → 403", async () => {
     mockRequireAdmin.mockResolvedValue(null);
 
-    const res = await getPlayers();
+    const req = makeRequest("GET");
+    const res = await getPlayers(req);
     expect(res.status).toBe(403);
   });
 
-  it("admin cookie → 200, returns array of players", async () => {
+  it("admin cookie → 200, returns paginated players", async () => {
     mockRequireAdmin.mockResolvedValue(true);
     const players = [
       { id: 1, name: "Alice", is_active: 1 },
       { id: 2, name: "Bob", is_active: 1 },
     ];
-    mockDbOrderBy.mockResolvedValue(players);
+    // First select: players list (select().from().orderBy().limit().offset())
+    const offsetFn = vi.fn().mockResolvedValue(players);
+    const limitFn = vi.fn().mockReturnValue({ offset: offsetFn });
+    const orderByFn = vi.fn().mockReturnValue({ limit: limitFn });
+    mockDbSelect.mockImplementationOnce(() => ({ from: vi.fn().mockReturnValue({ orderBy: orderByFn }) }));
+    // Second select: total count (select().from())
+    mockDbSelect.mockImplementationOnce(() => ({ from: vi.fn().mockResolvedValue([{ total: 2 }]) }));
 
-    const res = await getPlayers();
+    const req = makeRequest("GET");
+    const res = await getPlayers(req);
     const data = await res.json();
 
     expect(res.status).toBe(200);
     expect(data.success).toBe(true);
     expect(data.data).toEqual(players);
+    expect(data.pagination).toMatchObject({ page: 1, limit: 20, total: 2 });
   });
 });
 
