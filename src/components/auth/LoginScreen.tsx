@@ -5,6 +5,7 @@ import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { blobImageSrc } from "@/lib/blob-image";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -185,6 +186,10 @@ export default function LoginScreen({ players }: Props) {
           textAlign: "center",
         }}
       >
+        {/* Theme toggle — top-right corner */}
+        <div style={{ position: "absolute", top: 16, right: 16, zIndex: 10 }}>
+          <ThemeToggle />
+        </div>
         <h1
           style={{
             fontFamily: "var(--font-cinzel), serif",
