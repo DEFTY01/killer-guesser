@@ -8,6 +8,7 @@ import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
 import { nowInZone, windowBoundariesUtc } from "@/lib/timezone";
+import { resolveVoteWindow, isVoteWindowOpen } from "@/lib/voteWindow";
 
 // ── Server-side Ably debounce ─────────────────────────────────────
 // When multiple clients vote within a short window (e.g. 3 phones tapping at
@@ -179,6 +180,10 @@ export async function GET(
 
   const { vote_window_start, vote_window_end, timezone } = game;
 
+  // ── Resolve effective vote window (override or default) ──────
+  const todayDate = new Date().toISOString().slice(0, 10);
+  const resolvedWindow = await resolveVoteWindow(gameId, todayDate);
+
   // ── Lazy close: process if window has ended ──────────────────
   if (
     vote_window_start &&
@@ -349,7 +354,7 @@ export async function GET(
   }
 
   // ── Window open: return alive players ────────────────────────
-  if (isWindowOpen(vote_window_start, vote_window_end, timezone)) {
+  if (isVoteWindowOpen(resolvedWindow, timezone)) {
     const players = await db
       .select({
         id: game_players.user_id,
@@ -396,8 +401,8 @@ export async function GET(
     const canVote = !callerPermissions.includes("see_killer");
 
     const windowBounds =
-      vote_window_start && vote_window_end
-        ? windowBoundariesUtc(vote_window_start, vote_window_end, timezone)
+      resolvedWindow
+        ? windowBoundariesUtc(resolvedWindow.start, resolvedWindow.end, timezone)
         : null;
 
     const responseData: Record<string, unknown> = {
@@ -467,8 +472,8 @@ export async function GET(
   }));
 
   const notYetOpenBounds =
-    vote_window_start && vote_window_end
-      ? windowBoundariesUtc(vote_window_start, vote_window_end, timezone)
+    resolvedWindow
+      ? windowBoundariesUtc(resolvedWindow.start, resolvedWindow.end, timezone)
       : null;
 
   const responseData: Record<string, unknown> = {
@@ -591,7 +596,9 @@ export async function POST(
   }
 
   // ── Check vote window is open ─────────────────────────────────
-  if (!isWindowOpen(game.vote_window_start, game.vote_window_end, game.timezone)) {
+  const todayDatePost = new Date().toISOString().slice(0, 10);
+  const resolvedWindowPost = await resolveVoteWindow(gameId, todayDatePost);
+  if (!isVoteWindowOpen(resolvedWindowPost, game.timezone)) {
     return NextResponse.json(
       { success: false, error: "Voting is closed" },
       { status: 403 },

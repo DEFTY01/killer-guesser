@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text } from "drizzle-orm/sqlite-core";
+import { integer, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 // ── Helper: 10-character nanoid-style ID ──────────────────────────
 
@@ -158,6 +158,25 @@ export const app_settings = sqliteTable("app_settings", {
   bg_dark_url: text("bg_dark_url"),
 });
 
+// ── vote_window_overrides ─────────────────────────────────────────
+
+export const vote_window_overrides = sqliteTable(
+  "vote_window_overrides",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    game_id: text("game_id")
+      .notNull()
+      .references(() => games.id, { onDelete: "cascade" }),
+    day_date: text("day_date").notNull(),
+    window_start: text("window_start").notNull(),
+    window_end: text("window_end").notNull(),
+    created_at: integer("created_at")
+      .notNull()
+      .default(sql`(unixepoch())`),
+  },
+  (t) => [unique("vote_window_overrides_game_date_unique").on(t.game_id, t.day_date)],
+);
+
 // ── Relations ─────────────────────────────────────────────────────
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -174,6 +193,7 @@ export const gamesRelations = relations(games, ({ many, one }) => ({
     fields: [games.id],
     references: [game_settings.game_id],
   }),
+  vote_window_overrides: many(vote_window_overrides),
 }));
 
 export const rolesRelations = relations(roles, ({ many }) => ({
@@ -225,3 +245,13 @@ export const gameSettingsRelations = relations(game_settings, ({ one }) => ({
     references: [games.id],
   }),
 }));
+
+export const voteWindowOverridesRelations = relations(
+  vote_window_overrides,
+  ({ one }) => ({
+    game: one(games, {
+      fields: [vote_window_overrides.game_id],
+      references: [games.id],
+    }),
+  }),
+);

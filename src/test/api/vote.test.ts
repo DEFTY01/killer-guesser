@@ -2,10 +2,12 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockPublish, mockChannelGet } = vi.hoisted(() => ({
+const { mockAuth, mockPublish, mockChannelGet, mockResolveVoteWindow, mockIsVoteWindowOpen } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockPublish: vi.fn().mockResolvedValue(undefined),
   mockChannelGet: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })),
+  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
+  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
@@ -100,6 +102,12 @@ vi.mock("@/db/schema", () => ({
   games: { id: "id", start_time: "start_time", vote_window_start: "vws", vote_window_end: "vwe", status: "status" },
   game_players: { id: "id", game_id: "game_id", user_id: "user_id", is_dead: "is_dead", revived_at: "revived_at", role_id: "role_id", has_tipped: "has_tipped" },
   votes: { id: "id", game_id: "game_id", day: "day", voter_id: "voter_id", target_id: "target_id" },
+  vote_window_overrides: { id: "id", game_id: "game_id", day_date: "day_date", window_start: "window_start", window_end: "window_end" },
+}));
+
+vi.mock("@/lib/voteWindow", () => ({
+  resolveVoteWindow: mockResolveVoteWindow,
+  isVoteWindowOpen: mockIsVoteWindowOpen,
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -122,6 +130,8 @@ describe("GET /api/game/[id]/vote", () => {
     dbMock.callIndex = 0;
     dbMock.selectResults = [];
     delete process.env.ABLY_API_KEY;
+    mockIsVoteWindowOpen.mockReturnValue(false);
+    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("unauthorized → 401", async () => {
@@ -171,15 +181,12 @@ describe("GET /api/game/[id]/vote", () => {
 
   it("window open → returns windowOpen:true and alive players list", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      // Game with open window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}`, team1_name: "Good", team2_name: "Evil" }],
+      // Game — null vote_window to avoid triggering lazy close logic
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
       // Caller row (no special permissions)
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // All alive players
@@ -203,14 +210,12 @@ describe("GET /api/game/[id]/vote", () => {
 
   it("window open + see_killer caller → canVote:false in response", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}`, team1_name: "Good", team2_name: "Evil" }],
+      // Game — null vote_window to avoid triggering lazy close logic
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
       // Caller has see_killer permission
       [{ game_player_id: 1, permissions: '["see_killer"]', is_dead: 0, revived_at: null }],
       // All alive players
@@ -279,15 +284,12 @@ describe("GET /api/game/[id]/vote", () => {
 
   it("window open + Spy (see_votes) → includes full voter breakdown", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      // Game with open window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}`, team1_name: "Good", team2_name: "Evil" }],
+      // Game — null vote_window to avoid triggering lazy close logic
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
       // Caller is Spy with see_votes
       [{ game_player_id: 1, permissions: '["see_votes"]', is_dead: 0, revived_at: null }],
       // All alive players
@@ -398,6 +400,8 @@ describe("POST /api/game/[id]/vote", () => {
     dbMock.callIndex = 0;
     dbMock.selectResults = [];
     delete process.env.ABLY_API_KEY;
+    mockIsVoteWindowOpen.mockReturnValue(false);
+    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("outside vote window → 403 'Voting is closed'", async () => {
@@ -422,16 +426,12 @@ describe("POST /api/game/[id]/vote", () => {
 
   it("dead player → 403", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    // Set up a window that is currently open
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
       // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       // Caller is dead, no revival
       [{ id: 1, is_dead: 1, revived_at: null }],
     ];
@@ -448,15 +448,12 @@ describe("POST /api/game/[id]/vote", () => {
 
   it("valid vote → 200", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
       // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       // Caller is alive
       [{ id: 1, is_dead: 0, revived_at: null }],
       // No existing vote
@@ -507,14 +504,11 @@ describe("POST /api/game/[id]/vote", () => {
 
   it("second vote by same player → updates existing row (upsert)", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
       // Existing vote found (upsert case)
       [{ id: 5 }],
@@ -562,14 +556,11 @@ describe("POST /api/game/[id]/vote", () => {
 
   it("not a participant → 403", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       [], // caller not a participant
     ];
 
@@ -587,14 +578,11 @@ describe("POST /api/game/[id]/vote", () => {
     vi.useFakeTimers();
     process.env.ABLY_API_KEY = "test-key";
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
       [], // no existing vote
       [{ name: "Alice" }],
@@ -632,15 +620,12 @@ describe("POST /api/game/[id]/vote", () => {
 
   it("see_killer player → 403 'Players with killer knowledge cannot vote'", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
       // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       // Caller is alive but has see_killer permission (e.g. the Spy / Seer role)
       [{ id: 1, is_dead: 0, revived_at: null, permissions: '["see_killer"]' }],
     ];

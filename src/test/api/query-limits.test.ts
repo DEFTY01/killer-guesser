@@ -10,11 +10,17 @@ import { NextRequest } from "next/server";
  */
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth } = vi.hoisted(() => ({
+const { mockAuth, mockIsVoteWindowOpen, mockResolveVoteWindow } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
+  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
+  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
+vi.mock("@/lib/voteWindow", () => ({
+  resolveVoteWindow: mockResolveVoteWindow,
+  isVoteWindowOpen: mockIsVoteWindowOpen,
+}));
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn() })) } },
   ABLY_CHANNELS: { game: (id: string) => `game-${id}`, vote: (id: string, day: number) => `vote-${id}-${day}` },
@@ -45,6 +51,7 @@ vi.mock("@/db/schema", () => ({
   game_settings: { game_id: "gid", murder_item_url: "miu", murder_item_name: "min" },
   votes: { id: "id", game_id: "gid", day: "day", voter_id: "vid", target_id: "tid" },
   events: { id: "id" },
+  vote_window_overrides: { id: "id", game_id: "game_id", day_date: "day_date", window_start: "window_start", window_end: "window_end" },
 }));
 
 // ── Helpers ───────────────────────────────────────────────────────
@@ -156,21 +163,20 @@ describe("query-limits: vote endpoint caps players at 50", () => {
     vi.clearAllMocks();
     dbState.callIndex = 0;
     dbState.selectResults = [];
+    mockIsVoteWindowOpen.mockReturnValue(false);
+    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("returns at most 50 players in the vote tally even when 60 are seeded", async () => {
     mockAuth.mockResolvedValue({ user: { id: "1", role: "player" } });
-
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     const sixtyPlayers = makePlayers(60).map((p) => ({ id: p.user_id, name: p.name, is_dead: 0, revived_at: null }));
 
     dbState.selectResults = [
-      // 1. Game
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}`, team1_name: "Good", team2_name: "Evil" }],
+      // 1. Game — null vote_window to avoid triggering lazy close logic
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
       // 2. Caller
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // 3. Players — 60 rows; mock DB enforces .limit(50)

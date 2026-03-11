@@ -8,6 +8,7 @@ import type {
   votes as votesTable,
   events as eventsTable,
   game_settings as gameSettingsTable,
+  vote_window_overrides as voteWindowOverridesTable,
 } from "@/db/schema";
 
 // ── Domain string unions ───────────────────────────────────────────
@@ -65,3 +66,7 @@ export type NewEvent = typeof eventsTable.$inferInsert;
 
 export type GameSettings = typeof gameSettingsTable.$inferSelect;
 export type NewGameSettings = typeof gameSettingsTable.$inferInsert;
+
+export type VoteWindowOverride = typeof voteWindowOverridesTable.$inferSelect;
+export type NewVoteWindowOverride =
+  typeof voteWindowOverridesTable.$inferInsert;

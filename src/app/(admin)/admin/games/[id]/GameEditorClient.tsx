@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useTransition, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
@@ -61,6 +61,15 @@ interface RoleOption {
   is_evil: number;
 }
 
+interface VoteWindowOverrideRow {
+  id: number;
+  game_id: string;
+  day_date: string;
+  window_start: string;
+  window_end: string;
+  created_at: number;
+}
+
 interface GameEditorClientProps {
   game: GameRow;
   settings: SettingsRow;
@@ -113,6 +122,17 @@ export default function GameEditorClient({
   // Timezone editing state
   const [timezone, setTimezone] = useState(initialGame.timezone ?? "UTC");
   const [timezoneSaving, setTimezoneSaving] = useState(false);
+
+  // Per-day override state
+  const todayStr = new Date().toISOString().slice(0, 10);
+  const [overrideDate, setOverrideDate] = useState(todayStr);
+  const [overrideStart, setOverrideStart] = useState("");
+  const [overrideEnd, setOverrideEnd] = useState("");
+  const [overrideSaving, setOverrideSaving] = useState(false);
+  const [overrideToast, setOverrideToast] = useState<string | null>(null);
+  const [overrides, setOverrides] = useState<VoteWindowOverrideRow[]>([]);
+  const [overridesLoading, setOverridesLoading] = useState(true);
+  const [overrideDeleteBusy, setOverrideDeleteBusy] = useState<Set<string>>(new Set());
 
   // Per-row busy states
   const [deadBusy, setDeadBusy] = useState<Set<number>>(new Set());
@@ -362,6 +382,88 @@ export default function GameEditorClient({
     }
   }, [game.id, timezone]);
 
+  // ── Load overrides on mount ────────────────────────────────────
+
+  const loadOverrides = useCallback(async () => {
+    setOverridesLoading(true);
+    try {
+      const res = await fetch(`/api/admin/games/${game.id}/vote-window-override`);
+      const json = await res.json();
+      if (json.success) {
+        setOverrides(json.data);
+      }
+    } catch {
+      // silently ignore
+    } finally {
+      setOverridesLoading(false);
+    }
+  }, [game.id]);
+
+  useEffect(() => {
+    void loadOverrides();
+  }, [loadOverrides]);
+
+  // ── Save per-day override ──────────────────────────────────────
+
+  const saveOverride = useCallback(async () => {
+    if (!overrideStart || !overrideEnd) {
+      setActionError("Both start and end times are required.");
+      return;
+    }
+    setActionError(null);
+    setOverrideSaving(true);
+    try {
+      const res = await fetch(
+        `/api/admin/games/${game.id}/vote-window-override`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            day_date: overrideDate,
+            window_start: overrideStart,
+            window_end: overrideEnd,
+          }),
+        },
+      );
+      const json = await res.json();
+      if (!json.success) {
+        setActionError(json.error ?? "Unknown error");
+        return;
+      }
+      setOverrideToast(`Override saved for ${overrideDate}`);
+      setTimeout(() => setOverrideToast(null), 3000);
+      await loadOverrides();
+    } catch {
+      setActionError("Failed to save override. Please try again.");
+    } finally {
+      setOverrideSaving(false);
+    }
+  }, [game.id, overrideDate, overrideStart, overrideEnd, loadOverrides]);
+
+  // ── Delete per-day override ────────────────────────────────────
+
+  const deleteOverride = useCallback(
+    async (dayDate: string) => {
+      setOverrideDeleteBusy((s) => new Set(s).add(dayDate));
+      try {
+        await fetch(
+          `/api/admin/games/${game.id}/vote-window-override/${dayDate}`,
+          { method: "DELETE" },
+        );
+        await loadOverrides();
+      } catch {
+        // silently ignore
+      } finally {
+        setOverrideDeleteBusy((s) => {
+          const next = new Set(s);
+          next.delete(dayDate);
+          return next;
+        });
+      }
+    },
+    [game.id, loadOverrides],
+  );
+
   // ── Render ─────────────────────────────────────────────────────
 
   return (
@@ -473,6 +575,149 @@ export default function GameEditorClient({
             </button>
           )}
         </div>
+      </div>
+
+      {/* ── Per-day override section ──────────────────────────── */}
+      <div className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
+        <h2 className="text-sm font-semibold text-gray-700">
+          Today&apos;s Override
+        </h2>
+
+        {/* Resolved window for today */}
+        <div className="flex items-center gap-2 text-sm">
+          {(() => {
+            const todayOverride = overrides.find((o) => o.day_date === todayStr);
+            if (todayOverride) {
+              return (
+                <>
+                  <span className="font-medium text-gray-800">
+                    {todayOverride.window_start} – {todayOverride.window_end}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                    Override active
+                  </span>
+                </>
+              );
+            }
+            if (game.vote_window_start && game.vote_window_end) {
+              return (
+                <>
+                  <span className="font-medium text-gray-800">
+                    {game.vote_window_start} – {game.vote_window_end}
+                  </span>
+                  <span className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                    Using default
+                  </span>
+                </>
+              );
+            }
+            return (
+              <span className="text-gray-400 italic">No window configured</span>
+            );
+          })()}
+        </div>
+
+        {/* Set override form */}
+        <div className="flex flex-wrap items-end gap-3">
+          <label htmlFor="override-date" className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Date</span>
+            <input
+              id="override-date"
+              type="date"
+              value={overrideDate}
+              onChange={(e) => setOverrideDate(e.target.value)}
+              aria-label="Override date"
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <label htmlFor="override-start" className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">Start</span>
+            <input
+              id="override-start"
+              type="time"
+              value={overrideStart}
+              onChange={(e) => setOverrideStart(e.target.value)}
+              aria-label="Override window start time"
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <label htmlFor="override-end" className="flex flex-col gap-1">
+            <span className="text-xs text-gray-500">End</span>
+            <input
+              id="override-end"
+              type="time"
+              value={overrideEnd}
+              onChange={(e) => setOverrideEnd(e.target.value)}
+              aria-label="Override window end time"
+              className="rounded border border-gray-300 px-2 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+          </label>
+          <Button
+            variant="secondary"
+            size="sm"
+            loading={overrideSaving}
+            onClick={saveOverride}
+            aria-label="Set override"
+          >
+            Set Override
+          </Button>
+        </div>
+
+        {/* Toast */}
+        {overrideToast && (
+          <p className="text-sm text-green-600 font-medium" role="status">
+            {overrideToast}
+          </p>
+        )}
+
+        {/* Existing overrides table */}
+        {!overridesLoading && overrides.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead>
+                <tr className="border-b bg-gray-50/50">
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">
+                    Date
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">
+                    Window
+                  </th>
+                  <th className="px-4 py-2 text-left font-medium text-gray-600">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {overrides.map((o) => (
+                  <tr key={o.day_date} className="border-b last:border-0">
+                    <td className="px-4 py-2 font-mono text-gray-700">
+                      {o.day_date}
+                    </td>
+                    <td className="px-4 py-2 text-gray-700">
+                      {o.window_start} – {o.window_end}
+                    </td>
+                    <td className="px-4 py-2">
+                      <button
+                        onClick={() => deleteOverride(o.day_date)}
+                        disabled={overrideDeleteBusy.has(o.day_date)}
+                        className="rounded px-2 py-0.5 text-xs font-medium bg-red-100 text-red-700 hover:bg-red-200 disabled:opacity-50 focus:outline-none focus:ring-2 focus:ring-red-500"
+                        aria-label={`Delete override for ${o.day_date}`}
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {overridesLoading && (
+          <p className="text-xs text-gray-400">Loading overrides…</p>
+        )}
+        {!overridesLoading && overrides.length === 0 && (
+          <p className="text-xs text-gray-400">No overrides set.</p>
+        )}
       </div>
 
       {/* ── Error banner ─────────────────────────────────────── */}

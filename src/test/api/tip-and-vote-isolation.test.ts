@@ -31,6 +31,17 @@ vi.mock("@/lib/role-constants", () => ({
   ROLE_PERMISSIONS: ["see_killer", "revive_dead", "see_votes", "extra_vote", "immunity_once"],
 }));
 
+// ── Hoist voteWindow mock ─────────────────────────────────────────
+const { mockIsVoteWindowOpen, mockResolveVoteWindow } = vi.hoisted(() => ({
+  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
+  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock("@/lib/voteWindow", () => ({
+  resolveVoteWindow: mockResolveVoteWindow,
+  isVoteWindowOpen: mockIsVoteWindowOpen,
+}));
+
 // Track which route is being tested to return correct results
 const dbState = vi.hoisted(() => ({
   selectResults: [] as unknown[][],
@@ -79,6 +90,7 @@ vi.mock("@/db/schema", () => ({
   games: { id: "id", start_time: "st", vote_window_start: "vws", vote_window_end: "vwe", status: "status" },
   game_players: { id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", is_revived: "is_revived", revived_at: "ra", has_tipped: "ht", role_id: "rid" },
   votes: { id: "id", game_id: "gid", day: "day", voter_id: "vid", target_id: "tid" },
+  vote_window_overrides: { id: "id", game_id: "game_id", day_date: "day_date", window_start: "window_start", window_end: "window_end" },
 }));
 
 vi.mock("drizzle-orm", () => ({
@@ -97,6 +109,8 @@ describe("tip-and-vote-isolation", () => {
     dbState.callIndex = 0;
     dbState.selectResults = [];
     delete process.env.ABLY_API_KEY;
+    mockIsVoteWindowOpen.mockReturnValue(false);
+    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("tipping does NOT consume the player's vote for the evening", async () => {
@@ -120,14 +134,13 @@ describe("tip-and-vote-isolation", () => {
     expect(tipData.data.correct).toBe(false);
 
     // Second: vote should still work (player can tip AND vote)
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbState.callIndex = 0;
     dbState.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      // Game — null vote_window to avoid triggering lazy close logic
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       // Caller is alive-after-revival (undead: is_dead=0, is_revived=1, can vote)
       [{ id: 1, is_dead: 0, is_revived: 1, revived_at: Math.floor(Date.now() / 1000) }],
       [], // no existing vote
@@ -150,13 +163,12 @@ describe("tip-and-vote-isolation", () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
 
     // First: vote
-    const now = new Date();
-    const startH = String(now.getUTCHours()).padStart(2, "0");
-    const startM = String(now.getUTCMinutes()).padStart(2, "0");
-    const endH = String((now.getUTCHours() + 1) % 24).padStart(2, "0");
+    mockIsVoteWindowOpen.mockReturnValue(true);
+    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbState.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${startH}:${startM}`, vote_window_end: `${endH}:${startM}` }],
+      // Game — null vote_window to avoid triggering lazy close logic
+      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
       [], // no existing vote
       [{ name: "Alice", avatar_url: null }],
