@@ -45,6 +45,7 @@ interface PlayerRow {
   team: "team1" | "team2" | null;
   role_id: number | null;
   is_dead: number;
+  is_revived: number;
   died_at: number | null;
   has_tipped: number;
   name: string;
@@ -879,6 +880,10 @@ export default function GameEditorClient({
                       {p.is_dead ? (
                         <span className="inline-flex items-center gap-1 text-red-500 font-medium text-xs">
                           <span aria-hidden="true">☠</span> Dead
+                        </span>
+                      ) : p.is_revived ? (
+                        <span className="inline-flex items-center gap-1 text-green-600 font-medium text-xs">
+                          <span aria-hidden="true">✨</span> Undead
                         </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 text-green-600 font-medium text-xs">

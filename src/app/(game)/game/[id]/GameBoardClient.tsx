@@ -30,6 +30,7 @@ interface GameInfo {
 interface SettingsInfo {
   murder_item_url: string | null;
   murder_item_name: string | null;
+  death_animation_delay_ms: number | null;
 }
 
 interface CallerInfo {
@@ -794,12 +795,13 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   // Only players with at least one special permission see role-color borders.
   const canSeeColors = (data?.caller.permissions.length ?? 0) > 0;
 
-  // FAB visibility: alive (includes undead since is_dead=0), not tipped, not the killer
+  // FAB visibility: alive (includes undead since is_dead=0), not tipped, not the killer, not Undead
   const callerIsAlive =
     data?.caller !== undefined &&
     data.caller.is_dead === 0;
   const showFab =
     callerIsAlive &&
+    data?.caller.is_revived === 0 &&
     data?.caller.has_tipped === 0 &&
     data?.caller.role_name !== "Killer";
 
@@ -1000,7 +1002,8 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               isKiller={canSeeKiller && isKiller(player.user_id, data.killer_id ?? undefined)}
               canRevive={canRevive}
               viewerRole={data.caller.role_name}
-              showRoleBorder={canSeeColors}
+              showRoleBorder={false}
+              deathAnimationDelayMs={data.settings.death_animation_delay_ms ?? 2000}
               team1Name={data.game.team1_name}
               team2Name={data.game.team2_name}
               onSelfTap={handleSelfTap}

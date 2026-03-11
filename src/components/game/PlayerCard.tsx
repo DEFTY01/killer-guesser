@@ -1,9 +1,8 @@
 "use client";
 
-import { memo } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { blobImageSrc } from "@/lib/blob-image";
-import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -45,8 +44,14 @@ export interface PlayerCardProps {
   /**
    * When true, show the role-color border on each player card.
    * Only viewers with a special role (any permissions) should see these.
+   * Seer: red border only on killer card; Medic: no role-color border.
    */
   showRoleBorder?: boolean;
+  /**
+   * Milliseconds to wait before applying the death animation (grayscale + overlay).
+   * Defaults to 0 (immediate). Only applied on live `is_dead` transitions, not on mount.
+   */
+  deathAnimationDelayMs?: number;
 }
 
 // ── Team badge ────────────────────────────────────────────────────
@@ -102,12 +107,46 @@ export const PlayerCard = memo(function PlayerCard({
   onSelfTap,
   onRevive,
   showRoleBorder = false,
+  deathAnimationDelayMs = 0,
 }: PlayerCardProps) {
   const isMayorView = viewerRole === "Mayor";
 
   const isDead = player.is_dead === 1;
   // Undead: revived but not re-dead (is_revived=1, is_dead=0)
   const isUndead = player.is_revived === 1 && !isDead;
+
+  // ── Death animation: apply grayscale/overlay after delay on live transition ──
+  // Track previous is_dead value to detect transitions (not initial mount).
+  const prevIsDeadRef = useRef<number | null>(null);
+  const [showDeadStyle, setShowDeadStyle] = useState(isDead);
+
+  useEffect(() => {
+    const prev = prevIsDeadRef.current;
+    const current = player.is_dead;
+
+    // First mount: set ref and apply dead style immediately (no animation).
+    if (prev === null) {
+      prevIsDeadRef.current = current;
+      setShowDeadStyle(current === 1);
+      return;
+    }
+
+    prevIsDeadRef.current = current;
+
+    // Live transition to dead: delay the visual style change.
+    if (prev !== 1 && current === 1) {
+      const timer = setTimeout(() => {
+        setShowDeadStyle(true);
+      }, deathAnimationDelayMs);
+      return () => clearTimeout(timer);
+    }
+
+    // Transition to alive (revive): remove dead style immediately.
+    if (current !== 1) {
+      setShowDeadStyle(false);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [player.is_dead, deathAnimationDelayMs]);
 
   // ── Avatar click handler (shared between Mayor and default) ─
   const avatarClickProps =
@@ -165,17 +204,16 @@ export const PlayerCard = memo(function PlayerCard({
   }
 
   // ── Border style (default view) ─────────────────────────────
-  // Only viewers with a special role see colored borders; others get a plain gray border.
+  // Seer (see_killer): red border only on killer card.
+  // All other callers (including Medic): plain gray border.
   const borderStyle = isKiller
     ? { border: "2px solid #c0392b" } // red border for killer (Seer view)
-    : showRoleBorder
-      ? { border: `2px solid ${player.role_color ?? DEFAULT_ROLE_COLOR}` }
-      : { border: "2px solid #e5e7eb" }; // plain gray-200 for regular viewers
+    : { border: "2px solid #e5e7eb" }; // plain gray-200
 
   // ── Card wrapper classes ────────────────────────────────────
   const cardClasses = [
     "relative flex flex-col items-center gap-2 rounded-2xl bg-white p-3 text-center shadow-sm",
-    isDead ? "opacity-80" : "",
+    showDeadStyle ? "opacity-80" : "",
   ]
     .join(" ")
     .trim();
@@ -187,7 +225,7 @@ export const PlayerCard = memo(function PlayerCard({
         className={[
           "relative w-16 h-16 rounded-full overflow-hidden bg-indigo-100 shrink-0",
           isOwnCard ? "cursor-pointer ring-2 ring-offset-1 ring-indigo-400" : "",
-          isDead ? "grayscale" : "",
+          showDeadStyle ? "grayscale" : "",
         ]
           .join(" ")
           .trim()}
@@ -219,7 +257,7 @@ export const PlayerCard = memo(function PlayerCard({
         )}
 
         {/* ── Red ✕ overlay (dead, not undead) ──────────────── */}
-        {isDead && !isUndead && (
+        {showDeadStyle && !isUndead && (
           <div
             className="absolute inset-0 flex items-center justify-center"
             aria-hidden="true"

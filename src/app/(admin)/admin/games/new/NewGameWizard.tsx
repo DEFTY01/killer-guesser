@@ -99,6 +99,7 @@ interface Step3State {
   team2FullyRandom: boolean;
   murderItemUrl: string | null;
   murderItemName: string;
+  deathAnimationDelayMs: number;
 }
 
 const HH_MM_RE = /^\d{2}:\d{2}$/;
@@ -241,6 +242,7 @@ export function NewGameWizard({ players, roles }: Props) {
     team2FullyRandom: false,
     murderItemUrl: null,
     murderItemName: "",
+    deathAnimationDelayMs: 2000,
   });
   const [uploadingMurder, setUploadingMurder] = useState(false);
   const [murderUploadError, setMurderUploadError] = useState<string | null>(
@@ -412,6 +414,7 @@ export function NewGameWizard({ players, roles }: Props) {
       team2SpecialCount: step3.team2SpecialCount,
       murder_item_url: step3.murderItemUrl ?? null,
       murder_item_name: step3.murderItemName.trim() || null,
+      death_animation_delay_ms: step3.deathAnimationDelayMs,
     };
 
     try {
@@ -1197,6 +1200,33 @@ export function NewGameWizard({ players, roles }: Props) {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Death reveal delay */}
+          <div className="mb-2">
+            <label
+              htmlFor="death-animation-delay"
+              className="block text-sm font-medium text-gray-700 mb-1"
+            >
+              Death reveal delay (ms)
+            </label>
+            <input
+              id="death-animation-delay"
+              type="number"
+              min={0}
+              step={100}
+              value={step3.deathAnimationDelayMs}
+              onChange={(e) =>
+                setStep3((p) => ({
+                  ...p,
+                  deathAnimationDelayMs: Math.max(0, parseInt(e.target.value, 10) || 0),
+                }))
+              }
+              className="w-48 rounded-lg border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              How long (in ms) to wait before showing the death animation. Default: 2000.
+            </p>
           </div>
 
           <div className="flex justify-between mt-6">

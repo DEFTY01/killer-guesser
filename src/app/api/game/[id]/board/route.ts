@@ -123,6 +123,7 @@ export async function GET(
     .select({
       murder_item_url: game_settings.murder_item_url,
       murder_item_name: game_settings.murder_item_name,
+      death_animation_delay_ms: game_settings.death_animation_delay_ms,
     })
     .from(game_settings)
     .where(eq(game_settings.game_id, gameId))
@@ -226,6 +227,7 @@ export async function GET(
     settings: {
       murder_item_url: string | null;
       murder_item_name: string | null;
+      death_animation_delay_ms: number | null;
     };
     caller: {
       game_player_id: number;
@@ -264,6 +266,7 @@ export async function GET(
     settings: {
       murder_item_url: settings?.murder_item_url ?? null,
       murder_item_name: settings?.murder_item_name ?? null,
+      death_animation_delay_ms: settings?.death_animation_delay_ms ?? 2000,
     },
     caller: {
       game_player_id: callerRow.game_player_id,
