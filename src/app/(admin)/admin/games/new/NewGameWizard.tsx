@@ -1376,6 +1376,7 @@ export function NewGameWizard({ players, roles }: Props) {
                         fill
                         className="object-contain"
                         sizes="48px"
+                        unoptimized
                       />
                     </div>
                   )}

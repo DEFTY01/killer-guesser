@@ -538,6 +538,7 @@ function KillerGuessModal({
                             fill
                             sizes="48px"
                             className="object-cover"
+                            unoptimized
                           />
                         ) : (
                           <span className="flex h-full w-full items-center justify-center text-base font-bold text-gray-500">
@@ -580,6 +581,7 @@ function KillerGuessModal({
                       fill
                       sizes="80px"
                       className="object-cover"
+                      unoptimized
                     />
                   ) : (
                     <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-gray-500">

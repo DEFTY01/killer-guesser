@@ -340,6 +340,7 @@ export default async function GameHistoryPage({
                                     width={24}
                                     height={24}
                                     className="rounded-full object-cover shrink-0"
+                                    unoptimized
                                   />
                                 )}
                                 <span className="text-sm text-gray-700 min-w-0 truncate">
@@ -431,6 +432,7 @@ export default async function GameHistoryPage({
                             width={32}
                             height={32}
                             className={`rounded-full object-cover shrink-0 ${p.is_dead ? "grayscale opacity-60" : ""}`}
+                            unoptimized
                           />
                         ) : (
                           <div
@@ -559,6 +561,7 @@ export default async function GameHistoryPage({
                                 width={28}
                                 height={28}
                                 className="rounded-full object-cover shrink-0"
+                                unoptimized
                               />
                             )}
                             <span className="text-sm text-gray-700 w-32 truncate shrink-0">

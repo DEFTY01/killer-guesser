@@ -103,6 +103,7 @@ function PlayerTile({
             fill
             sizes="56px"
             className="object-cover"
+            unoptimized
           />
         ) : (
           <span className="flex h-full w-full items-center justify-center text-lg font-bold text-gray-500">
@@ -734,7 +735,7 @@ function MiniAvatar({
   return (
     <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
       {url ? (
-        <Image src={url} alt={name} fill sizes="32px" className="object-cover" />
+        <Image src={url} alt={name} fill sizes="32px" className="object-cover" unoptimized />
       ) : (
         <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
           {name.charAt(0).toUpperCase()}
