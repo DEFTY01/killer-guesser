@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useCountdown } from "@/hooks/useCountdown";
 
@@ -43,16 +44,11 @@ function SkeletonCard({ tall = false }: { tall?: boolean }) {
 // ── Active game card ──────────────────────────────────────────────
 
 function ActiveCard({ game }: { game: LobbyGame }) {
-  const router = useRouter();
-
-  function handleJoin() {
-    setSelectedGameCookie(game.id);
-    router.push(`/game/${game.id}`);
-  }
-
   return (
-    <button
-      onClick={handleJoin}
+    <Link
+      href={`/game/${game.id}`}
+      prefetch
+      onClick={() => setSelectedGameCookie(game.id)}
       className="w-full text-left rounded-2xl bg-white border border-gray-100 shadow-md p-5 flex items-center justify-between gap-4 hover:shadow-lg active:scale-[0.98] transition-all"
     >
       <div className="flex-1 min-w-0">
@@ -72,7 +68,7 @@ function ActiveCard({ game }: { game: LobbyGame }) {
       <span className="shrink-0 text-indigo-600 font-bold text-lg">
         Join →
       </span>
-    </button>
+    </Link>
   );
 }
 

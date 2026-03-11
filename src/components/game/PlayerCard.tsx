@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import Image from "next/image";
 import { blobImageSrc } from "@/lib/blob-image";
 import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
@@ -90,7 +91,7 @@ function TeamBadge({
  * - Healer:     "Revive" button below dead player's name.
  * - Default:    2px border in role color + team badge.
  */
-export function PlayerCard({
+export const PlayerCard = memo(function PlayerCard({
   player,
   isOwnCard,
   isKiller,
@@ -267,4 +268,4 @@ export function PlayerCard({
       )}
     </div>
   );
-}
+});

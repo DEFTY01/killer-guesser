@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback, useRef, memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { useAbly } from "@/hooks/useAbly";
@@ -131,6 +131,45 @@ function PlayerTile({
   );
 }
 
+// ── VoteTileRow ───────────────────────────────────────────────────
+
+const VoteTileRow = memo(function VoteTileRow({
+  player,
+  isSelected,
+  isSelf,
+  hasVotes,
+  onSelect,
+  dispatchRef,
+}: {
+  player: VotePlayer;
+  isSelected: boolean;
+  isSelf: boolean;
+  hasVotes: boolean;
+  onSelect: (id: number) => void;
+  dispatchRef: React.MutableRefObject<Map<number, React.Dispatch<React.SetStateAction<number>>>>;
+}) {
+  const [voteCount, setVoteCount] = useState(player.voteCount);
+  const handleClick = useCallback(() => {
+    if (!isSelf) onSelect(player.id);
+  }, [isSelf, onSelect, player.id]);
+  useEffect(() => {
+    setVoteCount(player.voteCount);
+  }, [player.voteCount]);
+  useEffect(() => {
+    dispatchRef.current.set(player.id, setVoteCount);
+    return () => { dispatchRef.current.delete(player.id); };
+  }, [player.id, dispatchRef]);
+  return (
+    <PlayerTile
+      player={{ ...player, voteCount }}
+      isSelected={isSelected}
+      isSelf={isSelf}
+      totalVotes={hasVotes ? 1 : 0}
+      onClick={handleClick}
+    />
+  );
+});
+
 // ── Countdown display ─────────────────────────────────────────────
 
 function VoteWindowCountdown({ endHhmm }: { endHhmm: string }) {
@@ -163,22 +202,22 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
   const [data, setData] = useState<VoteData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Selected suspect (before confirming)
   const [selectedId, setSelectedId] = useState<number | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [voteError, setVoteError] = useState<string | null>(null);
 
-  // Live votes for spy view
   const [liveVotes, setLiveVotes] = useState<VoteEntry[]>([]);
 
-  // Results after close
   const [results, setResults] = useState<VoteResult[] | null>(null);
   const [eliminated, setEliminated] =
     useState<{ id: number; name: string } | null | undefined>(undefined);
 
-  // Crossfade transition state
   const [closing, setClosing] = useState(false);
   const closedRef = useRef(false);
+
+  const countDispatchRef = useRef<Map<number, React.Dispatch<React.SetStateAction<number>>>>(new Map());
+  const voterTargetRef = useRef<Map<number, number>>(new Map());
+  const [hasVotes, setHasVotes] = useState(false);
 
   // ── Load data ──────────────────────────────────────────────
 
@@ -193,9 +232,14 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         const d = json.data as VoteData;
         setData(d);
         if (d.votes) setLiveVotes(d.votes);
+        if (d.windowOpen) {
+          if (d.votes) {
+            d.votes.forEach((v) => { voterTargetRef.current.set(v.voterId, v.targetId); });
+          }
+          if (d.players.some((p) => p.voteCount > 0)) setHasVotes(true);
+        }
         if (!d.windowOpen) {
           setResults(d.results);
-          // Populate eliminated from the GET response (covers late-joiners)
           if (d.eliminated !== undefined) {
             setEliminated(d.eliminated ?? null);
           }
@@ -208,12 +252,14 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     fetchData();
   }, [fetchData]);
 
-  // Pre-select the player the caller already voted for
   useEffect(() => {
     if (data?.windowOpen && data.callerVotedFor) {
       setSelectedId(data.callerVotedFor);
     }
   }, [data]);
+
+  const handleSelect = useCallback((id: number) => setSelectedId(id), []);
+  const noOp = useCallback((_id: number) => {}, []);
 
   // ── Submit / change vote ────────────────────────────────────
 
@@ -221,6 +267,10 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     if (selectedId === null) return;
     setSubmitting(true);
     setVoteError(null);
+    setData((prev) => {
+      if (!prev?.windowOpen) return prev;
+      return { ...prev, callerVotedFor: selectedId };
+    });
     try {
       const res = await fetch(`/api/game/${gameId}/vote`, {
         method: "POST",
@@ -230,15 +280,17 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
       const json = await res.json();
       if (!json.success) {
         setVoteError((json.error as string) ?? "Something went wrong");
-        return;
+        setData((prev) => {
+          if (!prev?.windowOpen) return prev;
+          return { ...prev, callerVotedFor: null };
+        });
       }
-      // Optimistically update callerVotedFor
-      setData((prev) => {
-        if (!prev?.windowOpen) return prev;
-        return { ...prev, callerVotedFor: selectedId };
-      });
     } catch {
       setVoteError("Network error. Please try again.");
+      setData((prev) => {
+        if (!prev?.windowOpen) return prev;
+        return { ...prev, callerVotedFor: null };
+      });
     } finally {
       setSubmitting(false);
     }
@@ -254,10 +306,8 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     useCallback(
       (msg) => {
         const payload = msg.data as VoteEntry;
-        // Update spy list
         if (canSeeVotes) {
           setLiveVotes((prev) => {
-            // Replace if same voter, otherwise append
             const idx = prev.findIndex((v) => v.voterId === payload.voterId);
             if (idx >= 0) {
               const next = [...prev];
@@ -267,38 +317,24 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
             return [...prev, payload];
           });
         }
-        // Update aggregate counts on player tiles
-        setData((prev) => {
-          if (!prev?.windowOpen) return prev;
-          // Find old target for this voter and decrement, then increment new
-          const oldVote = prev.votes?.find((v) => v.voterId === payload.voterId);
-          const oldTargetId = oldVote?.targetId ?? null;
-          return {
-            ...prev,
-            players: prev.players.map((p) => {
-              let delta = 0;
-              if (p.id === payload.targetId) delta += 1;
-              if (oldTargetId !== null && p.id === oldTargetId) delta -= 1;
-              return delta !== 0
-                ? { ...p, voteCount: Math.max(0, p.voteCount + delta) }
-                : p;
-            }),
-            votes: canSeeVotes
-              ? (() => {
-                  const existing = prev.votes ?? [];
-                  const idx = existing.findIndex(
-                    (v) => v.voterId === payload.voterId,
-                  );
-                  if (idx >= 0) {
-                    const next = [...existing];
-                    next[idx] = payload;
-                    return next;
-                  }
-                  return [...existing, payload];
-                })()
-              : prev.votes,
-          };
-        });
+        const oldTargetId = voterTargetRef.current.get(payload.voterId) ?? null;
+        voterTargetRef.current.set(payload.voterId, payload.targetId);
+        countDispatchRef.current.get(payload.targetId)?.(c => c + 1);
+        if (oldTargetId !== null && oldTargetId !== payload.targetId) {
+          countDispatchRef.current.get(oldTargetId)?.(c => Math.max(0, c - 1));
+        }
+        setHasVotes(true);
+        if (canSeeVotes) {
+          setData((prev) => {
+            if (!prev?.windowOpen) return prev;
+            const existing = prev.votes ?? [];
+            const idx = existing.findIndex((v) => v.voterId === payload.voterId);
+            const votes = idx >= 0
+              ? [...existing.slice(0, idx), payload, ...existing.slice(idx + 1)]
+              : [...existing, payload];
+            return { ...prev, votes };
+          });
+        }
       },
       [canSeeVotes],
     ),
@@ -477,15 +513,10 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
   // ── Active vote window ──────────────────────────────────
 
   const openData = data as OpenState;
-  const totalVotes = openData.players.reduce(
-    (sum, p) => sum + p.voteCount,
-    0,
-  );
   const hasConfirmedVote = openData.callerVotedFor !== null;
   const selectedChanged =
     selectedId !== null && selectedId !== openData.callerVotedFor;
 
-  // Players with see_killer permission observe votes but cannot cast one.
   if (!openData.canVote) {
     return (
       <div
@@ -514,13 +545,14 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         {/* Read-only player grid showing live vote counts */}
         <div className="player-grid player-grid-vote">
           {openData.players.map((player) => (
-            <PlayerTile
+            <VoteTileRow
               key={player.id}
               player={player}
               isSelected={false}
               isSelf={player.id === openData.callerUserId}
-              totalVotes={totalVotes}
-              onClick={() => {}}
+              hasVotes={hasVotes}
+              onSelect={noOp}
+              dispatchRef={countDispatchRef}
             />
           ))}
         </div>
@@ -568,21 +600,17 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
       {/* Player grid */}
       <div className="player-grid player-grid-vote">
-        {openData.players.map((player) => {
-          const isSelf = player.id === openData.callerUserId;
-          return (
-            <PlayerTile
-              key={player.id}
-              player={player}
-              isSelected={selectedId === player.id}
-              isSelf={isSelf}
-              totalVotes={totalVotes}
-              onClick={() => {
-                if (!isSelf) setSelectedId(player.id);
-              }}
-            />
-          );
-        })}
+        {openData.players.map((player) => (
+          <VoteTileRow
+            key={player.id}
+            player={player}
+            isSelected={selectedId === player.id}
+            isSelf={player.id === openData.callerUserId}
+            hasVotes={hasVotes}
+            onSelect={handleSelect}
+            dispatchRef={countDispatchRef}
+          />
+        ))}
       </div>
 
       {/* Confirm button */}
