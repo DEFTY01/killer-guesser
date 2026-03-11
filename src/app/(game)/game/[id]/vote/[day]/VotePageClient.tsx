@@ -512,7 +512,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         </div>
 
         {/* Read-only player grid showing live vote counts */}
-        <div className="player-grid">
+        <div className="player-grid player-grid-vote">
           {openData.players.map((player) => (
             <PlayerTile
               key={player.id}
@@ -567,7 +567,7 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
       )}
 
       {/* Player grid */}
-      <div className="player-grid">
+      <div className="player-grid player-grid-vote">
         {openData.players.map((player) => {
           const isSelf = player.id === openData.callerUserId;
           return (

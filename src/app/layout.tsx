@@ -8,6 +8,8 @@ import { app_settings } from "@/db/schema";
 import { eq } from "drizzle-orm";
 
 export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
   viewportFit: "cover",
 };
 
