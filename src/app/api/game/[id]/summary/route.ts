@@ -161,15 +161,24 @@ export async function GET(
     });
   }
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      game,
-      players,
-      votes_by_day,
-      caller_team: callerRow.team,
-      caller_permissions: callerRow.permissions ?? null,
-      killerRoleId,
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        game,
+        players,
+        votes_by_day,
+        caller_team: callerRow.team,
+        caller_permissions: callerRow.permissions ?? null,
+        killerRoleId,
+      },
     },
-  });
+    {
+      headers: {
+        // Closed-game summary is immutable — cache privately in the browser
+        // for 1 hour to avoid redundant transfers on re-visits.
+        "Cache-Control": "private, max-age=3600",
+      },
+    },
+  );
 }

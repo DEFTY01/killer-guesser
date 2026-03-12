@@ -203,26 +203,30 @@ export async function GET(
       )
       .returning({ id: games.id });
 
-    // Only the first caller that cleared the window performs close logic.
-    if (cleared) {
-      // Tally votes for the current day.
-      const tally = await db
-        .select({
-          target_id: votes.target_id,
-          target_name: users.name,
-          vote_count: count(votes.id),
-        })
-        .from(votes)
-        .innerJoin(users, eq(votes.target_id, users.id))
-        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-        .groupBy(votes.target_id, users.name);
+    // Tally votes once — reused for both close logic (first caller) and response.
+    // This avoids a duplicate DB round-trip that previously occurred when the
+    // first caller performed the close (lines inside `if (cleared)`) and then
+    // re-queried the same tally for building the response.
+    const closeTally = await db
+      .select({
+        target_id: votes.target_id,
+        target_name: users.name,
+        vote_count: count(votes.id),
+      })
+      .from(votes)
+      .innerJoin(users, eq(votes.target_id, users.id))
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+      .groupBy(votes.target_id, users.name);
 
+    // Only the first caller that cleared the window performs close logic.
+    let closedEliminated: { id: number; name: string } | null = null;
+    if (cleared) {
       // Build a Map of vote counts for O(1) lookups and total-vote calculation.
-      const counts = new Map(tally.map((r) => [r.target_id, r.vote_count]));
+      const counts = new Map(closeTally.map((r) => [r.target_id, r.vote_count]));
       const totalVotes = [...counts.values()].reduce((s, c) => s + c, 0);
 
       // Sort descending by vote count.
-      const sorted = [...tally].sort((a, b) => b.vote_count - a.vote_count);
+      const sorted = [...closeTally].sort((a, b) => b.vote_count - a.vote_count);
       const top = sorted[0];
 
       // A player is eliminated only when their count is STRICTLY GREATER than
@@ -234,8 +238,6 @@ export async function GET(
       const hasMajority =
         top !== undefined && totalVotes > 0 && top.vote_count * 2 > totalVotes;
       const majority = isStrictlyTop && hasMajority ? top : undefined;
-
-      let eliminated: { id: number; name: string } | null = null;
 
       if (majority) {
         // Eliminate the majority player (died in the evening).
@@ -253,7 +255,7 @@ export async function GET(
             ),
           );
 
-        eliminated = { id: majority.target_id, name: majority.target_name };
+        closedEliminated = { id: majority.target_id, name: majority.target_name };
 
         // Check win conditions after vote elimination (multi-killer rule:
         // good wins only when ALL evil players are dead).
@@ -264,8 +266,8 @@ export async function GET(
       if (process.env.ABLY_API_KEY) {
         const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
         await channel.publish(ABLY_EVENTS.vote_closed, {
-          eliminated,
-          voteResults: tally.map((r) => ({
+          eliminated: closedEliminated,
+          voteResults: closeTally.map((r) => ({
             playerId: r.target_id,
             name: r.target_name,
             voteCount: r.vote_count,
@@ -281,47 +283,40 @@ export async function GET(
       .where(eq(games.id, gameId))
       .limit(1);
 
-    // Build results response.
-    const tally = await db
-      .select({
-        target_id: votes.target_id,
-        target_name: users.name,
-        vote_count: count(votes.id),
-      })
-      .from(votes)
-      .innerJoin(users, eq(votes.target_id, users.id))
-      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-      .groupBy(votes.target_id, users.name);
-
-    const results = tally.map((r) => ({
+    const results = closeTally.map((r) => ({
       playerId: r.target_id,
       name: r.target_name,
       voteCount: r.vote_count,
     }));
 
-    // Find who (if anyone) was eliminated in the evening for today's day.
-    // This covers both the first-caller and subsequent GET calls after close.
-    const eveningDead = await db
-      .select({ user_id: game_players.user_id, name: users.name })
-      .from(game_players)
-      .innerJoin(users, eq(game_players.user_id, users.id))
-      .where(
-        and(
-          eq(game_players.game_id, gameId),
-          eq(game_players.is_dead, 1),
-          eq(game_players.died_time_of_day, "evening"),
-        ),
-      )
-      .limit(1);
-    const eliminatedFromDb = eveningDead[0]
-      ? { id: eveningDead[0].user_id, name: eveningDead[0].name }
-      : null;
+    // Find who was eliminated: first caller already knows from close logic;
+    // subsequent callers (cleared=false) must query the DB.
+    let eliminated: { id: number; name: string } | null;
+    if (cleared) {
+      eliminated = closedEliminated;
+    } else {
+      const eveningDead = await db
+        .select({ user_id: game_players.user_id, name: users.name })
+        .from(game_players)
+        .innerJoin(users, eq(game_players.user_id, users.id))
+        .where(
+          and(
+            eq(game_players.game_id, gameId),
+            eq(game_players.is_dead, 1),
+            eq(game_players.died_time_of_day, "evening"),
+          ),
+        )
+        .limit(1);
+      eliminated = eveningDead[0]
+        ? { id: eveningDead[0].user_id, name: eveningDead[0].name }
+        : null;
+    }
 
     const responseData: Record<string, unknown> = {
       windowOpen: false,
       day,
       callerUserId: userId,
-      eliminated: eliminatedFromDb,
+      eliminated,
       results,
       game_timezone: timezone,
       ...(reloaded?.vote_window_start && reloaded?.vote_window_end
@@ -361,7 +356,9 @@ export async function GET(
       }));
     }
 
-    return NextResponse.json({ success: true, data: responseData });
+    return NextResponse.json({ success: true, data: responseData }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   // ── Window open: return alive players ────────────────────────
@@ -460,7 +457,9 @@ export async function GET(
       }));
     }
 
-    return NextResponse.json({ success: true, data: responseData });
+    return NextResponse.json({ success: true, data: responseData }, {
+      headers: { "Cache-Control": "no-store" },
+    });
   }
 
   // ── Window not yet open or no window set ─────────────────────
@@ -530,7 +529,9 @@ export async function GET(
     }));
   }
 
-  return NextResponse.json({ success: true, data: responseData });
+  return NextResponse.json({ success: true, data: responseData }, {
+    headers: { "Cache-Control": "no-store" },
+  });
 }
 
 // ── POST /api/game/[id]/vote ──────────────────────────────────────

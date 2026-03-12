@@ -76,11 +76,19 @@ export async function GET() {
     .where(eq(game_players.game_id, gameId))
     .orderBy(users.name);
 
-  return NextResponse.json({
-    success: true,
-    data: {
-      game,
-      players,
+  return NextResponse.json(
+    {
+      success: true,
+      data: {
+        game,
+        players,
+      },
     },
-  });
+    {
+      headers: {
+        // Participant list is personalized and may change — do not cache.
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }

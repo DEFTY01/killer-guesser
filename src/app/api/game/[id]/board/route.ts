@@ -362,5 +362,10 @@ export async function GET(
     }));
   }
 
-  return NextResponse.json({ success: true, data });
+  return NextResponse.json({ success: true, data }, {
+    headers: {
+      // Board is real-time personalized data — must not be cached by any CDN.
+      "Cache-Control": "no-store",
+    },
+  });
 }

@@ -96,9 +96,17 @@ export async function GET() {
     .orderBy(desc(games.start_time))
     .limit(5);
 
-  return NextResponse.json({
-    active,
-    scheduled,
-    past: pastRows,
-  });
+  return NextResponse.json(
+    {
+      active,
+      scheduled,
+      past: pastRows,
+    },
+    {
+      headers: {
+        // Lobby state is personalized and changes in real-time — do not cache.
+        "Cache-Control": "no-store",
+      },
+    },
+  );
 }
