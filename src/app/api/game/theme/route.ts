@@ -16,8 +16,17 @@ export async function GET() {
     .where(eq(app_settings.id, 1))
     .limit(1);
 
-  return NextResponse.json({
-    bg_light_url: row?.bg_light_url ?? null,
-    bg_dark_url: row?.bg_dark_url ?? null,
-  });
+  return NextResponse.json(
+    {
+      bg_light_url: row?.bg_light_url ?? null,
+      bg_dark_url: row?.bg_dark_url ?? null,
+    },
+    {
+      headers: {
+        // Theme images change infrequently; serve from CDN cache for 5 min,
+        // allow stale-while-revalidate for up to 1 hour.
+        "Cache-Control": "public, s-maxage=300, stale-while-revalidate=3600",
+      },
+    },
+  );
 }
