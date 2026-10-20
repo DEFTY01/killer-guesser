@@ -1,8 +1,8 @@
 {
   "version": "6",
   "dialect": "sqlite",
-  "id": "4eec4f4d-efa1-4f15-819f-933f1823a5db",
-  "prevId": "79db6e8f-2a5a-48b0-a813-eff92d489a97",
+  "id": "997f374e-3ade-4713-bf41-daad2ec35a7d",
+  "prevId": "4eec4f4d-efa1-4f15-819f-933f1823a5db",
   "tables": {
     "app_settings": {
       "name": "app_settings",
@@ -91,7 +91,16 @@
           "default": 0
         }
       },
-      "indexes": {},
+      "indexes": {
+        "events_game_day_idx": {
+          "name": "events_game_day_idx",
+          "columns": [
+            "game_id",
+            "day"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "events_game_id_games_id_fk": {
           "name": "events_game_id_games_id_fk",
@@ -223,7 +232,16 @@
           "autoincrement": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "game_players_game_user_idx": {
+          "name": "game_players_game_user_idx",
+          "columns": [
+            "game_id",
+            "user_id"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {
         "game_players_game_id_games_id_fk": {
           "name": "game_players_game_id_games_id_fk",
@@ -485,7 +503,16 @@
           "default": "(unixepoch())"
         }
       },
-      "indexes": {},
+      "indexes": {
+        "games_status_start_time_idx": {
+          "name": "games_status_start_time_idx",
+          "columns": [
+            "status",
+            "start_time"
+          ],
+          "isUnique": false
+        }
+      },
       "foreignKeys": {},
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},

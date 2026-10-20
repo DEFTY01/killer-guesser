@@ -1,5 +1,5 @@
 import { relations, sql } from "drizzle-orm";
-import { integer, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
+import { index, integer, real, sqliteTable, text, unique } from "drizzle-orm/sqlite-core";
 
 // ── Helper: 10-character nanoid-style ID ──────────────────────────
 
@@ -56,7 +56,7 @@ export const games = sqliteTable("games", {
   created_at: integer("created_at")
     .notNull()
     .default(sql`(unixepoch())`),
-});
+}, (t) => [index("games_status_start_time_idx").on(t.status, t.start_time)]);
 
 // ── roles ─────────────────────────────────────────────────────────
 
@@ -96,7 +96,7 @@ export const game_players = sqliteTable("game_players", {
   has_tipped: integer("has_tipped").notNull().default(0),
   tipped_user_id: integer("tipped_user_id").references(() => users.id),
   death_reason: text("death_reason"),
-});
+}, (t) => [index("game_players_game_user_idx").on(t.game_id, t.user_id)]);
 
 // ── votes ─────────────────────────────────────────────────────────
 
@@ -137,7 +137,7 @@ export const events = sqliteTable("events", {
     .notNull()
     .default(sql`(unixepoch())`),
   is_archived: integer("is_archived").notNull().default(0),
-});
+}, (t) => [index("events_game_day_idx").on(t.game_id, t.day)]);
 
 // ── game_settings ─────────────────────────────────────────────────
 
