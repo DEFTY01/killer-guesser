@@ -11,7 +11,7 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { activateGameIfReady } from "@/lib/activateGame";
-import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
+import { getVotingState } from "@/lib/votingState";
 import type { RolePermission } from "@/lib/role-constants";
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -94,22 +94,70 @@ export async function GET(
   // Auto-activate if start_time has passed
   await activateGameIfReady(gameId);
 
-  // ── Load game ─────────────────────────────────────────────────
-  const [game] = await db
-    .select({
-      id: games.id,
-      name: games.name,
-      status: games.status,
-      start_time: games.start_time,
-      team1_name: games.team1_name,
-      team2_name: games.team2_name,
-      vote_window_start: games.vote_window_start,
-      vote_window_end: games.vote_window_end,
-      timezone: games.timezone,
-    })
-    .from(games)
-    .where(eq(games.id, gameId))
-    .limit(1);
+  // ── Load game, settings, caller and players in parallel ───────
+  // Team membership is intentionally omitted from the player list — it is
+  // private and must not be visible to any participant during an active game.
+  const [[game], [settings], [callerRow], players] = await Promise.all([
+    db
+      .select({
+        id: games.id,
+        name: games.name,
+        status: games.status,
+        start_time: games.start_time,
+        team1_name: games.team1_name,
+        team2_name: games.team2_name,
+        vote_window_start: games.vote_window_start,
+        vote_window_end: games.vote_window_end,
+        timezone: games.timezone,
+        vote_closed_day: games.vote_closed_day,
+      })
+      .from(games)
+      .where(eq(games.id, gameId))
+      .limit(1),
+    db
+      .select({
+        murder_item_url: game_settings.murder_item_url,
+        murder_item_name: game_settings.murder_item_name,
+        death_animation_delay_ms: game_settings.death_animation_delay_ms,
+      })
+      .from(game_settings)
+      .where(eq(game_settings.game_id, gameId))
+      .limit(1),
+    db
+      .select({
+        game_player_id: game_players.id,
+        permissions: roles.permissions,
+        role_name: roles.name,
+        role_color: roles.color_hex,
+        role_description: roles.description,
+        team: game_players.team,
+        is_dead: game_players.is_dead,
+        is_revived: game_players.is_revived,
+        revived_at: game_players.revived_at,
+        has_tipped: game_players.has_tipped,
+      })
+      .from(game_players)
+      .leftJoin(roles, eq(game_players.role_id, roles.id))
+      .where(
+        and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
+      )
+      .limit(1),
+    db
+      .select({
+        id: game_players.id,
+        user_id: game_players.user_id,
+        name: users.name,
+        avatar_url: users.avatar_url,
+        is_dead: game_players.is_dead,
+        is_revived: game_players.is_revived,
+        revived_at: game_players.revived_at,
+      })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(eq(game_players.game_id, gameId))
+      .orderBy(users.name)
+      .limit(50),
+  ]);
 
   if (!game) {
     return NextResponse.json(
@@ -117,38 +165,6 @@ export async function GET(
       { status: 404 },
     );
   }
-
-  // ── Load settings ─────────────────────────────────────────────
-  const [settings] = await db
-    .select({
-      murder_item_url: game_settings.murder_item_url,
-      murder_item_name: game_settings.murder_item_name,
-      death_animation_delay_ms: game_settings.death_animation_delay_ms,
-    })
-    .from(game_settings)
-    .where(eq(game_settings.game_id, gameId))
-    .limit(1);
-
-  // ── Verify caller is a participant and load their permissions ──
-  const [callerRow] = await db
-    .select({
-      game_player_id: game_players.id,
-      permissions: roles.permissions,
-      role_name: roles.name,
-      role_color: roles.color_hex,
-      role_description: roles.description,
-      team: game_players.team,
-      is_dead: game_players.is_dead,
-      is_revived: game_players.is_revived,
-      revived_at: game_players.revived_at,
-      has_tipped: game_players.has_tipped,
-    })
-    .from(game_players)
-    .leftJoin(roles, eq(game_players.role_id, roles.id))
-    .where(
-      and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
-    )
-    .limit(1);
 
   if (!callerRow) {
     return NextResponse.json(
@@ -159,58 +175,23 @@ export async function GET(
 
   const callerPermissions = parsePermissions(callerRow.permissions);
 
-  // ── Load all players ──────────────────────────────────────────
-  // Team membership is intentionally omitted from the player list — it is
-  // private and must not be visible to any participant during an active game.
-  const players = await db
-    .select({
-      id: game_players.id,
-      user_id: game_players.user_id,
-      name: users.name,
-      avatar_url: users.avatar_url,
-      is_dead: game_players.is_dead,
-      is_revived: game_players.is_revived,
-      revived_at: game_players.revived_at,
-      role_color: roles.color_hex,
-    })
-    .from(game_players)
-    .innerJoin(users, eq(game_players.user_id, users.id))
-    .leftJoin(roles, eq(game_players.role_id, roles.id))
-    .where(eq(game_players.game_id, gameId))
-    .orderBy(users.name)
-    .limit(50);
-
-  // Normalise: replace null role_color with the default blue
-  const normalizedPlayers = players.map((p) => ({
-    ...p,
-    role_color: p.role_color ?? DEFAULT_ROLE_COLOR,
-  }));
-
-  // ── Mayor anonymisation: strip role_color data ────────────────
-  // The Mayor's view is deliberately equalized — they cannot see role colours.
-  // Strip every field except the bare minimum needed to render a face-and-name card.
-  const isMayor = callerRow.role_name === "Mayor";
-
-  // ?slim reduces the player list to the minimum fields needed for lightweight
-  // components (e.g. a live score card or dead-player overlay).
-  const responsePlayers = (slim || isMayor)
-    ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, is_revived, revived_at }) => ({
-        id,
-        user_id,
-        name,
-        avatar_url,
-        is_dead,
-        is_revived,
-        revived_at,
-      }))
-    : normalizedPlayers;
-
-  // ── Current game day ──────────────────────────────────────────
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const currentDay = Math.max(
-    1,
-    Math.floor((nowUnix - game.start_time) / 86400) + 1,
+  // Other players' role colours are never sent: each role has its own colour,
+  // so they would reveal the Killer to anyone reading the network response.
+  // The caller's own colour is returned in `caller.role_color`.
+  const responsePlayers = players.map(
+    ({ id, user_id, name, avatar_url, is_dead, is_revived, revived_at }) => ({
+      id,
+      user_id,
+      name,
+      avatar_url,
+      is_dead,
+      is_revived,
+      revived_at,
+    }),
   );
+
+  // ── Current vote round (same numbering as the vote route) ──────
+  const { currentNumber: currentDay } = await getVotingState(game);
 
   // ── Build base response ───────────────────────────────────────
   const data: {

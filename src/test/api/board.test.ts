@@ -10,6 +10,11 @@ const { mockAuth, mockDbSelect, mockDbUpdate } = vi.hoisted(() => {
   };
 });
 
+vi.mock("@/lib/votingState", () => ({
+  getVotingState: vi.fn().mockResolvedValue({
+    open: null, last: null, upcoming: null, currentNumber: 2,
+  }),
+}));
 vi.mock("@/lib/auth", () => ({
   auth: mockAuth,
 }));

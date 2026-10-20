@@ -7,28 +7,45 @@ interface SkeletonProps {
 export function Skeleton({ className = "" }: SkeletonProps) {
   return (
     <div
-      className={`animate-pulse rounded-md bg-gray-200 ${className}`}
+      className={`skeleton rounded-full ${className}`}
       aria-hidden="true"
     />
   );
 }
 
-// ── SkeletonCard — player avatar card ─────────────────────────────
+// ── SkeletonCard: player avatar card (matches PlayerCard) ─────────
 
 export function SkeletonCard() {
   return (
     <div
-      className="flex flex-col items-center gap-2 rounded-2xl bg-white border border-gray-100 p-3 animate-pulse"
+      className="card flex flex-col items-center gap-2 p-3"
       aria-hidden="true"
     >
-      <div className="w-16 h-16 rounded-full bg-gray-200" />
-      <div className="h-3 w-20 rounded-full bg-gray-200" />
-      <div className="h-4 w-14 rounded-full bg-gray-200" />
+      <div className="skeleton size-16 rounded-full" />
+      <div className="skeleton h-3.5 w-20 rounded-full" />
+      <div className="skeleton h-5 w-14 rounded-full" />
     </div>
   );
 }
 
-// ── SkeletonTable — admin data table ──────────────────────────────
+// ── SkeletonRow: list row / game card (matches lobby + summary rows) ──
+
+export function SkeletonRow({ tall = false }: { tall?: boolean }) {
+  return (
+    <div
+      className={`card flex items-center gap-3 p-4 ${tall ? "min-h-28" : "min-h-20"}`}
+      aria-hidden="true"
+    >
+      <div className="flex-1 space-y-2">
+        <div className="skeleton h-4 w-2/5 rounded-full" />
+        <div className="skeleton h-3 w-1/4 rounded-full" />
+      </div>
+      <div className="skeleton h-9 w-16 rounded-full" />
+    </div>
+  );
+}
+
+// ── SkeletonTable: admin data table (unchanged, admin styling) ────
 
 interface SkeletonTableProps {
   rows?: number;

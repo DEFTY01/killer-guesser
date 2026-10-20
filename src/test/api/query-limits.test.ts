@@ -10,17 +10,20 @@ import { NextRequest } from "next/server";
  */
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockIsVoteWindowOpen, mockResolveVoteWindow } = vi.hoisted(() => ({
+const { mockAuth } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
-  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
-  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
 }));
 
-vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
-vi.mock("@/lib/voteWindow", () => ({
-  resolveVoteWindow: mockResolveVoteWindow,
-  isVoteWindowOpen: mockIsVoteWindowOpen,
+const votingState = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/lib/votingState", () => ({
+  getVotingState: vi.fn(async () => votingState.current),
 }));
+const closedRound = { open: null, last: null, upcoming: null, currentNumber: 2 };
+const openRound = {
+  open: { date: "2026-01-15", number: 2, openMs: 0, closeMs: Number.MAX_SAFE_INTEGER },
+  last: null, upcoming: null, currentNumber: 2,
+};
+vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn() })) } },
   ABLY_CHANNELS: { game: (id: string) => `game-${id}`, vote: (id: string, day: number) => `vote-${id}-${day}` },
@@ -33,6 +36,7 @@ vi.mock("@/lib/role-constants", () => ({
   ROLE_PERMISSIONS: ["see_killer", "revive_dead", "see_votes", "extra_vote", "immunity_once"],
 }));
 vi.mock("drizzle-orm", () => ({
+  lt: vi.fn(),
   eq: vi.fn(),
   and: vi.fn(),
   sql: vi.fn(),
@@ -125,6 +129,7 @@ import { GET as getVote } from "@/app/api/game/[id]/vote/route";
 
 describe("query-limits: board endpoint caps players at 50", () => {
   beforeEach(() => {
+    votingState.current = closedRound;
     vi.clearAllMocks();
     dbState.callIndex = 0;
     // Seed 60 players to verify the cap
@@ -163,14 +168,11 @@ describe("query-limits: vote endpoint caps players at 50", () => {
     vi.clearAllMocks();
     dbState.callIndex = 0;
     dbState.selectResults = [];
-    mockIsVoteWindowOpen.mockReturnValue(false);
-    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("returns at most 50 players in the vote tally even when 60 are seeded", async () => {
     mockAuth.mockResolvedValue({ user: { id: "1", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
+    votingState.current = openRound;
 
     const sixtyPlayers = makePlayers(60).map((p) => ({ id: p.user_id, name: p.name, is_dead: 0, revived_at: null }));
 

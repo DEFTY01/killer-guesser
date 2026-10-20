@@ -3,103 +3,67 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { game_players, games, roles, users, votes } from "@/db/schema";
-import { and, count, eq, sql } from "drizzle-orm";
-import type { RolePermission } from "@/lib/role-constants";
+import { and, count, eq } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import { checkGameOver } from "@/lib/gameEnd";
-import { nowInZone, windowBoundariesUtc } from "@/lib/timezone";
-import { resolveVoteWindow, isVoteWindowOpen } from "@/lib/voteWindow";
-
-// ── Server-side Ably debounce ─────────────────────────────────────
-// When multiple clients vote within a short window (e.g. 3 phones tapping at
-// once) we would otherwise fire a separate VOTE_CAST publish for each.  The
-// 500 ms debounce collapses those into a single message per game/day,
-// significantly reducing Ably message volume.
-const voteCastDebounceTimers = new Map<string, ReturnType<typeof setTimeout>>();
-
-function debounceVoteCast(key: string, callback: () => void): void {
-  const existing = voteCastDebounceTimers.get(key);
-  if (existing !== undefined) clearTimeout(existing);
-  const timer = setTimeout(() => {
-    voteCastDebounceTimers.delete(key);
-    callback();
-  }, 500);
-  voteCastDebounceTimers.set(key, timer);
-}
+import { closeRound, findEliminated, loadResults } from "@/lib/voteClose";
+import { parsePermissions } from "@/lib/permissions";
+import { getVotingState } from "@/lib/votingState";
+import type { Round } from "@/lib/voteRound";
 
 // ── Helpers ────────────────────────────────────────────────────────
 
-function parsePermissions(raw: string | null | undefined): RolePermission[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as RolePermission[]) : [];
-  } catch {
-    return [];
-  }
+const noStore = { headers: { "Cache-Control": "no-store" } };
+
+function bounds(round: Round | null) {
+  return round
+    ? { window_open_utc_ms: round.openMs, window_close_utc_ms: round.closeMs }
+    : {};
 }
 
-/**
- * Returns true if the current time in the game's timezone is within the
- * [start, end) vote window.  HH:MM strings are interpreted in game.timezone.
- */
-function isWindowOpen(
-  start: string | null,
-  end: string | null,
-  timezone: string,
-): boolean {
-  if (!start || !end) return false;
-  const currentMin = nowInZone(timezone);
-  const [sh, sm] = start.split(":").map(Number);
-  const [eh, em] = end.split(":").map(Number);
-  if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return false;
-  const startMin = sh * 60 + sm;
-  const endMin = eh * 60 + em;
-  // Handle overnight windows (e.g. 22:00–02:00)
-  if (endMin <= startMin) {
-    return currentMin >= startMin || currentMin < endMin;
-  }
-  return currentMin >= startMin && currentMin < endMin;
-}
-
-/**
- * Returns true if the current time in the game's timezone is at or past
- * vote_window_end and the window is no longer open.
- */
-function isWindowEnded(end: string | null, timezone: string): boolean {
-  if (!end) return false;
-  const currentMin = nowInZone(timezone);
-  const [eh, em] = end.split(":").map(Number);
-  if (isNaN(eh) || isNaN(em)) return false;
-  return currentMin >= eh * 60 + em;
+/** Who voted for whom in one round, with names. For callers with `see_votes`. */
+async function loadVoteDetails(gameId: string, day: number) {
+  const [enriched, nameRows] = await Promise.all([
+    db
+      .select({
+        voter_id: votes.voter_id,
+        voter_name: users.name,
+        target_id: votes.target_id,
+      })
+      .from(votes)
+      .innerJoin(users, eq(votes.voter_id, users.id))
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+      .limit(200),
+    db
+      .select({ user_id: game_players.user_id, name: users.name })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(eq(game_players.game_id, gameId))
+      .limit(50),
+  ]);
+  const names = new Map(nameRows.map((p) => [p.user_id, p.name]));
+  return enriched.map((v) => ({
+    voterId: v.voter_id,
+    voterName: v.voter_name,
+    targetId: v.target_id,
+    targetName: names.get(v.target_id) ?? "Unknown",
+  }));
 }
 
 // ── GET /api/game/[id]/vote ───────────────────────────────────────
 
 /**
- * Returns the current vote state for the active day.
+ * Returns the vote state for the current round.
  *
- * Compares the server's current UTC time (HH:MM) against the game's
- * `vote_window_start` / `vote_window_end` fields to determine state:
+ * **Round open:** `{ windowOpen: true, day, players[], callerVotedFor, ... }`
  *
- * **Window open:**
- * ```json
- * { windowOpen: true, day: 1, players: [{ id, name, avatarUrl }] }
- * ```
+ * **Round closed or not yet open:** `{ windowOpen: false, day, results[],
+ * eliminated }`. Before today's window opens only the opening time is
+ * returned; afterwards the last finished round's results are shown.
  *
- * **Window closed / not yet started:**
- * ```json
- * { windowOpen: false, day: 1, results: [{ playerId, name, voteCount }] }
- * ```
+ * Callers with `see_votes` additionally get the voter → target breakdown.
  *
- * Callers with the `see_votes` permission additionally receive a `votes` array
- * with the full voter → target breakdown in both states.
- *
- * **Lazy close** — on the first GET received after `vote_window_end` the
- * endpoint automatically tallies votes, applies a simple-majority elimination
- * (> 50 % of living voters), and publishes a `VOTE_CLOSED` Ably event on the
- * `game-[id]` channel.  The vote window is then cleared to prevent
- * re-processing on subsequent requests.
+ * **Lazy close:** the first request after a round ends tallies it, applies the
+ * strict-majority rule over living voters and publishes `vote_closed`.
  */
 export async function GET(
   _req: NextRequest,
@@ -123,17 +87,15 @@ export async function GET(
 
   const { id: gameId } = await params;
 
-  // ── Load game ─────────────────────────────────────────────────
   const [game] = await db
     .select({
       id: games.id,
-      name: games.name,
+      status: games.status,
       start_time: games.start_time,
       vote_window_start: games.vote_window_start,
       vote_window_end: games.vote_window_end,
-      team1_name: games.team1_name,
-      team2_name: games.team2_name,
       timezone: games.timezone,
+      vote_closed_day: games.vote_closed_day,
     })
     .from(games)
     .where(eq(games.id, gameId))
@@ -146,13 +108,9 @@ export async function GET(
     );
   }
 
-  // ── Verify caller is a participant ────────────────────────────
   const [callerRow] = await db
     .select({
-      game_player_id: game_players.id,
       permissions: roles.permissions,
-      is_dead: game_players.is_dead,
-      revived_at: game_players.revived_at,
     })
     .from(game_players)
     .leftJoin(roles, eq(game_players.role_id, roles.id))
@@ -171,367 +129,97 @@ export async function GET(
   const callerPermissions = parsePermissions(callerRow.permissions);
   const canSeeVotes = callerPermissions.includes("see_votes");
 
-  // ── Compute current day ───────────────────────────────────────
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const day = Math.max(
-    1,
-    Math.floor((nowUnix - game.start_time) / 86400) + 1,
-  );
+  const state = await getVotingState(game);
+  const base = { callerUserId: userId, game_timezone: game.timezone };
 
-  const { vote_window_start, vote_window_end, timezone } = game;
+  // ── Round open ────────────────────────────────────────────────
+  if (state.open) {
+    const day = state.open.number;
 
-  // ── Resolve effective vote window (override or default) ──────
-  const todayDate = new Date().toISOString().slice(0, 10);
-  const resolvedWindow = await resolveVoteWindow(gameId, todayDate);
-
-  // ── Lazy close: process if window has ended ──────────────────
-  if (
-    vote_window_start &&
-    vote_window_end &&
-    isWindowEnded(vote_window_end, timezone) &&
-    !isWindowOpen(vote_window_start, vote_window_end, timezone)
-  ) {
-    // Atomically clear the window to prevent concurrent re-processing.
-    const [cleared] = await db
-      .update(games)
-      .set({ vote_window_start: null, vote_window_end: null })
-      .where(
-        and(
-          eq(games.id, gameId),
-          eq(games.vote_window_start, vote_window_start),
-        ),
-      )
-      .returning({ id: games.id });
-
-    // Tally votes once — reused for both close logic (first caller) and response.
-    // This avoids a duplicate DB round-trip that previously occurred when the
-    // first caller performed the close (lines inside `if (cleared)`) and then
-    // re-queried the same tally for building the response.
-    const closeTally = await db
-      .select({
-        target_id: votes.target_id,
-        target_name: users.name,
-        vote_count: count(votes.id),
-      })
-      .from(votes)
-      .innerJoin(users, eq(votes.target_id, users.id))
-      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-      .groupBy(votes.target_id, users.name);
-
-    // Only the first caller that cleared the window performs close logic.
-    let closedEliminated: { id: number; name: string } | null = null;
-    if (cleared) {
-      // Build a Map of vote counts for O(1) lookups and total-vote calculation.
-      const counts = new Map(closeTally.map((r) => [r.target_id, r.vote_count]));
-      const totalVotes = [...counts.values()].reduce((s, c) => s + c, 0);
-
-      // Sort descending by vote count.
-      const sorted = [...closeTally].sort((a, b) => b.vote_count - a.vote_count);
-      const top = sorted[0];
-
-      // A player is eliminated only when their count is STRICTLY GREATER than
-      // all other candidates AND strictly greater than half of total votes cast
-      // (i.e. vote_count > 50%, so vote_count * 2 > totalVotes).
-      const isStrictlyTop =
-        top !== undefined &&
-        (sorted.length < 2 || sorted[1].vote_count < top.vote_count);
-      const hasMajority =
-        top !== undefined && totalVotes > 0 && top.vote_count * 2 > totalVotes;
-      const majority = isStrictlyTop && hasMajority ? top : undefined;
-
-      if (majority) {
-        // Eliminate the majority player (died in the evening).
-        await db
-          .update(game_players)
-          .set({
-            is_dead: 1,
-            died_at: sql<number>`(unixepoch())`,
-            died_time_of_day: "evening",
-          })
-          .where(
-            and(
-              eq(game_players.game_id, gameId),
-              eq(game_players.user_id, majority.target_id),
-            ),
-          );
-
-        closedEliminated = { id: majority.target_id, name: majority.target_name };
-
-        // Check win conditions after vote elimination (multi-killer rule:
-        // good wins only when ALL evil players are dead).
-        await checkGameOver(gameId);
-      }
-
-      // Publish VOTE_CLOSED on the game channel.
-      if (process.env.ABLY_API_KEY) {
-        const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
-        await channel.publish(ABLY_EVENTS.vote_closed, {
-          eliminated: closedEliminated,
-          voteResults: closeTally.map((r) => ({
-            playerId: r.target_id,
-            name: r.target_name,
-            voteCount: r.vote_count,
-          })),
-        });
-      }
-    }
-
-    // Reload game to get cleared vote_window values.
-    const [reloaded] = await db
-      .select({ vote_window_start: games.vote_window_start, vote_window_end: games.vote_window_end })
-      .from(games)
-      .where(eq(games.id, gameId))
-      .limit(1);
-
-    const results = closeTally.map((r) => ({
-      playerId: r.target_id,
-      name: r.target_name,
-      voteCount: r.vote_count,
-    }));
-
-    // Find who was eliminated: first caller already knows from close logic;
-    // subsequent callers (cleared=false) must query the DB.
-    let eliminated: { id: number; name: string } | null;
-    if (cleared) {
-      eliminated = closedEliminated;
-    } else {
-      const eveningDead = await db
-        .select({ user_id: game_players.user_id, name: users.name })
-        .from(game_players)
-        .innerJoin(users, eq(game_players.user_id, users.id))
-        .where(
-          and(
-            eq(game_players.game_id, gameId),
-            eq(game_players.is_dead, 1),
-            eq(game_players.died_time_of_day, "evening"),
-          ),
-        )
-        .limit(1);
-      eliminated = eveningDead[0]
-        ? { id: eveningDead[0].user_id, name: eveningDead[0].name }
-        : null;
-    }
-
-    const responseData: Record<string, unknown> = {
-      windowOpen: false,
-      day,
-      callerUserId: userId,
-      eliminated,
-      results,
-      game_timezone: timezone,
-      ...(reloaded?.vote_window_start && reloaded?.vote_window_end
-        ? {
-            window_open_utc_ms: windowBoundariesUtc(reloaded.vote_window_start, reloaded.vote_window_end, timezone).openMs,
-            window_close_utc_ms: windowBoundariesUtc(reloaded.vote_window_start, reloaded.vote_window_end, timezone).closeMs,
-          }
-        : {}),
-    };
-
-    if (canSeeVotes) {
-      const enriched = await db
+    const [players, tally, [existingVote]] = await Promise.all([
+      db
         .select({
-          voter_id: votes.voter_id,
-          voter_name: users.name,
-          target_id: votes.target_id,
+          id: game_players.user_id,
+          name: users.name,
+          is_dead: game_players.is_dead,
         })
-        .from(votes)
-        .innerJoin(users, eq(votes.voter_id, users.id))
-        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-        .limit(200);
-
-      const playerMap = new Map(
-        (await db
-          .select({ user_id: game_players.user_id, name: users.name })
-          .from(game_players)
-          .innerJoin(users, eq(game_players.user_id, users.id))
-          .where(eq(game_players.game_id, gameId))
-          .limit(50)).map((p) => [p.user_id, p]),
-      );
-
-      responseData.votes = enriched.map((v) => ({
-        voterId: v.voter_id,
-        voterName: v.voter_name,
-        targetId: v.target_id,
-        targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
-      }));
-    }
-
-    return NextResponse.json({ success: true, data: responseData }, {
-      headers: { "Cache-Control": "no-store" },
-    });
-  }
-
-  // ── Window open: return alive players ────────────────────────
-  if (isVoteWindowOpen(resolvedWindow, timezone)) {
-    const players = await db
-      .select({
-        id: game_players.user_id,
-        name: users.name,
-        is_dead: game_players.is_dead,
-        revived_at: game_players.revived_at,
-      })
-      .from(game_players)
-      .innerJoin(users, eq(game_players.user_id, users.id))
-      .where(eq(game_players.game_id, gameId))
-      .orderBy(users.name)
-      .limit(50);
-
-    const alivePlayers = players.filter(
-      (p) => p.is_dead === 0,
-    );
-
-    // Aggregate vote tallies for live display.
-    const tally = await db
-      .select({
-        target_id: votes.target_id,
-        vote_count: count(votes.id),
-      })
-      .from(votes)
-      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-      .groupBy(votes.target_id)
-      .limit(200);
-
-    const tallyMap = new Map(tally.map((r) => [r.target_id, r.vote_count]));
-
-    // Check if caller has already voted.
-    const [existingVote] = await db
-      .select({ target_id: votes.target_id })
-      .from(votes)
-      .where(
-        and(
-          eq(votes.game_id, gameId),
-          eq(votes.day, day),
-          eq(votes.voter_id, userId),
-        ),
-      )
-      .limit(1);
-
-    const canVote = !callerPermissions.includes("see_killer");
-
-    const windowBounds =
-      resolvedWindow
-        ? windowBoundariesUtc(resolvedWindow.start, resolvedWindow.end, timezone)
-        : null;
-
-    const responseData: Record<string, unknown> = {
-      windowOpen: true,
-      day,
-      callerUserId: userId,
-      canVote,
-      game_timezone: timezone,
-      ...(windowBounds
-        ? {
-            window_open_utc_ms: windowBounds.openMs,
-            window_close_utc_ms: windowBounds.closeMs,
-          }
-        : {}),
-      callerVotedFor: existingVote?.target_id ?? null,
-      players: alivePlayers.map((p) => ({
-        id: p.id,
-        name: p.name,
-        voteCount: tallyMap.get(p.id) ?? 0,
-      })),
-    };
-
-    if (canSeeVotes) {
-      const enriched = await db
-        .select({
-          voter_id: votes.voter_id,
-          voter_name: users.name,
-          target_id: votes.target_id,
-        })
-        .from(votes)
-        .innerJoin(users, eq(votes.voter_id, users.id))
-        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-        .limit(200);
-
-      const playerMap = new Map(
-        alivePlayers.map((p) => [p.id, p]),
-      );
-
-      responseData.votes = enriched.map((v) => ({
-        voterId: v.voter_id,
-        voterName: v.voter_name,
-        targetId: v.target_id,
-        targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
-      }));
-    }
-
-    return NextResponse.json({ success: true, data: responseData }, {
-      headers: { "Cache-Control": "no-store" },
-    });
-  }
-
-  // ── Window not yet open or no window set ─────────────────────
-  const tally = await db
-    .select({
-      target_id: votes.target_id,
-      target_name: users.name,
-      vote_count: count(votes.id),
-    })
-    .from(votes)
-    .innerJoin(users, eq(votes.target_id, users.id))
-    .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-    .groupBy(votes.target_id, users.name)
-    .limit(200);
-
-  const results = tally.map((r) => ({
-    playerId: r.target_id,
-    name: r.target_name,
-    voteCount: r.vote_count,
-  }));
-
-  const notYetOpenBounds =
-    resolvedWindow
-      ? windowBoundariesUtc(resolvedWindow.start, resolvedWindow.end, timezone)
-      : null;
-
-  const responseData: Record<string, unknown> = {
-    windowOpen: false,
-    day,
-    callerUserId: userId,
-    game_timezone: timezone,
-    ...(notYetOpenBounds
-      ? {
-          window_open_utc_ms: notYetOpenBounds.openMs,
-          window_close_utc_ms: notYetOpenBounds.closeMs,
-        }
-      : {}),
-    results,
-  };
-
-  if (canSeeVotes) {
-    const enriched = await db
-      .select({
-        voter_id: votes.voter_id,
-        voter_name: users.name,
-        target_id: votes.target_id,
-      })
-      .from(votes)
-      .innerJoin(users, eq(votes.voter_id, users.id))
-      .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
-      .limit(200);
-
-    const playerMap = new Map(
-      (await db
-        .select({ user_id: game_players.user_id, name: users.name })
         .from(game_players)
         .innerJoin(users, eq(game_players.user_id, users.id))
         .where(eq(game_players.game_id, gameId))
-        .limit(50)).map((p) => [p.user_id, p]),
-    );
+        .orderBy(users.name)
+        .limit(50),
+      db
+        .select({ target_id: votes.target_id, vote_count: count(votes.id) })
+        .from(votes)
+        .where(and(eq(votes.game_id, gameId), eq(votes.day, day)))
+        .groupBy(votes.target_id)
+        .limit(200),
+      db
+        .select({ target_id: votes.target_id })
+        .from(votes)
+        .where(
+          and(
+            eq(votes.game_id, gameId),
+            eq(votes.day, day),
+            eq(votes.voter_id, userId),
+          ),
+        )
+        .limit(1),
+    ]);
 
-    responseData.votes = enriched.map((v) => ({
-      voterId: v.voter_id,
-      voterName: v.voter_name,
-      targetId: v.target_id,
-      targetName: playerMap.get(v.target_id)?.name ?? "Unknown",
-    }));
+    const tallyMap = new Map(tally.map((r) => [r.target_id, r.vote_count]));
+    const responseData: Record<string, unknown> = {
+      ...base,
+      windowOpen: true,
+      day,
+      canVote: !callerPermissions.includes("see_killer"),
+      ...bounds(state.open),
+      callerVotedFor: existingVote?.target_id ?? null,
+      players: players
+        .filter((p) => p.is_dead === 0)
+        .map((p) => ({ id: p.id, name: p.name, voteCount: tallyMap.get(p.id) ?? 0 })),
+    };
+    if (canSeeVotes) responseData.votes = await loadVoteDetails(gameId, day);
+
+    return NextResponse.json({ success: true, data: responseData }, noStore);
   }
 
-  return NextResponse.json({ success: true, data: responseData }, {
-    headers: { "Cache-Control": "no-store" },
-  });
+  // ── Round closed: tally the finished round once ───────────────
+  let eliminated: { id: number; name: string } | null | undefined;
+  if (state.last && game.status === "active" && state.last.number > game.vote_closed_day) {
+    // Close every missed round in order (nobody may have polled while an
+    // earlier one ended); only the newest is announced to clients.
+    let closedLast: Awaited<ReturnType<typeof closeRound>>;
+    const first = Math.max(game.vote_closed_day + 1, state.last.number - 6);
+    for (let n = first; n <= state.last.number; n++) {
+      const isLast = n === state.last.number;
+      const closed = await closeRound(gameId, { number: n }, { announce: isLast });
+      if (isLast) closedLast = closed;
+    }
+    eliminated = closedLast ? closedLast.eliminated : await findEliminated(gameId, state.last);
+  } else if (state.last) {
+    eliminated = await findEliminated(gameId, state.last);
+  }
+
+  // Before today's window opens there is nothing to show but the opening time.
+  const beforeWindow =
+    state.upcoming !== null && state.upcoming.number === state.currentNumber;
+  const shown = beforeWindow ? state.upcoming : state.last;
+  const day = shown?.number ?? state.currentNumber;
+
+  const responseData: Record<string, unknown> = {
+    ...base,
+    windowOpen: false,
+    day,
+    ...bounds(shown),
+    results: beforeWindow || !shown ? [] : await loadResults(gameId, day),
+    ...(eliminated !== undefined && !beforeWindow ? { eliminated } : {}),
+  };
+  if (canSeeVotes && shown && !beforeWindow) {
+    responseData.votes = await loadVoteDetails(gameId, day);
+  }
+
+  return NextResponse.json({ success: true, data: responseData }, noStore);
 }
 
 // ── POST /api/game/[id]/vote ──────────────────────────────────────
@@ -541,15 +229,14 @@ const voteSchema = z.object({
 });
 
 /**
- * Submits or changes a vote for the current game day.
+ * Submits or changes the caller's vote in the open round.
  *
- * - Caller must be a participant and alive (not dead without revival).
- * - The vote window must be currently open (UTC HH:MM comparison).
- * - Upserts: if the caller has already voted today the existing row is updated
- *   (allowing vote changes), otherwise a new row is inserted.
- * - Publishes a `VOTE_CAST` Ably event on the `vote-[gameId]-[day]` channel.
- *
- * @returns `{ success: true }` or `{ success: false; error: string }`
+ * - Game must be active and a vote round must be open.
+ * - Caller must be a living participant without killer knowledge.
+ * - Target must be a living participant (voting for yourself is allowed).
+ * - Upserts, so a vote can be changed until the round closes.
+ * - Publishes counter-only `vote_cast` on the public round channel and the
+ *   full detail on the `see_votes`-only spy channel.
  */
 export async function POST(
   req: NextRequest,
@@ -587,14 +274,15 @@ export async function POST(
 
   const { targetId } = parsed.data;
 
-  // ── Load game ─────────────────────────────────────────────────
   const [game] = await db
     .select({
       id: games.id,
+      status: games.status,
       start_time: games.start_time,
       vote_window_start: games.vote_window_start,
       vote_window_end: games.vote_window_end,
       timezone: games.timezone,
+      vote_closed_day: games.vote_closed_day,
     })
     .from(games)
     .where(eq(games.id, gameId))
@@ -607,22 +295,26 @@ export async function POST(
     );
   }
 
-  // ── Check vote window is open ─────────────────────────────────
-  const todayDatePost = new Date().toISOString().slice(0, 10);
-  const resolvedWindowPost = await resolveVoteWindow(gameId, todayDatePost);
-  if (!isVoteWindowOpen(resolvedWindowPost, game.timezone)) {
+  if (game.status !== "active") {
+    return NextResponse.json(
+      { success: false, error: "Game is not active" },
+      { status: 403 },
+    );
+  }
+
+  const { open } = await getVotingState(game);
+  if (!open) {
     return NextResponse.json(
       { success: false, error: "Voting is closed" },
       { status: 403 },
     );
   }
+  const day = open.number;
 
-  // ── Verify caller is alive participant ────────────────────────
   const [callerPlayer] = await db
     .select({
       id: game_players.id,
       is_dead: game_players.is_dead,
-      revived_at: game_players.revived_at,
       permissions: roles.permissions,
     })
     .from(game_players)
@@ -648,24 +340,39 @@ export async function POST(
 
   // Players who can see the killer's identity are observers -- they may not
   // cast a vote (they already know the answer and would spoil the game).
-  const postCallerPerms = parsePermissions(callerPlayer.permissions);
-  if (postCallerPerms.includes("see_killer")) {
+  if (parsePermissions(callerPlayer.permissions).includes("see_killer")) {
     return NextResponse.json(
       { success: false, error: "Players with killer knowledge cannot vote" },
       { status: 403 },
     );
   }
 
-  // ── Compute current day ───────────────────────────────────────
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const day = Math.max(
-    1,
-    Math.floor((nowUnix - game.start_time) / 86400) + 1,
-  );
+  const [targetPlayer] = await db
+    .select({ id: game_players.id })
+    .from(game_players)
+    .where(
+      and(
+        eq(game_players.game_id, gameId),
+        eq(game_players.user_id, targetId),
+        eq(game_players.is_dead, 0),
+      ),
+    )
+    .limit(1);
 
-  // ── Upsert vote (atomic: ON CONFLICT DO UPDATE) ──────────────
-  // Relies on the unique constraint votes_game_day_voter_unique
-  // (game_id, day, voter_id). Atomic — no TOCTOU race condition.
+  if (!targetPlayer) {
+    return NextResponse.json(
+      { success: false, error: "Target is not an alive participant" },
+      { status: 422 },
+    );
+  }
+
+  const [previousVote] = await db
+    .select({ target_id: votes.target_id })
+    .from(votes)
+    .where(and(eq(votes.game_id, gameId), eq(votes.day, day), eq(votes.voter_id, userId)))
+    .limit(1);
+
+  // Atomic upsert on the unique (game_id, day, voter_id) constraint.
   await db
     .insert(votes)
     .values({ game_id: gameId, day, voter_id: userId, target_id: targetId })
@@ -674,37 +381,48 @@ export async function POST(
       set: { target_id: targetId },
     });
 
-  // ── Load voter and target names for Ably payload ──────────────
+  // The round may have been tallied between our open-check and the insert; a
+  // vote that missed the tally must not be acknowledged as counted.
+  const [{ vote_closed_day } = { vote_closed_day: 0 }] = await db
+    .select({ vote_closed_day: games.vote_closed_day })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+  if (vote_closed_day >= day) {
+    await db
+      .delete(votes)
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day), eq(votes.voter_id, userId)));
+    return NextResponse.json(
+      { success: false, error: "Voting is closed" },
+      { status: 403 },
+    );
+  }
+
   const [[voterUser], [targetUser]] = await Promise.all([
-    db
-      .select({ name: users.name })
-      .from(users)
-      .where(eq(users.id, userId))
-      .limit(1),
-    db
-      .select({ name: users.name })
-      .from(users)
-      .where(eq(users.id, targetId))
-      .limit(1),
+    db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1),
+    db.select({ name: users.name }).from(users).where(eq(users.id, targetId)).limit(1),
   ]);
 
-  // ── Publish VOTE_CAST (debounced) ─────────────────────────────
-  // Debouncing collapses rapid bursts from multiple concurrent voters into a
-  // single Ably message per game/day, preventing message storms.
   if (process.env.ABLY_API_KEY) {
-    const debounceKey = `${gameId}:${day}`;
-    const voterName = voterUser?.name ?? "Unknown";
-    const targetName = targetUser?.name ?? "Unknown";
-    debounceVoteCast(debounceKey, () => {
-      const channel = ablyServer.channels.get(ABLY_CHANNELS.vote(gameId, day));
-      channel.publish(ABLY_EVENTS.vote_cast, {
-        voterId: userId,
-        voterName,
-        targetId,
-        targetName,
-      }).catch((err: unknown) => {
-        console.error("[vote] VOTE_CAST publish failed:", err);
-      });
+    const previousTargetId = previousVote?.target_id ?? null;
+    const publish = (channelName: string, data: Record<string, unknown>) =>
+      ablyServer.channels
+        .get(channelName)
+        .publish(ABLY_EVENTS.vote_cast, data)
+        .catch((err: unknown) => {
+          console.error("[vote] vote_cast publish failed:", err);
+        });
+
+    // Public channel: counters only. Voting is secret, so no voter identity.
+    if (previousTargetId !== targetId) {
+      void publish(ABLY_CHANNELS.vote(gameId, day), { targetId, previousTargetId });
+    }
+    // Spy channel: full detail, subscribable only with `see_votes`.
+    void publish(ABLY_CHANNELS.spy(gameId, day), {
+      voterId: userId,
+      voterName: voterUser?.name ?? "Unknown",
+      targetId,
+      targetName: targetUser?.name ?? "Unknown",
     });
   }
 

@@ -277,7 +277,7 @@ export default function EditPlayerPage({ params }: EditPlayerPageProps) {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
+      <div className="flex items-center justify-center min-h-dvh">
         <div className="text-gray-500">Loading...</div>
       </div>
     );

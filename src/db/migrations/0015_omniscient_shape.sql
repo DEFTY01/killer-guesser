@@ -1,0 +1,1 @@
+ALTER TABLE `games` ADD `vote_closed_day` integer DEFAULT 0 NOT NULL;

@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { Heartbeat, Skull } from "@phosphor-icons/react";
 import { blobImageSrc } from "@/lib/blob-image";
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -11,12 +12,12 @@ export interface PlayerCardPlayer {
   user_id: number;
   name: string;
   avatar_url: string | null;
-  /** Present for most roles; omitted for Mayor callers — the server strips team data intentionally. */
+  /** Present for most roles; omitted for Mayor callers - the server strips team data intentionally. */
   team?: "team1" | "team2" | null;
   is_dead: number;
   is_revived: number;
   revived_at: number | null;
-  /** Present for most roles; omitted for Mayor callers — the server strips role_color intentionally. */
+  /** Present for most roles; omitted for Mayor callers - the server strips role_color intentionally. */
   role_color?: string;
 }
 
@@ -37,7 +38,7 @@ export interface PlayerCardProps {
   team1Name?: string;
   /** Human-readable label for team2 (used by the team badge). */
   team2Name?: string;
-  /** Callback when the logged-in user taps their own avatar. */
+  /** Callback when the logged-in user taps their own "Report death" button. */
   onSelfTap?: () => void;
   /** Callback when the Healer taps the Revive button. */
   onRevive?: (gamePlayerId: number) => void;
@@ -68,17 +69,53 @@ function TeamBadge({
   if (!team) return null;
 
   const label = team === "team1" ? team1Name : team2Name;
-  const colorClass =
-    team === "team1"
-      ? "bg-indigo-100 text-indigo-700"
-      : "bg-rose-100 text-rose-700";
 
+  return <span className="pill max-w-full truncate">{label}</span>;
+}
+
+// ── Avatar ────────────────────────────────────────────────────────
+
+function Avatar({
+  player,
+  className = "",
+}: {
+  player: PlayerCardPlayer;
+  className?: string;
+}) {
   return (
-    <span
-      className={`inline-block rounded-full px-2 py-0.5 text-xs font-semibold ${colorClass}`}
+    <div
+      className={`relative size-16 shrink-0 overflow-hidden rounded-full bg-accent-soft ${className}`}
     >
-      {label}
-    </span>
+      {player.avatar_url ? (
+        <Image
+          src={blobImageSrc(player.avatar_url)}
+          alt={player.name}
+          fill
+          sizes="64px"
+          className="object-cover"
+          unoptimized
+        />
+      ) : (
+        <div className="flex h-full w-full select-none items-center justify-center text-2xl font-semibold text-accent">
+          {player.name.charAt(0).toUpperCase()}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Self-report button ────────────────────────────────────────────
+
+function ReportDeathButton({ onClick }: { onClick?: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="btn btn-danger-soft btn-sm mt-1 w-full"
+    >
+      <Skull className="size-4 shrink-0" aria-hidden="true" />
+      Report death
+    </button>
   );
 }
 
@@ -88,13 +125,13 @@ function TeamBadge({
  * Displays a single player in the game board grid.
  *
  * Visual states:
- * - Mayor view: flat grid — only avatar + name; no border color, no team badge, no labels.
- * - Dead:       grayscale filter + red ✕ overlay (non-Mayor callers).
- * - Undead:     (is_dead && revived_at) → grayscale, no ✕, green "Undead" label.
- * - Killer:     thin red border (visible to Seer only) + "Killer" label.
- * - Own card:   tapping the avatar opens the self-death modal.
+ * - Mayor view: flat grid - only avatar + name; no border color, no team badge, no labels.
+ * - Dead:       grayscale filter + X overlay + "Dead" label (non-Mayor callers).
+ * - Undead:     (is_dead && revived_at) -> grayscale, no X, "Undead" label.
+ * - Killer:     red border (visible to Seer only) + "Killer" label.
+ * - Own card:   a "Report death" button opens the self-death modal (which confirms first).
  * - Healer:     "Revive" button below dead player's name.
- * - Default:    2px border in role color + team badge.
+ * - Default:    neutral border + team badge.
  */
 export const PlayerCard = memo(function PlayerCard({
   player,
@@ -106,7 +143,6 @@ export const PlayerCard = memo(function PlayerCard({
   team2Name = "Team 2",
   onSelfTap,
   onRevive,
-  showRoleBorder = false,
   deathAnimationDelayMs = 0,
 }: PlayerCardProps) {
   const isMayorView = viewerRole === "Mayor";
@@ -126,8 +162,8 @@ export const PlayerCard = memo(function PlayerCard({
 
     // First mount: set ref and apply dead style immediately (no animation).
     if (prev === null) {
+      // useState(isDead) already applied the initial style.
       prevIsDeadRef.current = current;
-      setShowDeadStyle(current === 1);
       return;
     }
 
@@ -143,140 +179,77 @@ export const PlayerCard = memo(function PlayerCard({
 
     // Transition to alive (revive): remove dead style immediately.
     if (current !== 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowDeadStyle(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.is_dead, deathAnimationDelayMs]);
 
-  // ── Avatar click handler (shared between Mayor and default) ─
-  const avatarClickProps =
-    isOwnCard && !isDead
-      ? {
-          onClick: onSelfTap,
-          role: "button" as const,
-          "aria-label": "Report death",
-          tabIndex: 0,
-          onKeyDown: (e: React.KeyboardEvent) => {
-            if (e.key === "Enter" || e.key === " ") onSelfTap?.();
-          },
-        }
-      : {};
+  const ownRing = isOwnCard
+    ? "ring-2 ring-accent ring-offset-2 ring-offset-surface"
+    : "";
+  const showReport = isOwnCard && !isDead;
 
   // ── Mayor view: flat equal grid ─────────────────────────────
   if (isMayorView) {
     return (
-      <div className="relative flex flex-col items-center gap-2 rounded-2xl bg-white border border-gray-200 p-3 text-center shadow-sm">
-        <div
-          className={[
-            "relative w-16 h-16 rounded-full overflow-hidden bg-indigo-100 shrink-0",
-            isOwnCard ? "cursor-pointer ring-2 ring-offset-1 ring-indigo-400" : "",
-          ]
-            .join(" ")
-            .trim()}
-          {...avatarClickProps}
-        >
-          {player.avatar_url ? (
-            <Image
-              src={blobImageSrc(player.avatar_url)}
-              alt={player.name}
-              fill
-              sizes="64px"
-              className="object-cover"
-              unoptimized
-            />
-          ) : (
-            <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-indigo-400 select-none">
-              {player.name.charAt(0).toUpperCase()}
-            </div>
-          )}
-        </div>
+      <div className="card relative flex flex-col items-center gap-2 p-3 text-center">
+        <Avatar player={player} className={ownRing} />
 
-        <p className="text-sm font-semibold text-gray-800 leading-tight truncate w-full px-1">
+        <p className="w-full truncate px-1 text-sm font-semibold leading-tight text-fg">
           {player.name}
         </p>
+        {isOwnCard && <span className="sr-only">(you)</span>}
 
-        {/* ── Undead badge visible to ALL players (including Mayor) ── */}
+        {/* Undead badge visible to ALL players (including Mayor) */}
         {isUndead && (
-          <span className="text-xs font-semibold text-green-600">Undead</span>
+          <span className="pill pill-accent">
+            <Heartbeat className="size-3.5" aria-hidden="true" />
+            Undead
+          </span>
         )}
+
+        {showReport && <ReportDeathButton onClick={onSelfTap} />}
       </div>
     );
   }
 
-  // ── Border style (default view) ─────────────────────────────
-  // Seer (see_killer): red border only on killer card.
-  // All other callers (including Medic): plain gray border.
-  const borderStyle = isKiller
-    ? { border: "2px solid #c0392b" } // red border for killer (Seer view)
-    : { border: "2px solid #e5e7eb" }; // plain gray-200
-
   // ── Card wrapper classes ────────────────────────────────────
+  // Killer border (Seer view) stays inline: a fixed semantic red in both themes.
   const cardClasses = [
-    "relative flex flex-col items-center gap-2 rounded-2xl bg-white p-3 text-center shadow-sm",
+    "card relative flex flex-col items-center gap-2 border-2 p-3 text-center transition-opacity duration-500",
+    isKiller ? "" : "border-line",
     showDeadStyle ? "opacity-80" : "",
   ]
     .join(" ")
     .trim();
 
   return (
-    <div className={cardClasses} style={borderStyle}>
+    <div
+      className={cardClasses}
+      style={isKiller ? { border: "2px solid #c0392b" } : undefined}
+    >
       {/* ── Avatar ────────────────────────────────────────────── */}
-      <div
-        className={[
-          "relative w-16 h-16 rounded-full overflow-hidden bg-indigo-100 shrink-0",
-          isOwnCard ? "cursor-pointer ring-2 ring-offset-1 ring-indigo-400" : "",
-          showDeadStyle ? "grayscale" : "",
-        ]
-          .join(" ")
-          .trim()}
-        onClick={isOwnCard && !isDead ? onSelfTap : undefined}
-        role={isOwnCard && !isDead ? "button" : undefined}
-        aria-label={isOwnCard && !isDead ? "Report death" : undefined}
-        tabIndex={isOwnCard && !isDead ? 0 : undefined}
-        onKeyDown={
-          isOwnCard && !isDead
-            ? (e) => {
-                if (e.key === "Enter" || e.key === " ") onSelfTap?.();
-              }
-            : undefined
-        }
-      >
-        {player.avatar_url ? (
-          <Image
-            src={blobImageSrc(player.avatar_url)}
-            alt={player.name}
-            fill
-            sizes="64px"
-            className="object-cover"
-            unoptimized
-          />
-        ) : (
-          <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-indigo-400 select-none">
-            {player.name.charAt(0).toUpperCase()}
-          </div>
-        )}
+      <Avatar
+        player={player}
+        className={`transition-[filter] duration-500 ${ownRing} ${
+          showDeadStyle ? "grayscale" : ""
+        }`}
+      />
+      {isOwnCard && <span className="sr-only">(you)</span>}
 
-        {/* ── Red ✕ overlay (dead, not undead) ──────────────── */}
-        {showDeadStyle && !isUndead && (
-          <div
-            className="absolute inset-0 flex items-center justify-center"
-            aria-hidden="true"
-          >
-            {/* Horizontal bar of the X */}
-            <span
-              className="absolute block w-[80%] h-[3px] bg-red-500 rounded-full"
-              style={{ transform: "rotate(45deg)" }}
-            />
-            <span
-              className="absolute block w-[80%] h-[3px] bg-red-500 rounded-full"
-              style={{ transform: "rotate(-45deg)" }}
-            />
-          </div>
-        )}
-      </div>
+      {/* ── X overlay (dead, not undead) ─────────────────────── */}
+      {showDeadStyle && !isUndead && (
+        <div
+          className="pointer-events-none absolute left-1/2 top-3 size-16 -translate-x-1/2 animate-[fade_300ms_ease-out_both]"
+          aria-hidden="true"
+        >
+          <span className="absolute left-[10%] top-1/2 block h-[3px] w-[80%] rotate-45 rounded-full bg-danger" />
+          <span className="absolute left-[10%] top-1/2 block h-[3px] w-[80%] -rotate-45 rounded-full bg-danger" />
+        </div>
+      )}
 
       {/* ── Name ────────────────────────────────────────────────── */}
-      <p className="text-sm font-semibold text-gray-800 leading-tight truncate w-full px-1">
+      <p className="w-full truncate px-1 text-sm font-semibold leading-tight text-fg">
         {player.name}
       </p>
 
@@ -287,20 +260,32 @@ export const PlayerCard = memo(function PlayerCard({
         team2Name={team2Name}
       />
 
-      {/* ── Status labels ─────────────────────────────────────── */}
+      {/* ── Status labels (text, never color alone) ───────────── */}
+      {showDeadStyle && !isUndead && (
+        <span className="pill pill-danger">
+          <Skull className="size-3.5" aria-hidden="true" />
+          Dead
+        </span>
+      )}
       {isUndead && (
-        <span className="text-xs font-semibold text-green-600">Undead</span>
+        <span className="pill pill-accent">
+          <Heartbeat className="size-3.5" aria-hidden="true" />
+          Undead
+        </span>
       )}
-      {isKiller && (
-        <span className="text-xs font-semibold text-red-600">Killer</span>
-      )}
+      {isKiller && <span className="pill pill-danger">Killer</span>}
+
+      {/* ── Self-report (own card, alive) ─────────────────────── */}
+      {showReport && <ReportDeathButton onClick={onSelfTap} />}
 
       {/* ── Revive button (Healer + dead player who was never revived) ── */}
       {canRevive && isDead && player.is_revived === 0 && (
         <button
+          type="button"
           onClick={() => onRevive?.(player.id)}
-          className="mt-1 rounded-lg bg-green-100 px-3 py-1 text-xs font-semibold text-green-700 hover:bg-green-200 transition-colors focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
+          className="btn btn-secondary btn-sm mt-1 w-full"
         >
+          <Heartbeat className="size-4 shrink-0" aria-hidden="true" />
           Revive
         </button>
       )}

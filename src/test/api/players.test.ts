@@ -7,7 +7,7 @@ const { mockRequireAdmin, mockDbSelect, mockDbInsert, mockDbUpdate, mockDbDelete
   const set = vi.fn(() => ({ where: vi.fn(() => ({ returning })) }));
   // limit: supports both .limit() as a terminal (resolves) and .limit().offset() chain
   const offset = vi.fn().mockResolvedValue([]);
-  const limit = vi.fn(() => Object.assign(Promise.resolve([]), { offset }));
+  const limit = vi.fn((): unknown => Object.assign(Promise.resolve([]), { offset }));
   const orderBy = vi.fn(() => Object.assign(Promise.resolve([]), { limit }));
   const groupBy = vi.fn(() => ({ orderBy }));
   const leftJoin = vi.fn(() => ({ where: vi.fn().mockResolvedValue([]), groupBy }));

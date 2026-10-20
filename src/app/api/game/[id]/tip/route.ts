@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { game_players, roles, users } from "@/db/schema";
+import { game_players, games, roles, users } from "@/db/schema";
 import { and, eq, sql } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
@@ -155,6 +155,37 @@ export async function POST(
     );
   }
 
+  const [game] = await db
+    .select({ status: games.status })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+  if (game?.status !== "active") {
+    return NextResponse.json(
+      { success: false, error: "Game is not active" },
+      { status: 403 },
+    );
+  }
+
+  // Atomically claim the single tip; a parallel request loses this race.
+  const claimed = await db
+    .update(game_players)
+    .set({ has_tipped: 1 })
+    .where(
+      and(
+        eq(game_players.id, callerPlayer.id),
+        eq(game_players.has_tipped, 0),
+        eq(game_players.is_dead, 0),
+      ),
+    )
+    .returning({ id: game_players.id });
+  if (claimed.length === 0) {
+    return NextResponse.json(
+      { success: false, error: "Already used." },
+      { status: 403 },
+    );
+  }
+
   const isCorrect = suspectPlayer.role_name === "Killer";
 
   if (isCorrect) {
@@ -184,6 +215,16 @@ export async function POST(
 
     // Trigger game-end logic (archives events, closes game, publishes GAME_ENDED).
     await checkGameOver(gameId);
+
+    // Players need to see the Killer go down even when the game goes on.
+    if (process.env.ABLY_API_KEY) {
+      try {
+        const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+        await channel.publish(ABLY_EVENTS.player_died, { player_id: suspectId });
+      } catch (err) {
+        console.error("[tip] player_died publish failed:", err);
+      }
+    }
 
     return NextResponse.json({ success: true, data: { correct: true } });
   }

@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { game_players, game_settings, roles } from "@/db/schema";
-import { and, eq } from "drizzle-orm";
+import { game_players, game_settings, games, roles } from "@/db/schema";
+import { and, eq, isNull, lte, or } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
@@ -190,8 +190,47 @@ export async function POST(
     }
   }
 
-  // ── Revive the target player ──────────────────────────────────
+  // ── Game must be running ──────────────────────────────────────
+  const [game] = await db
+    .select({ status: games.status })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+  if (game?.status !== "active") {
+    return NextResponse.json(
+      { success: false, error: "Game is not active" },
+      { status: 403 },
+    );
+  }
+
+  // ── Claim the Medic's cooldown atomically ─────────────────────
+  // A parallel request that already used the revive makes this match no row.
   const nowTs = Math.floor(Date.now() / 1000);
+  const cooldownSec = (cooldownMinutes ?? 0) * 60;
+  const [medicClaim] = await db
+    .update(game_players)
+    .set({ last_revive_at: nowTs })
+    .where(
+      cooldownSec > 0
+        ? and(
+            eq(game_players.id, callerRow.id),
+            or(
+              isNull(game_players.last_revive_at),
+              lte(game_players.last_revive_at, nowTs - cooldownSec),
+            ),
+          )
+        : eq(game_players.id, callerRow.id),
+    )
+    .returning({ id: game_players.id });
+
+  if (!medicClaim) {
+    return NextResponse.json(
+      { success: false, error: "Revive on cooldown. Try again shortly." },
+      { status: 403 },
+    );
+  }
+
+  // ── Revive the target player (only if still dead and not undead) ─
   const [updated] = await db
     .update(game_players)
     .set({ is_dead: 0, is_revived: 1, revived_at: nowTs })
@@ -199,24 +238,32 @@ export async function POST(
       and(
         eq(game_players.id, numericPlayerId),
         eq(game_players.game_id, gameId),
+        eq(game_players.is_dead, 1),
+        eq(game_players.is_revived, 0),
       ),
     )
-    .returning();
+    .returning({
+      id: game_players.id,
+      user_id: game_players.user_id,
+      is_dead: game_players.is_dead,
+      is_revived: game_players.is_revived,
+      revived_at: game_players.revived_at,
+    });
 
   if (!updated) {
+    // Someone else revived (or the target changed): give the Medic the use back.
+    await db
+      .update(game_players)
+      .set({ last_revive_at: callerRow.last_revive_at ?? null })
+      .where(eq(game_players.id, callerRow.id));
     return NextResponse.json(
-      { success: false, error: "Revive failed" },
-      { status: 500 },
+      { success: false, error: "That player can no longer be revived." },
+      { status: 409 },
     );
   }
 
-  // ── Update the Medic's last_revive_at ─────────────────────────
-  await db
-    .update(game_players)
-    .set({ last_revive_at: nowTs })
-    .where(eq(game_players.id, callerRow.id));
-
   // ── Publish real-time event ───────────────────────────────────
+  // Only public fields: role and team of the revived player stay private.
   if (process.env.ABLY_API_KEY) {
     const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
     await channel.publish(ABLY_EVENTS.player_revived, {
@@ -224,10 +271,8 @@ export async function POST(
       game_player_id: updated.id,
       revived_at: updated.revived_at,
       is_revived: updated.is_revived,
-      updated_player: updated,
     });
   }
 
   return NextResponse.json({ success: true, data: updated });
 }
-

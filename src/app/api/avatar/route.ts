@@ -5,6 +5,7 @@ import { users } from "@/db/schema";
 import { resizeAvatar } from "@/lib/avatar";
 import { avatarUploadSchema } from "@/lib/validations";
 import { eq } from "drizzle-orm";
+import { requireAdmin } from "@/lib/auth-helpers";
 
 /**
  * POST /api/avatar
@@ -17,6 +18,13 @@ import { eq } from "drizzle-orm";
  * resampling and its public URL is stored in users.avatar_url.
  */
 export async function POST(req: NextRequest) {
+  if (!(await requireAdmin())) {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized" },
+      { status: 403 }
+    );
+  }
+
   const formData = await req.formData();
   const file = formData.get("file");
   const playerId = formData.get("playerId");

@@ -34,3 +34,9 @@ In GitHub → Settings → Branches → Add rule for `main`:
 | CI | `file:ci.db` | Set in `.github/workflows/ci.yml` env block |
 | Staging | Turso dev database | Set `DATABASE_URL` in Vercel preview env |
 | Production | Turso production database | Set in Vercel production env (`file:*` is not supported) |
+
+## Database schema changes
+
+Apply schema changes to a database with `npm run db:push` (this is what CI does). The Drizzle migration journal in `src/db/migrations/` is not complete enough to build a fresh database with `npm run db:migrate`: there are two `0013` migrations and some hand-written ones are missing from the journal. Keep adding migrations with `npm run db:generate`, but treat `db:push` as the source of truth until the journal is baselined.
+
+New games get a join code and every player a PIN when the game is created. Games created before that have no PIN until an admin opens the game page and uses "New PIN" for each player.

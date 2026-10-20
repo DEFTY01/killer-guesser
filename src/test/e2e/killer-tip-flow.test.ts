@@ -42,6 +42,11 @@ vi.mock("@/db", () => ({
       const from = vi.fn(() => ({ where, leftJoin, innerJoin }));
       return { from };
     }),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 1 }]) })),
+      })),
+    })),
     transaction: vi.fn(async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => {
       const txUpdate = vi.fn(() => ({
         set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
@@ -54,6 +59,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   users: { id: "id", name: "name" },
   roles: { id: "id", name: "name" },
+  games: { id: "id", status: "status" },
   game_players: { id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", revived_at: "ra", has_tipped: "ht", role_id: "rid" },
 }));
 
@@ -89,6 +95,7 @@ describe("killer-tip-flow", () => {
       [{ id: 2, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Survivor" }],
       // Suspect: not the killer
       [{ id: 3, user_id: 3, is_dead: 0, revived_at: null, role_name: "Survivor" }],
+      [{ status: "active" }],
       // Caller user info for PLAYER_DIED event
       [{ name: "Survivor1" }],
     ];
@@ -130,6 +137,7 @@ describe("killer-tip-flow", () => {
       [{ id: 4, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Survivor" }],
       // Suspect is the Killer
       [{ id: 1, user_id: 1, is_dead: 0, revived_at: null, role_name: "Killer" }],
+      [{ status: "active" }],
     ];
 
     const res = await postTip(makeTipRequest(1), {

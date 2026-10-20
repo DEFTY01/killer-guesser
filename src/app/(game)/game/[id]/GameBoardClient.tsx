@@ -5,9 +5,24 @@ import Image from "next/image";
 import { blobImageSrc } from "@/lib/blob-image";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  CheckCircle,
+  Check,
+  Eye,
+  EyeSlash,
+  MagnifyingGlass,
+  Scales,
+  Skull,
+  Trophy,
+  Warning,
+  X,
+} from "@phosphor-icons/react";
 import { VoteCountdown } from "@/components/game/VoteCountdown";
 import { PlayerCard, type PlayerCardPlayer } from "@/components/game/PlayerCard";
 import { RoleRevealModal } from "@/components/game/RoleRevealModal";
+import { readableOn, roleColorOrDefault } from "@/components/game/roleColor";
+import { Modal } from "@/components/ui/Modal";
+import { SkeletonCard, Skeleton } from "@/components/ui/Skeleton";
 import type { RolePermission } from "@/lib/role-constants";
 import { isKiller } from "@/lib/roleUtils";
 import { useAbly } from "@/hooks/useAbly";
@@ -76,7 +91,7 @@ interface VoteLogEntry {
  * Converts a HH:MM string stored in the game's timezone to a display string
  * in the browser's local timezone.
  *
- * e.g. "17:45" in Europe/Budapest (UTC+1) → "17:45" for Budapest users,
+ * e.g. "17:45" in Europe/Budapest (UTC+1) -> "17:45" for Budapest users,
  *      or "16:45" for UTC users.
  */
 function gameHhmmToLocalString(hhmm: string, gameTimezone: string): string {
@@ -148,7 +163,7 @@ function isVoteWindowActive(
   if (isNaN(sh) || isNaN(sm) || isNaN(eh) || isNaN(em)) return false;
   const startMin = sh * 60 + sm;
   const endMin = eh * 60 + em;
-  // Handle overnight windows (e.g. 22:00–02:00).
+  // Handle overnight windows (e.g. 22:00-02:00).
   if (endMin <= startMin) {
     return currentMin >= startMin || currentMin < endMin;
   }
@@ -167,27 +182,31 @@ function MurderItemModal({
   onClose: () => void;
 }) {
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center backdrop-blur-md bg-black/70"
-      role="dialog"
-      aria-modal="true"
+    <Modal
+      className="modal-full"
       aria-label={name ?? "Murder item fullscreen view"}
+      onClose={onClose}
       onClick={onClose}
-      onKeyDown={(e) => { if (e.key === "Escape") onClose(); }}
-      tabIndex={-1}
     >
-      <div className="relative w-full h-full flex items-center justify-center p-6">
+      <div className="relative h-full w-full">
         <Image
           src={blobImageSrc(url)}
           alt={name ?? "Murder item"}
           fill
           sizes="100vw"
-          className="object-contain"
-          onClick={(e) => e.stopPropagation()}
+          className="object-contain p-6"
           unoptimized
         />
       </div>
-    </div>
+      <button
+        type="button"
+        onClick={onClose}
+        aria-label="Close"
+        className="btn btn-secondary absolute right-4 top-[calc(1rem+var(--safe-top))] size-11 px-0"
+      >
+        <X className="size-5" aria-hidden="true" />
+      </button>
+    </Modal>
   );
 }
 
@@ -200,18 +219,16 @@ function MurderItemCard({ url, name }: { url: string | null; name: string | null
 
   return (
     <>
-      <div className="rounded-2xl bg-white border border-gray-100 shadow-sm overflow-hidden max-w-xs mx-auto">
-        <div className="px-4 pt-3 pb-1 text-center">
-          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">
-            The killer&apos;s weapon:
-          </p>
-        </div>
+      <div className="card mx-auto max-w-xs overflow-hidden">
+        <p className="px-4 pt-3 text-center text-sm font-medium text-muted">
+          The killer&apos;s weapon:
+        </p>
         {url && (
           <button
             type="button"
             aria-label="View murder weapon fullscreen"
             onClick={() => setModalOpen(true)}
-            className="relative w-full aspect-square bg-gray-50 block cursor-zoom-in focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-indigo-500"
+            className="relative block aspect-square w-full cursor-zoom-in bg-elevated focus-visible:outline-offset-[-2px]"
           >
             <Image
               src={blobImageSrc(url)}
@@ -224,9 +241,9 @@ function MurderItemCard({ url, name }: { url: string | null; name: string | null
           </button>
         )}
         {name && (
-          <div className="px-4 py-3 text-center">
-            <p className="text-sm font-bold text-gray-800">{name}</p>
-          </div>
+          <p className="px-4 py-3 text-center text-sm font-semibold text-fg">
+            {name}
+          </p>
         )}
       </div>
 
@@ -299,32 +316,32 @@ function SelfDeathModal({
   );
 
   return (
-    /* Backdrop */
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
-      role="dialog"
-      aria-modal="true"
+    <Modal
+      className="modal"
       aria-labelledby="death-modal-title"
+      onClose={submitting ? undefined : onClose}
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-6">
+      <div className="p-6 pb-[calc(1.5rem+var(--safe-bottom))]">
         {step === "confirm" ? (
           <>
             <h2
               id="death-modal-title"
-              className="text-lg font-bold text-gray-900 mb-4 text-center"
+              className="mb-5 text-center text-lg font-semibold text-fg"
             >
               Did you die?
             </h2>
             <div className="flex gap-3">
               <button
+                type="button"
                 onClick={() => setStep("form")}
-                className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                className="btn btn-danger flex-1"
               >
                 Yes
               </button>
               <button
+                type="button"
                 onClick={onClose}
-                className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                className="btn btn-secondary flex-1"
               >
                 No
               </button>
@@ -334,19 +351,19 @@ function SelfDeathModal({
           <form onSubmit={handleSubmit}>
             <h2
               id="death-modal-title"
-              className="text-lg font-bold text-gray-900 mb-4 text-center"
+              className="mb-4 text-center text-lg font-semibold text-fg"
             >
               Where did it happen?
             </h2>
 
             {error && (
-              <p role="alert" className="mb-3 text-sm text-red-600 text-center">
+              <p role="alert" className="callout callout-danger mb-3">
                 {error}
               </p>
             )}
 
-            <label className="block mb-3">
-              <span className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-3 block">
+              <span className="mb-1.5 block text-sm font-medium text-fg">
                 Location
               </span>
               <input
@@ -356,12 +373,12 @@ function SelfDeathModal({
                 placeholder="e.g. The kitchen"
                 maxLength={200}
                 required
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="field"
               />
             </label>
 
-            <label className="block mb-5">
-              <span className="block text-sm font-medium text-gray-700 mb-1">
+            <label className="mb-5 block">
+              <span className="mb-1.5 block text-sm font-medium text-fg">
                 Time of day
               </span>
               <select
@@ -371,7 +388,7 @@ function SelfDeathModal({
                     e.target.value as "morning" | "afternoon" | "evening",
                   )
                 }
-                className="w-full rounded-lg border border-gray-300 px-3 py-2 text-base focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                className="field"
               >
                 <option value="morning">Morning</option>
                 <option value="afternoon">Afternoon</option>
@@ -383,7 +400,7 @@ function SelfDeathModal({
               <button
                 type="submit"
                 disabled={submitting}
-                className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+                className="btn btn-danger flex-1"
               >
                 {submitting ? "Submitting…" : "Confirm"}
               </button>
@@ -391,7 +408,7 @@ function SelfDeathModal({
                 type="button"
                 onClick={onClose}
                 disabled={submitting}
-                className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
+                className="btn btn-secondary flex-1"
               >
                 Cancel
               </button>
@@ -399,19 +416,7 @@ function SelfDeathModal({
           </form>
         )}
       </div>
-    </div>
-  );
-}
-
-// ── Skeleton card ─────────────────────────────────────────────────
-
-function SkeletonCard() {
-  return (
-    <div className="flex flex-col items-center gap-2 rounded-2xl bg-white border border-gray-100 p-3 animate-pulse">
-      <div className="w-16 h-16 rounded-full bg-gray-200" />
-      <div className="h-3 w-20 rounded-full bg-gray-200" />
-      <div className="h-4 w-14 rounded-full bg-gray-200" />
-    </div>
+    </Modal>
   );
 }
 
@@ -434,6 +439,41 @@ interface KillerGuessModalProps {
   callerUserId: number;
   onClose: () => void;
   onWrongGuess: (callerUserId: number) => void;
+}
+
+function GuessAvatar({
+  player,
+  size,
+}: {
+  player: GuessPlayer;
+  size: 48 | 80;
+}) {
+  return (
+    <div
+      className={`relative shrink-0 overflow-hidden rounded-full bg-accent-soft ${
+        size === 48 ? "size-12" : "size-20"
+      }`}
+    >
+      {player.avatar_url ? (
+        <Image
+          src={blobImageSrc(player.avatar_url)}
+          alt={player.name}
+          fill
+          sizes={`${size}px`}
+          className="object-cover"
+          unoptimized
+        />
+      ) : (
+        <span
+          className={`flex h-full w-full items-center justify-center font-semibold text-accent ${
+            size === 48 ? "text-base" : "text-2xl"
+          }`}
+        >
+          {player.name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
 }
 
 function KillerGuessModal({
@@ -488,163 +528,117 @@ function KillerGuessModal({
   }, [gameId, suspect, callerUserId, onClose, onWrongGuess, router]);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-      role="dialog"
-      aria-modal="true"
+    <Modal
+      className="modal"
       aria-labelledby="killer-guess-title"
+      onClose={screen === 3 || submitting ? undefined : onClose}
     >
-      <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl overflow-hidden">
-        {/* Sliding screens */}
-        <div className="relative overflow-hidden">
-          {/* Screen 1: Suspect grid */}
-          <div
-            className="modal-slide-screen"
-            style={{
-              transform: screen === 1 ? "translateX(0)" : "translateX(-100%)",
-              transition: "transform 0.2s ease",
-              position: screen === 1 ? "relative" : "absolute",
-              inset: 0,
-            }}
-          >
-            {screen === 1 && (
-              <div className="p-6 space-y-4">
-                <h2
-                  id="killer-guess-title"
-                  className="text-lg font-bold text-gray-900 text-center"
-                >
-                  🔍 Who is the killer?
-                </h2>
-                {apiError && (
-                  <p role="alert" className="text-sm text-red-600 text-center">
-                    {apiError}
-                  </p>
-                )}
-                <div className="player-grid player-grid-vote max-h-72 overflow-y-auto">
-                  {alivePlayers.map((p) => (
-                    <button
-                      key={p.id}
-                      type="button"
-                      onClick={() => {
-                        setSuspect(p);
-                        setScreen(2);
-                      }}
-                      className="flex flex-col items-center gap-1 rounded-xl border-2 border-gray-200 bg-white p-2 min-h-[44px] hover:border-indigo-400 hover:shadow-sm transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500"
-                    >
-                      <div className="relative w-12 h-12 rounded-full overflow-hidden bg-gray-100">
-                        {p.avatar_url ? (
-                          <Image
-                            src={blobImageSrc(p.avatar_url)}
-                            alt={p.name}
-                            fill
-                            sizes="48px"
-                            className="object-cover"
-                            unoptimized
-                          />
-                        ) : (
-                          <span className="flex h-full w-full items-center justify-center text-base font-bold text-gray-500">
-                            {p.name.charAt(0).toUpperCase()}
-                          </span>
-                        )}
-                      </div>
-                      <span className="text-xs font-semibold text-gray-800 truncate max-w-full">
-                        {p.name}
-                      </span>
-                    </button>
-                  ))}
-                </div>
+      <div className="pb-[var(--safe-bottom)]">
+        {/* Screen 1: Suspect grid */}
+        {screen === 1 && (
+          <div className="space-y-4 p-6">
+            <h2
+              id="killer-guess-title"
+              className="flex items-center justify-center gap-2 text-lg font-semibold text-fg"
+            >
+              <MagnifyingGlass className="size-5 text-accent" aria-hidden="true" />
+              Who is the killer?
+            </h2>
+            {apiError && (
+              <p role="alert" className="callout callout-danger">
+                {apiError}
+              </p>
+            )}
+            <div className="player-grid player-grid-vote max-h-72 overflow-y-auto">
+              {alivePlayers.map((p) => (
                 <button
+                  key={p.id}
                   type="button"
-                  onClick={onClose}
-                  className="w-full rounded-xl border border-gray-300 bg-white px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors"
+                  onClick={() => {
+                    setSuspect(p);
+                    setScreen(2);
+                  }}
+                  className="flex min-h-11 flex-col items-center gap-1.5 rounded-control border border-line bg-elevated p-2 transition-[border-color,transform] duration-150 active:scale-[0.98]"
                 >
-                  Cancel
+                  <GuessAvatar player={p} size={48} />
+                  <span className="max-w-full truncate text-xs font-semibold text-fg">
+                    {p.name}
+                  </span>
                 </button>
-              </div>
+              ))}
+            </div>
+            <button type="button" onClick={onClose} className="btn btn-secondary w-full">
+              Cancel
+            </button>
+          </div>
+        )}
+
+        {/* Screen 2: Confirm accusation */}
+        {screen === 2 && suspect && (
+          <div className="space-y-5 p-6 text-center">
+            <h2 id="killer-guess-title" className="text-lg font-semibold text-fg">
+              Accuse {suspect.name}?
+            </h2>
+            <div className="flex justify-center">
+              <GuessAvatar player={suspect} size={80} />
+            </div>
+            <p className="callout callout-danger justify-center font-semibold">
+              <Warning className="size-5 shrink-0" aria-hidden="true" />
+              If you&apos;re wrong, you die!
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setScreen(1)}
+                disabled={submitting}
+                className="btn btn-secondary flex-1"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleAccuse}
+                disabled={submitting}
+                className="btn btn-danger flex-1"
+              >
+                {submitting ? "Accusing…" : "Accuse them"}
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Screen 3: Result */}
+        {screen === 3 && correct !== null && (
+          <div role="status" aria-live="polite" className="space-y-4 p-8 text-center">
+            {correct ? (
+              <CheckCircle className="mx-auto size-14 text-success" aria-hidden="true" />
+            ) : (
+              <Skull className="mx-auto size-14 text-danger" aria-hidden="true" />
+            )}
+            <h2
+              id="killer-guess-title"
+              className={`text-xl font-semibold ${correct ? "text-success" : "text-danger"}`}
+            >
+              {correct ? "Found the killer!" : "You have died."}
+            </h2>
+            <p className="text-sm text-muted">
+              {correct
+                ? "Redirecting to lobby…"
+                : "The game continues without you."}
+            </p>
+            {correct ? (
+              <Link href="/lobby" className="btn btn-primary w-full">
+                Back to lobby
+              </Link>
+            ) : (
+              <button type="button" onClick={onClose} className="btn btn-secondary w-full">
+                Close
+              </button>
             )}
           </div>
-
-          {/* Screen 2: Confirm accusation */}
-          {screen === 2 && suspect && (
-            <div className="p-6 space-y-5 text-center">
-              <h2
-                id="killer-guess-title"
-                className="text-lg font-bold text-gray-900"
-              >
-                Accuse {suspect.name}?
-              </h2>
-              <div className="flex justify-center">
-                <div className="relative w-20 h-20 rounded-full overflow-hidden bg-gray-100 border-4 border-gray-200">
-                  {suspect.avatar_url ? (
-                    <Image
-                      src={blobImageSrc(suspect.avatar_url)}
-                      alt={suspect.name}
-                      fill
-                      sizes="80px"
-                      className="object-cover"
-                      unoptimized
-                    />
-                  ) : (
-                    <span className="flex h-full w-full items-center justify-center text-2xl font-bold text-gray-500">
-                      {suspect.name.charAt(0).toUpperCase()}
-                    </span>
-                  )}
-                </div>
-              </div>
-              <p className="text-sm font-semibold text-amber-700 bg-amber-50 border border-amber-200 rounded-xl px-4 py-2">
-                ⚠️ If you&apos;re wrong, you die!
-              </p>
-              <div className="flex gap-3">
-                <button
-                  type="button"
-                  onClick={() => setScreen(1)}
-                  disabled={submitting}
-                  className="flex-1 rounded-xl border border-gray-300 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 disabled:opacity-50 transition-colors"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  onClick={handleAccuse}
-                  disabled={submitting}
-                  className="flex-1 rounded-xl bg-red-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-red-700 disabled:opacity-50 transition-colors focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
-                >
-                  {submitting ? "Accusing…" : "Accuse them"}
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Screen 3: Result */}
-          {screen === 3 && correct !== null && (
-            <div
-              className={`p-8 text-center space-y-4 ${
-                correct ? "bg-green-50" : "bg-red-50"
-              }`}
-            >
-              <div className="text-5xl">{correct ? "🎉" : "💀"}</div>
-              <h2
-                id="killer-guess-title"
-                className={`text-xl font-bold ${
-                  correct ? "text-green-700" : "text-red-700"
-                }`}
-              >
-                {correct ? "✓ Found the killer!" : "✗ You have died."}
-              </h2>
-              <p
-                className={`text-sm ${
-                  correct ? "text-green-600" : "text-red-500"
-                }`}
-              >
-                {correct
-                  ? "Redirecting to lobby…"
-                  : "The game continues without you."}
-              </p>
-            </div>
-          )}
-        </div>
+        )}
       </div>
-    </div>
+    </Modal>
   );
 }
 
@@ -679,6 +673,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         if (json.success) {
           const boardData = json.data as BoardData;
           setData(boardData);
+          setError(null);
           if (boardData.votes) {
             const playerMap = new Map(
               boardData.players.map((p) => [p.user_id, p.name]),
@@ -706,11 +701,27 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
     fetchBoard();
   }, [fetchBoard]);
 
+  // Phones sleep and drop realtime messages; resync when the tab is visible
+  // or the network returns so the board never stays stale.
+  useEffect(() => {
+    const resync = () => {
+      if (document.visibilityState === "visible") fetchBoard();
+    };
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("online", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", resync);
+      window.removeEventListener("online", resync);
+    };
+  }, [fetchBoard]);
+
   // ── Show role reveal on first load (once per session) ───────
   useEffect(() => {
     if (!data) return;
     const key = `role_reveal_shown_${gameId}`;
     if (!sessionStorage.getItem(key)) {
+      // sessionStorage is only readable after mount, so state must be set here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowRoleReveal(true);
     }
   }, [data, gameId]);
@@ -794,8 +805,6 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   const canSeeKiller = data?.caller.permissions.includes("see_killer") ?? false;
   const canSeeVotes = data?.caller.permissions.includes("see_votes") ?? false;
   const isMayor = data?.caller.role_name === "Mayor";
-  // Only players with at least one special permission see role-color borders.
-  const canSeeColors = (data?.caller.permissions.length ?? 0) > 0;
 
   // FAB visibility: alive (includes undead since is_dead=0), not tipped, not the killer, not Undead
   const callerIsAlive =
@@ -887,7 +896,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         setGameEnded(winner_team ?? null);
         setTimeout(() => {
           router.push("/");
-        }, 3000);
+        }, 6000);
       },
       [router, gameId],
     ),
@@ -922,8 +931,14 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
   // canVote: alive and does not have see_killer privilege
   const canVote = callerIsAlive && !canSeeKiller;
 
+  const roleBand = roleColorOrDefault(data?.caller.role_color);
+
   return (
-    <div className={`max-w-2xl mx-auto px-4 py-6 space-y-6${data ? " pb-28" : ""}`}>
+    <div
+      className={`mx-auto w-full max-w-lg space-y-6 px-4 py-6${
+        data ? " pb-[calc(8rem+var(--safe-bottom))]" : ""
+      }`}
+    >
       {/* ── Vote countdown (hidden for Mayor) ───────────────── */}
       {data && !isMayor && (
         <VoteCountdown
@@ -934,42 +949,43 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
       {/* ── Seer info banner ─────────────────────────────────── */}
       {canSeeKiller && (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-xl border border-purple-200 bg-purple-50 px-4 py-2 text-sm text-purple-700"
-        >
-          <span aria-hidden="true">👁️</span>
+        <div role="status" className="callout callout-accent">
+          <Eye className="size-5 shrink-0 text-accent" aria-hidden="true" />
           <span>You know who the killer is. Keep it secret.</span>
         </div>
       )}
 
       {/* ── Mayor info banner ─────────────────────────────────── */}
       {isMayor && (
-        <div
-          role="status"
-          className="flex items-center gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-700"
-        >
-          <span aria-hidden="true">⚖️</span>
+        <div role="status" className="callout callout-accent">
+          <Scales className="size-5 shrink-0 text-accent" aria-hidden="true" />
           <span>Everyone looks the same to you. Trust your instincts.</span>
         </div>
       )}
 
       {/* ── Game title ───────────────────────────────────────── */}
       {isLoading ? (
-        <div className="h-7 w-48 rounded-full bg-gray-200 animate-pulse" />
+        <Skeleton className="h-8 w-48" />
       ) : (
-        <h1 className="text-2xl font-bold text-gray-900 leading-tight">
+        <h1 className="text-2xl font-semibold leading-tight tracking-tight text-fg">
           {data?.game.name ?? "Game"}
         </h1>
       )}
 
       {/* ── Error state ─────────────────────────────────────── */}
       {error && (
-        <div
-          role="alert"
-          className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600"
-        >
-          {error}
+        <div role="alert" className="callout callout-danger items-center justify-between">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              fetchBoard();
+            }}
+            className="btn btn-secondary btn-sm shrink-0"
+          >
+            Retry
+          </button>
         </div>
       )}
 
@@ -991,7 +1007,12 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
       )}
 
       {data && memoizedPlayers.length === 0 && (
-        <p className="text-center text-gray-400 py-12">No players found</p>
+        <div className="flex flex-col items-center gap-3 py-12 text-center">
+          <p className="text-muted">No players found</p>
+          <button type="button" onClick={fetchBoard} className="btn btn-secondary">
+            Refresh
+          </button>
+        </div>
       )}
 
       {data && memoizedPlayers.length > 0 && (
@@ -1021,38 +1042,40 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           <button
             type="button"
             onClick={() => setRoleCardOpen((o) => !o)}
-            className="flex items-center gap-2 text-sm font-medium text-gray-600 hover:text-gray-900 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 rounded-lg px-1"
+            className="btn btn-ghost -ml-3"
             aria-expanded={roleCardOpen}
           >
-            <span aria-hidden="true">{roleCardOpen ? "🙈" : "👁️"}</span>
+            {roleCardOpen ? (
+              <EyeSlash className="size-5" aria-hidden="true" />
+            ) : (
+              <Eye className="size-5" aria-hidden="true" />
+            )}
             {roleCardOpen ? "Hide your role" : "Click to see your role"}
           </button>
           {roleCardOpen && (
-            <div
-              className="mt-2 rounded-2xl p-4 shadow-md text-white text-center"
-              style={{
-                background: data.caller.role_color
-                  ? `linear-gradient(135deg, ${data.caller.role_color}cc 0%, ${data.caller.role_color}88 100%)`
-                  : "linear-gradient(135deg, #2E6DA4cc 0%, #2E6DA488 100%)",
-              }}
-            >
-              <p className="text-xs font-semibold uppercase tracking-widest opacity-80 mb-1">
-                Your Role
-              </p>
-              <p className="text-xl font-bold">{data.caller.role_name}</p>
-              {data.caller.team && (
-                <p className="text-sm opacity-90 mt-1">
-                  Team:{" "}
-                  {data.caller.team === "team1"
-                    ? data.game.team1_name
-                    : data.game.team2_name}
-                </p>
-              )}
-              {data.caller.role_description && (
-                <p className="text-xs opacity-80 mt-2 leading-relaxed">
-                  {data.caller.role_description}
-                </p>
-              )}
+            <div className="card mt-2 overflow-hidden animate-[fadeIn_220ms_var(--ease-out)_both]">
+              <div
+                className="px-4 py-4 text-center"
+                style={{ backgroundColor: roleBand, color: readableOn(roleBand) }}
+              >
+                <p className="text-xs font-semibold">Your Role</p>
+                <p className="font-display text-xl font-bold">{data.caller.role_name}</p>
+              </div>
+              <div className="space-y-2 p-4 text-center">
+                {data.caller.team && (
+                  <p className="text-sm font-medium text-fg">
+                    Team:{" "}
+                    {data.caller.team === "team1"
+                      ? data.game.team1_name
+                      : data.game.team2_name}
+                  </p>
+                )}
+                {data.caller.role_description && (
+                  <p className="text-sm leading-relaxed text-muted">
+                    {data.caller.role_description}
+                  </p>
+                )}
+              </div>
             </div>
           )}
         </div>
@@ -1060,12 +1083,12 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
       {/* ── Spy: Today's Votes ───────────────────────────────── */}
       {data && canSeeVotes && (
-        <div className="rounded-2xl border border-violet-200 bg-violet-50/70 px-4 py-4 space-y-3">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-violet-700 uppercase tracking-wide">
-            <span aria-hidden="true">🕵️</span> Votes Today
+        <section className="card space-y-3 p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-fg">
+            <Eye className="size-5 text-accent" aria-hidden="true" /> Votes Today
           </h2>
           {liveVotes.length === 0 ? (
-            <p className="text-sm text-violet-400 italic">No votes cast yet today.</p>
+            <p className="text-sm text-muted">No votes cast yet today.</p>
           ) : (
             <ul className="space-y-2" role="list">
               {liveVotes.map((entry) => {
@@ -1079,15 +1102,18 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
                     className="flex flex-wrap items-center gap-1.5 text-sm"
                   >
                     <span
-                      className={`font-semibold ${isDead ? "line-through text-gray-400" : "text-gray-900"}`}
+                      className={`font-semibold ${isDead ? "text-muted line-through" : "text-fg"}`}
                     >
                       {entry.voter_name}
                     </span>
                     {isDead && (
-                      <span aria-label="eliminated" title="Eliminated">☠️</span>
+                      <>
+                        <Skull className="size-4 text-danger" aria-hidden="true" />
+                        <span className="sr-only">(eliminated)</span>
+                      </>
                     )}
-                    <span className="text-violet-500">accused</span>
-                    <span className="font-semibold text-gray-900">
+                    <span className="text-muted">accused</span>
+                    <span className="font-semibold text-fg">
                       {entry.target_name}
                     </span>
                   </li>
@@ -1095,17 +1121,17 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
               })}
             </ul>
           )}
-        </div>
+        </section>
       )}
 
       {/* ── Spy: Killer Guesses ──────────────────────────── */}
       {data && canSeeVotes && (
-        <div className="rounded-2xl border border-rose-200 bg-rose-50/70 px-4 py-4 space-y-3">
-          <h2 className="flex items-center gap-2 text-sm font-semibold text-rose-700 uppercase tracking-wide">
-            <span aria-hidden="true">🔍</span> Killer Guesses
+        <section className="card space-y-3 p-4">
+          <h2 className="flex items-center gap-2 text-sm font-semibold text-fg">
+            <MagnifyingGlass className="size-5 text-accent" aria-hidden="true" /> Killer Guesses
           </h2>
           {!tips || tips.length === 0 ? (
-            <p className="text-sm text-rose-400 italic">No killer guesses made yet.</p>
+            <p className="text-sm text-muted">No killer guesses made yet.</p>
           ) : (
             <ul className="space-y-2" role="list">
               {tips.map((entry) => {
@@ -1116,24 +1142,27 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
                     className="flex flex-wrap items-center gap-1.5 text-sm"
                   >
                     <span
-                      className={`font-semibold ${isDead ? "line-through text-gray-400" : "text-gray-900"}`}
+                      className={`font-semibold ${isDead ? "text-muted line-through" : "text-fg"}`}
                     >
                       {entry.tipper_name}
                     </span>
                     {isDead && (
-                      <span aria-label="eliminated" title="Eliminated">☠️</span>
+                      <>
+                        <Skull className="size-4 text-danger" aria-hidden="true" />
+                        <span className="sr-only">(eliminated)</span>
+                      </>
                     )}
-                    <span className="text-rose-500">accused</span>
-                    <span className="font-semibold text-gray-900">
+                    <span className="text-muted">accused</span>
+                    <span className="font-semibold text-fg">
                       {entry.suspect_name ?? "???"}
                     </span>
-                    <span className="text-gray-400 text-xs">as the killer</span>
+                    <span className="text-xs text-muted">as the killer</span>
                   </li>
                 );
               })}
             </ul>
           )}
-        </div>
+        </section>
       )}
 
       {/* ── "I was eliminated" button ────────────────────────── */}
@@ -1142,14 +1171,12 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
           <button
             type="button"
             onClick={() => setShowDeathModal(true)}
-            className="flex items-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-100 transition-colors focus:outline-none focus:ring-2 focus:ring-red-400 focus:ring-offset-2"
+            className="btn btn-danger-soft"
           >
-            <span aria-hidden="true">💀</span> I was eliminated
+            <Skull className="size-5" aria-hidden="true" /> I was eliminated
           </button>
         </div>
       )}
-
-
 
       {/* ── Role reveal modal (full-screen, shown once on first load) */}
       {showRoleReveal && data && (
@@ -1191,69 +1218,64 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
       {/* ── Killer guess FAB ─────────────────────────────────── */}
       {showFab && !showGuessModal && (
-        <button
-          type="button"
-          onClick={() => setShowGuessModal(true)}
-          className="fixed z-40 flex items-center gap-2 rounded-2xl bg-indigo-600 px-5 py-3 text-sm font-semibold text-white shadow-lg hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-          style={{
-            bottom: data
-              ? "calc(5rem + var(--safe-bottom, 0px))"
-              : "calc(1.5rem + var(--safe-bottom, 0px))",
-            right: "calc(1.5rem + var(--safe-right, 0px))",
-          }}
-          aria-label="Guess the killer"
-        >
-          <span aria-hidden="true">🔍</span> Guess the killer!
-        </button>
+        <div className="pointer-events-none fixed inset-x-0 bottom-[calc(5.5rem+var(--safe-bottom))] z-40">
+          <div className="mx-auto flex max-w-lg justify-end px-4">
+            <button
+              type="button"
+              onClick={() => setShowGuessModal(true)}
+              className="btn btn-secondary pointer-events-auto bg-surface shadow-lg"
+              aria-label="Guess the killer"
+            >
+              <MagnifyingGlass className="size-5 text-accent" aria-hidden="true" /> Guess the killer!
+            </button>
+          </div>
+        </div>
       )}
 
       {/* ── Vote sticky bottom bar ────────────────────────────── */}
       {data && (
-        <div
-          className={`fixed bottom-0 left-0 right-0 z-40 border-t bg-white shadow-[0_-4px_16px_rgba(0,0,0,0.10)] transition-colors ${
-            voteActive ? "border-indigo-200" : "border-gray-100"
-          }`}
-          style={{
-            paddingBottom: "var(--safe-bottom, 0px)",
-            paddingLeft: "var(--safe-left, 0px)",
-            paddingRight: "var(--safe-right, 0px)",
-          }}
-        >
-          <div className="max-w-2xl mx-auto flex items-center gap-3 px-4 py-3">
-            {/* Status dot */}
-            <span
-              className={`shrink-0 w-2.5 h-2.5 rounded-full ${
-                voteActive ? "bg-indigo-500 animate-pulse" : "bg-gray-300"
-              }`}
-              aria-hidden="true"
-            />
-            <div className="flex-1 min-w-0">
-              <p className={`text-xs font-semibold uppercase tracking-wide ${voteActive ? "text-indigo-500" : "text-gray-400"}`}>
-                {voteActive
-                  ? (canVote ? "Vote — window open!" : "Voting in progress")
-                  : "Daily Vote"}
-              </p>
-              <p className="text-sm text-gray-500 truncate">
-                {voteActive
-                  ? `Day ${data.game.current_day}${data.game.vote_window_end ? ` · closes ${gameHhmmToLocalString(data.game.vote_window_end, data.game.game_timezone)}` : ""}`
-                  : data.game.vote_window_start
-                    ? `Opens at ${gameHhmmToLocalString(data.game.vote_window_start, data.game.game_timezone)}`
-                    : `Day ${data.game.current_day}`}
-              </p>
+        <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] backdrop-blur-md">
+          <div className="mx-auto flex max-w-lg items-center gap-3 px-4 py-3">
+            <div
+              role="status"
+              aria-live="polite"
+              className="flex min-w-0 flex-1 items-center gap-2.5"
+            >
+              {/* Single semantic live dot: only while the vote window is open */}
+              {voteActive && (
+                <span
+                  className="size-2.5 shrink-0 animate-pulse rounded-full bg-success"
+                  aria-hidden="true"
+                />
+              )}
+              <div className="min-w-0">
+                <p className={`text-sm font-semibold ${voteActive ? "text-success" : "text-fg"}`}>
+                  {voteActive
+                    ? (canVote ? "Vote window open" : "Voting in progress")
+                    : "Daily Vote"}
+                </p>
+                <p className="truncate text-sm text-muted">
+                  {voteActive
+                    ? `Day ${data.game.current_day}${data.game.vote_window_end ? `, closes ${gameHhmmToLocalString(data.game.vote_window_end, data.game.game_timezone)}` : ""}`
+                    : data.game.vote_window_start
+                      ? `Opens at ${gameHhmmToLocalString(data.game.vote_window_start, data.game.game_timezone)}`
+                      : `Day ${data.game.current_day}`}
+                </p>
+              </div>
             </div>
-            {/* The link ALWAYS navigates to the vote page — the vote page
+            {/* The link ALWAYS navigates to the vote page. The vote page
                 itself handles the "window closed" state with a clear message. */}
             <Link
               href={`/game/${gameId}/vote/${data.game.current_day}`}
-              className={`shrink-0 inline-flex items-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 ${
-                voteActive && canVote
-                  ? "bg-indigo-600 text-white hover:bg-indigo-700 focus:ring-indigo-500"
-                  : voteActive
-                    ? "bg-violet-600 text-white hover:bg-violet-700 focus:ring-violet-500"
-                    : "bg-indigo-50 text-indigo-600 border border-indigo-200 hover:bg-indigo-100 focus:ring-indigo-400"
+              className={`btn shrink-0 ${
+                voteActive && canVote ? "btn-primary" : "btn-secondary"
               }`}
             >
-              <span aria-hidden="true">🗳</span>
+              {voteActive && canVote ? (
+                <Check className="size-5" aria-hidden="true" />
+              ) : voteActive ? (
+                <Eye className="size-5" aria-hidden="true" />
+              ) : null}
               {voteActive ? (canVote ? "Vote" : "Watch") : "Go to vote"}
             </Link>
           </div>
@@ -1262,33 +1284,36 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
       {/* ── Game-ended modal ─────────────────────────────────── */}
       {gameEnded !== false && (
-        <div
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4"
-          role="dialog"
-          aria-modal="true"
+        <Modal
+          className="modal"
           aria-labelledby="game-ended-title"
+          dismissible={false}
         >
-          <div className="w-full max-w-sm rounded-2xl bg-white shadow-xl p-8 text-center space-y-4">
-            <div className="text-5xl">🏆</div>
-            <h2
-              id="game-ended-title"
-              className="text-xl font-bold text-gray-900"
-            >
+          <div
+            role="status"
+            aria-live="polite"
+            className="space-y-4 p-8 pb-[calc(2rem+var(--safe-bottom))] text-center"
+          >
+            <Trophy className="mx-auto size-14 text-accent" aria-hidden="true" />
+            <h2 id="game-ended-title" className="text-xl font-semibold text-fg">
               Game Over!
             </h2>
             {gameEnded ? (
-              <p className="text-gray-600">
-                <span className="font-semibold text-gray-900">{gameEnded}</span>{" "}
+              <p className="text-muted">
+                <span className="font-semibold text-fg">{gameEnded}</span>{" "}
                 wins!
               </p>
             ) : (
-              <p className="text-gray-600">The game has ended.</p>
+              <p className="text-muted">The game has ended.</p>
             )}
-            <p className="text-sm text-gray-400">
+            <p className="text-sm text-muted">
               Redirecting to home in a moment…
             </p>
+            <Link href="/lobby" className="btn btn-primary w-full">
+              Back to lobby
+            </Link>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

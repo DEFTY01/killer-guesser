@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { games, game_settings, game_players, roles } from "@/db/schema";
+import { generateJoinCode, generatePin, hashPin } from "@/lib/credentials";
+import { isValidHhmm, isValidTimezone } from "@/lib/voteRound";
 import { desc, eq, sql, inArray, and } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { assignTeamsAndRoles } from "@/lib/assignTeamsAndRoles";
@@ -22,15 +24,20 @@ const createGameSchema = z.object({
     .positive("start_time must be a positive unix timestamp"),
   vote_window_start: z
     .string()
-    .regex(/^\d{2}:\d{2}$/, "vote_window_start must be HH:MM")
+    .refine(isValidHhmm, "vote_window_start must be HH:MM")
     .optional()
     .nullable(),
   vote_window_end: z
     .string()
-    .regex(/^\d{2}:\d{2}$/, "vote_window_end must be HH:MM")
+    .refine(isValidHhmm, "vote_window_end must be HH:MM")
     .optional()
     .nullable(),
-  timezone: z.string().min(1).max(100).default("UTC"),
+  timezone: z
+    .string()
+    .min(1)
+    .max(100)
+    .refine(isValidTimezone, "Unknown IANA timezone")
+    .default("UTC"),
   team1_name: z.string().min(1, "team1_name is required").default("Evil"),
   team2_name: z.string().min(1, "team2_name is required").default("Good"),
   /** True if team1 is the Evil team. Defaults to true (team1 is always Evil). */
@@ -233,10 +240,22 @@ export async function POST(req: NextRequest) {
     team2SpecialCount,
   });
 
-  const newGame = await db.transaction(async (tx) => {
+  // PINs are shown to the admin once; only their hashes are stored.
+  const issuedPins = playerAssignments.map((p) => ({
+    userId: p.userId,
+    pin: generatePin(),
+  }));
+  const pinHashes = new Map(
+    await Promise.all(
+      issuedPins.map(async (i) => [i.userId, await hashPin(i.pin)] as const),
+    ),
+  );
+
+  const createGame = () => db.transaction(async (tx) => {
     const [game] = await tx
       .insert(games)
       .values({
+        join_code: generateJoinCode(),
         name,
         start_time,
         vote_window_start: vote_window_start ?? null,
@@ -268,6 +287,7 @@ export async function POST(req: NextRequest) {
           user_id: p.userId,
           team: p.team,
           role_id: p.roleId,
+          pin_hash: pinHashes.get(p.userId) ?? null,
         })),
       );
     }
@@ -275,5 +295,25 @@ export async function POST(req: NextRequest) {
     return game;
   });
 
-  return NextResponse.json({ success: true, data: newGame }, { status: 201 });
+  // A join-code collision (31^6 space) is rare; retry with a fresh code.
+  let newGame: Awaited<ReturnType<typeof createGame>> | undefined;
+  for (let attempt = 0; attempt < 3 && !newGame; attempt++) {
+    try {
+      newGame = await createGame();
+    } catch (err) {
+      const message = String((err as { message?: string })?.message ?? err);
+      if (!/UNIQUE|unique/.test(message) || attempt === 2) throw err;
+    }
+  }
+  if (!newGame) {
+    return NextResponse.json(
+      { success: false, error: "Could not create game" },
+      { status: 500 },
+    );
+  }
+
+  return NextResponse.json(
+    { success: true, data: { ...newGame, pins: issuedPins } },
+    { status: 201 },
+  );
 }

@@ -9,19 +9,22 @@ import { NextRequest } from "next/server";
  */
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockCheckGameOver, mockIsVoteWindowOpen, mockResolveVoteWindow } = vi.hoisted(() => ({
+const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
-  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
-  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
 }));
 
+const votingState = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/lib/votingState", () => ({
+  getVotingState: vi.fn(async () => votingState.current),
+}));
+const closedRound = { open: null, last: null, upcoming: null, currentNumber: 2 };
+const openRound = {
+  open: { date: "2026-01-15", number: 2, openMs: 0, closeMs: Number.MAX_SAFE_INTEGER },
+  last: null, upcoming: null, currentNumber: 2,
+};
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
-vi.mock("@/lib/voteWindow", () => ({
-  resolveVoteWindow: mockResolveVoteWindow,
-  isVoteWindowOpen: mockIsVoteWindowOpen,
-}));
 
 vi.mock("@/lib/ably", () => ({
   ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },
@@ -98,6 +101,7 @@ vi.mock("@/db/schema", () => ({
 }));
 
 vi.mock("drizzle-orm", () => ({
+  lt: vi.fn(),
   eq: vi.fn(),
   and: vi.fn(),
   sql: vi.fn(),
@@ -131,12 +135,11 @@ const allPlayers = [
 
 describe("full-game-flow (API-level)", () => {
   beforeEach(() => {
+    votingState.current = closedRound;
     vi.clearAllMocks();
     dbState.callIndex = 0;
     dbState.selectResults = [];
     delete process.env.ABLY_API_KEY;
-    mockIsVoteWindowOpen.mockReturnValue(false);
-    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("GET /board as killer → no killerId in response", async () => {
@@ -178,13 +181,13 @@ describe("full-game-flow (API-level)", () => {
 
   it("POST /vote as alive player within window → 200", async () => {
     mockAuth.mockResolvedValue({ user: { id: "2", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
+    votingState.current = openRound;
 
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic
-      [{ ...makeGameData(), vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
+      [{ ...makeGameData(), status: "active", vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       [{ id: 2, is_dead: 0, revived_at: null }],
+      [{ id: 99 }], // target is an alive participant
       [], // no existing vote
       [{ name: "Survivor1", avatar_url: null }],
       [{ name: "Killer", avatar_url: null }],
@@ -202,13 +205,13 @@ describe("full-game-flow (API-level)", () => {
 
   it("POST /vote as killer voting for themselves → 200 (self-vote allowed)", async () => {
     mockAuth.mockResolvedValue({ user: { id: "1", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
+    votingState.current = openRound;
 
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic
-      [{ ...makeGameData(), vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
+      [{ ...makeGameData(), status: "active", vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
+      [{ id: 99 }], // target is an alive participant
       [], // no existing vote
       [{ name: "Killer", avatar_url: null }],
       [{ name: "Killer", avatar_url: null }],

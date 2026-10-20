@@ -1,3 +1,4 @@
+import { safeGamePlayerColumns } from "@/db/gamePlayerColumns";
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { games, game_players, game_settings, roles } from "@/db/schema";
@@ -211,7 +212,7 @@ export async function POST(
     });
 
     const updated = await db
-      .select()
+      .select(safeGamePlayerColumns)
       .from(game_players)
       .where(eq(game_players.game_id, id));
 
@@ -224,7 +225,7 @@ export async function POST(
   });
 
   const updated = await db
-    .select()
+    .select(safeGamePlayerColumns)
     .from(game_players)
     .where(eq(game_players.game_id, id));
 

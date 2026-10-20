@@ -2,16 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
+const { mockAuth, mockCheckGameOver, mockPublish } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
+  mockPublish: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
 vi.mock("@/lib/ably", () => ({
-  ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },
+  ablyServer: { channels: { get: vi.fn(() => ({ publish: mockPublish })) } },
   ABLY_CHANNELS: { game: (id: string) => `game-${id}` },
   ABLY_EVENTS: { player_died: "player_died", game_ended: "game_ended" },
 }));
@@ -20,6 +21,7 @@ vi.mock("@/lib/ably", () => ({
 const dbState = vi.hoisted(() => ({
   selectResults: [] as unknown[][],
   callIndex: 0,
+  claimResult: [{ id: 1 }] as unknown[],
 }));
 
 vi.mock("@/db", () => ({
@@ -37,6 +39,11 @@ vi.mock("@/db", () => ({
       const from = vi.fn(() => ({ where, leftJoin, innerJoin }));
       return { from };
     }),
+    update: vi.fn(() => ({
+      set: vi.fn(() => ({
+        where: vi.fn(() => ({ returning: vi.fn(async () => dbState.claimResult) })),
+      })),
+    })),
     transaction: vi.fn(async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => {
       const txUpdate = vi.fn(() => ({
         set: vi.fn(() => ({ where: vi.fn(() => Promise.resolve([])) })),
@@ -49,6 +56,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   users: { id: "id", name: "name" },
   roles: { id: "id", name: "name" },
+  games: { id: "id", status: "status" },
   game_players: { id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", revived_at: "ra", has_tipped: "ht", role_id: "rid" },
 }));
 
@@ -73,6 +81,7 @@ describe("POST /api/game/[id]/tip", () => {
     vi.clearAllMocks();
     dbState.callIndex = 0;
     dbState.selectResults = [];
+    dbState.claimResult = [{ id: 1 }];
     delete process.env.ABLY_API_KEY;
   });
 
@@ -150,6 +159,8 @@ describe("POST /api/game/[id]/tip", () => {
       [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
       // Suspect - not the killer
       [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Survivor" }],
+      // Game
+      [{ status: "active" }],
       // Caller user info for Ably
       [{ name: "Alice" }],
     ];
@@ -171,6 +182,8 @@ describe("POST /api/game/[id]/tip", () => {
       [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
       // Suspect is the Killer
       [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Killer" }],
+      // Game
+      [{ status: "active" }],
     ];
 
     const res = await postTip(makeRequest({ suspectId: 20 }), {
@@ -181,5 +194,51 @@ describe("POST /api/game/[id]/tip", () => {
     expect(res.status).toBe(200);
     expect(data.data.correct).toBe(true);
     expect(mockCheckGameOver).toHaveBeenCalledWith("G1");
+  });
+
+  it("parallel tip that loses the atomic claim → 403 'Already used.'", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    dbState.claimResult = [];
+
+    dbState.selectResults = [
+      [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
+      [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Killer" }],
+      [{ status: "active" }],
+    ];
+
+    const res = await postTip(makeRequest({ suspectId: 20 }), {
+      params: Promise.resolve({ id: "G1" }),
+    });
+
+    expect(res.status).toBe(403);
+    expect(mockCheckGameOver).not.toHaveBeenCalled();
+  });
+
+  it("inactive game → 403 'Game is not active'", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    dbState.selectResults = [
+      [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
+      [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Survivor" }],
+      [{ status: "closed" }],
+    ];
+
+    const res = await postTip(makeRequest({ suspectId: 20 }), {
+      params: Promise.resolve({ id: "G1" }),
+    });
+
+    expect(res.status).toBe(403);
+  });
+
+  it("correct guess announces the Killer's death to everyone", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    dbState.selectResults = [
+      [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
+      [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Killer" }],
+      [{ status: "active" }],
+    ];
+    await postTip(makeRequest({ suspectId: 20 }), { params: Promise.resolve({ id: "G1" }) });
+    expect(mockPublish).toHaveBeenCalledWith("player_died", { player_id: 20 });
   });
 });

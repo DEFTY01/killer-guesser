@@ -6,6 +6,7 @@ import { blobImageSrc } from "@/lib/blob-image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import type { GameStatus } from "@/types";
+import { localDate } from "@/lib/voteRound";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -23,6 +24,7 @@ interface GameRow {
   created_at: number;
   /** 1 = team1 is the Evil team; 0 = team2 is the Evil team */
   evil_team_is_team1: number;
+  join_code: string | null;
 }
 
 type SettingsRow = {
@@ -126,7 +128,8 @@ export default function GameEditorClient({
   const [timezoneSaving, setTimezoneSaving] = useState(false);
 
   // Per-day override state
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Overrides are keyed by the game's local calendar date, not UTC.
+  const [todayStr] = useState(() => localDate(Date.now(), initialGame.timezone ?? "UTC"));
   const [overrideDate, setOverrideDate] = useState(todayStr);
   const [overrideStart, setOverrideStart] = useState("");
   const [overrideEnd, setOverrideEnd] = useState("");
@@ -138,6 +141,8 @@ export default function GameEditorClient({
 
   // Per-row busy states
   const [deadBusy, setDeadBusy] = useState<Set<number>>(new Set());
+  const [pinBusy, setPinBusy] = useState<Set<number>>(new Set());
+  const [issuedPins, setIssuedPins] = useState<Record<number, string>>({});
   const [roleBusy, setRoleBusy] = useState<Set<number>>(new Set());
 
   // ── Game-level actions ─────────────────────────────────────────
@@ -232,6 +237,29 @@ export default function GameEditorClient({
   );
 
   // ── Per-player actions ─────────────────────────────────────────
+
+  const issuePin = useCallback(
+    async (player: PlayerRow) => {
+      setPinBusy((s) => new Set(s).add(player.id));
+      try {
+        const res = await fetch(
+          `/api/admin/games/${game.id}/players/${player.id}/pin`,
+          { method: "POST" },
+        );
+        const json = await res.json();
+        if (json.success) {
+          setIssuedPins((prev) => ({ ...prev, [player.id]: json.data.pin as string }));
+        }
+      } finally {
+        setPinBusy((s) => {
+          const next = new Set(s);
+          next.delete(player.id);
+          return next;
+        });
+      }
+    },
+    [game.id],
+  );
 
   const toggleDead = useCallback(
     async (player: PlayerRow) => {
@@ -402,6 +430,8 @@ export default function GameEditorClient({
   }, [game.id]);
 
   useEffect(() => {
+    // Fetch-on-mount; loadOverrides sets loading state synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadOverrides();
   }, [loadOverrides]);
 
@@ -476,6 +506,14 @@ export default function GameEditorClient({
           {game.name}
         </h1>
         <StatusBadge status={game.status} />
+        {game.join_code && (
+          <span className="text-sm text-gray-500 dark:text-gray-400">
+            Code:{" "}
+            <span className="font-mono font-semibold tracking-widest text-gray-900 dark:text-white select-all">
+              {game.join_code}
+            </span>
+          </span>
+        )}
         <span className="text-sm text-gray-500 dark:text-gray-400">
           Start:{" "}
           <span className="font-medium text-gray-700 dark:text-gray-200">
@@ -908,6 +946,19 @@ export default function GameEditorClient({
                       >
                         {p.is_dead ? "Revive" : "Mark Dead"}
                       </button>
+                      <button
+                        onClick={() => issuePin(p)}
+                        disabled={pinBusy.has(p.id)}
+                        className="ml-2 rounded px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 disabled:opacity-50"
+                        aria-label={`Issue new PIN for ${p.name}`}
+                      >
+                        New PIN
+                      </button>
+                      {issuedPins[p.id] && (
+                        <span className="ml-2 font-mono text-sm font-semibold tracking-widest text-indigo-600 dark:text-indigo-300">
+                          {issuedPins[p.id]}
+                        </span>
+                      )}
                     </td>
                   </tr>
                 ))}

@@ -38,6 +38,9 @@ export const ABLY_CHANNELS = {
 
   /** Returns the channel name for a specific day's vote, e.g. `"vote-abc123-1"`. */
   vote: (gameId: string, day: number) => `vote-${gameId}-${day}`,
+
+  /** Who voted for whom. Only callers with `see_votes` may subscribe (see the token route). */
+  spy: (gameId: string, day: number) => `spy-${gameId}-${day}`,
 } as const;
 
 /**

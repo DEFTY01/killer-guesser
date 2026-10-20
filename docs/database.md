@@ -35,7 +35,7 @@ npm run db:migrate
 npm run db:push
 ```
 
-Migration files are stored in `./drizzle/`.
+Migration files are stored in `./src/db/migrations/`.
 
 ## Connection string
 

@@ -2,744 +2,473 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockPublish, mockChannelGet, mockResolveVoteWindow, mockIsVoteWindowOpen } = vi.hoisted(() => ({
+const { mockAuth, mockGetVotingState, mockCheckGameOver, mockPublish, dbState } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
+  mockGetVotingState: vi.fn(),
+  mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
   mockPublish: vi.fn().mockResolvedValue(undefined),
-  mockChannelGet: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })),
-  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
-  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
+  dbState: {
+    selectResults: [] as unknown[][],
+    callIndex: 0,
+    claimResult: [{ id: "G1" }] as unknown[],
+    setCalls: [] as Record<string, unknown>[],
+    insertValues: [] as Record<string, unknown>[],
+    deleted: 0,
+  },
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
+vi.mock("@/lib/votingState", () => ({ getVotingState: mockGetVotingState }));
+vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
 vi.mock("@/lib/ably", () => ({
-  ablyServer: { channels: { get: mockChannelGet } },
-  ABLY_CHANNELS: { game: (id: string) => `game-${id}`, vote: (id: string, day: number) => `vote-${id}-${day}` },
-  ABLY_EVENTS: { vote_cast: "vote_cast", vote_closed: "vote_closed", game_ended: "game_ended", player_died: "player_died" },
+  ablyServer: { channels: { get: vi.fn(() => ({ publish: mockPublish })) } },
+  ABLY_CHANNELS: {
+    game: (id: string) => `game-${id}`,
+    vote: (id: string, day: number) => `vote-${id}-${day}`,
+    spy: (id: string, day: number) => `spy-${id}-${day}`,
+  },
+  ABLY_EVENTS: { vote_cast: "vote_cast", vote_closed: "vote_closed" },
 }));
-
-vi.mock("@/lib/gameEnd", () => ({
-  checkGameOver: vi.fn().mockResolvedValue(undefined),
-}));
-
-// Chainable DB mock
-const dbMock = vi.hoisted(() => {
-  const makeMockChain = () => {
-    const returning = vi.fn().mockResolvedValue([]);
-    const limit = vi.fn().mockResolvedValue([]);
-    const orderBy = vi.fn(() => Object.assign(Promise.resolve([]), { limit }));
-    const groupBy = vi.fn(() => Object.assign(Promise.resolve([]), { orderBy, limit }));
-    const where = vi.fn(() => {
-      const result = Promise.resolve([]);
-      return Object.assign(result, { limit, orderBy, returning, groupBy });
-    });
-    const leftJoin = vi.fn(() => ({ where, orderBy }));
-    const innerJoin = vi.fn(() => ({ where, leftJoin, orderBy, groupBy }));
-    const from = vi.fn(() => ({ where, leftJoin, innerJoin, orderBy, groupBy }));
-    return { from, where, limit, orderBy, returning, leftJoin, innerJoin, groupBy };
-  };
-
-  return {
-    selectResults: [] as unknown[][],
-    callIndex: 0,
-    makeMockChain,
-  };
-});
 
 vi.mock("@/db", () => {
-  return {
-    db: {
-      select: vi.fn(() => {
-        const resultForThisCall = dbMock.selectResults[dbMock.callIndex] ?? [];
-        dbMock.callIndex++;
-        const returning = vi.fn().mockResolvedValue(resultForThisCall);
-        const limit = vi.fn().mockResolvedValue(resultForThisCall);
-        const orderBy = vi.fn(() => Object.assign(Promise.resolve(resultForThisCall), { limit }));
-        const groupBy = vi.fn(() => {
-          return Object.assign(Promise.resolve(resultForThisCall), {
-            orderBy: vi.fn(() => Object.assign(Promise.resolve(resultForThisCall), { limit })),
-            limit,
-          });
-        });
-        const where = vi.fn(() => {
-          const result = Promise.resolve(resultForThisCall);
-          return Object.assign(result, { limit, orderBy, returning, groupBy });
-        });
-        const leftJoin = vi.fn(() => ({ where, orderBy }));
-        const innerJoin = vi.fn(() => ({ where, leftJoin, orderBy, groupBy }));
-        const from = vi.fn(() => ({ where, leftJoin, innerJoin, orderBy, groupBy }));
-        return { from };
+  const db = {
+    select: vi.fn(() => {
+      const result = dbState.selectResults[dbState.callIndex] ?? [];
+      dbState.callIndex++;
+      const limit = vi.fn().mockResolvedValue(result);
+      const orderBy = vi.fn(() => Object.assign(Promise.resolve(result), { limit }));
+      const groupBy = vi.fn(() => Object.assign(Promise.resolve(result), { limit, orderBy }));
+      const where = vi.fn(() => Object.assign(Promise.resolve(result), { limit, orderBy, groupBy }));
+      const join = (): Record<string, unknown> => ({ where, leftJoin: join, innerJoin: join });
+      return { from: vi.fn(() => ({ where, leftJoin: join, innerJoin: join })) };
+    }),
+    insert: vi.fn(() => ({
+      values: vi.fn((v: Record<string, unknown>) => {
+        dbState.insertValues.push(v);
+        return { onConflictDoUpdate: vi.fn().mockResolvedValue([]) };
       }),
-      insert: vi.fn(() => ({
-        values: vi.fn(() => ({
-          returning: vi.fn().mockResolvedValue([{ id: 1 }]),
-          onConflictDoUpdate: vi.fn().mockResolvedValue([]),
-        })),
-      })),
-      update: vi.fn(() => ({
-        set: vi.fn(() => ({
-          where: vi.fn(() => {
-            const result = Promise.resolve([]);
-            return Object.assign(result, { returning: vi.fn().mockResolvedValue([]) });
-          }),
-        })),
-      })),
-      transaction: vi.fn(async (fn: (tx: Record<string, unknown>) => Promise<unknown>) => {
-        const txUpdate = vi.fn(() => ({
-          set: vi.fn(() => ({
-            where: vi.fn(() => Promise.resolve([])),
-          })),
-        }));
-        const txInsert = vi.fn(() => ({
-          values: vi.fn(() => ({ returning: vi.fn().mockResolvedValue([{ id: 1 }]) })),
-        }));
-        return fn({ update: txUpdate, insert: txInsert });
+    })),
+    delete: vi.fn(() => ({ where: vi.fn(async () => { dbState.deleted += 1; }) })),
+    update: vi.fn(() => ({
+      set: vi.fn((v: Record<string, unknown>) => {
+        dbState.setCalls.push(v);
+        return {
+          where: vi.fn(() =>
+            Object.assign(Promise.resolve([]), {
+              returning: vi.fn(async () => dbState.claimResult),
+            }),
+          ),
+        };
       }),
-    },
+    })),
   };
+  // The route runs the tally inside a transaction; the mock just reuses itself.
+  const withTx = Object.assign(db, {
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
+  });
+  return { db: withTx };
 });
 
 vi.mock("@/db/schema", () => ({
-  users: { id: "id", name: "name", avatar_url: "avatar_url" },
+  users: { id: "id", name: "name" },
   roles: { id: "id", name: "name", permissions: "permissions" },
-  games: { id: "id", start_time: "start_time", vote_window_start: "vws", vote_window_end: "vwe", status: "status" },
-  game_players: { id: "id", game_id: "game_id", user_id: "user_id", is_dead: "is_dead", revived_at: "revived_at", role_id: "role_id", has_tipped: "has_tipped" },
-  votes: { id: "id", game_id: "game_id", day: "day", voter_id: "voter_id", target_id: "target_id" },
-  vote_window_overrides: { id: "id", game_id: "game_id", day_date: "day_date", window_start: "window_start", window_end: "window_end" },
-}));
-
-vi.mock("@/lib/voteWindow", () => ({
-  resolveVoteWindow: mockResolveVoteWindow,
-  isVoteWindowOpen: mockIsVoteWindowOpen,
+  games: {
+    id: "id", status: "status", vote_closed_day: "vcd",
+    vote_eliminated_user_id: "veu", vote_eliminated_day: "ved",
+  },
+  game_players: {
+    id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", role_id: "rid",
+    died_at: "da", died_time_of_day: "dtod",
+  },
+  votes: { id: "id", game_id: "gid", day: "day", voter_id: "vid", target_id: "tid" },
 }));
 
 vi.mock("drizzle-orm", () => ({
-  eq: vi.fn(),
-  and: vi.fn(),
-  sql: vi.fn(),
-  count: vi.fn(),
+  eq: vi.fn(), and: vi.fn(), sql: vi.fn(), count: vi.fn(),
+  lt: vi.fn(), gte: vi.fn(), asc: vi.fn(),
 }));
 
-vi.mock("@/lib/role-constants", () => ({
-  DEFAULT_ROLE_COLOR: "#2E6DA4",
-  ROLE_PERMISSIONS: ["see_killer", "revive_dead", "see_votes", "extra_vote", "immunity_once"],
-}));
+import { GET as getVote, POST as postVote } from "@/app/api/game/[id]/vote/route";
 
-import { POST as postVote, GET as getVote } from "@/app/api/game/[id]/vote/route";
+// ── Fixtures ──────────────────────────────────────────────────────
+const NOW = Date.now();
+const round = (number: number, openOffset: number, closeOffset: number) => ({
+  date: "2026-01-15",
+  number,
+  openMs: NOW + openOffset,
+  closeMs: NOW + closeOffset,
+});
+const state = (over: Record<string, unknown> = {}) => ({
+  open: null, last: null, upcoming: null, currentNumber: 2, ...over,
+});
+const game = (over: Record<string, unknown> = {}) => ({
+  id: "G1", status: "active", start_time: Math.floor(NOW / 1000) - 86400,
+  vote_window_start: "18:00", vote_window_end: "20:00", timezone: "UTC",
+  vote_closed_day: 0, ...over,
+});
+const player = { user: { id: "10", role: "player" } };
+const params = { params: Promise.resolve({ id: "G1" }) };
+const get = () => getVote(new NextRequest("http://localhost/api/game/G1/vote"), params);
+const post = (body: unknown) =>
+  postVote(
+    new NextRequest("http://localhost/api/game/G1/vote", {
+      method: "POST",
+      body: JSON.stringify(body),
+      headers: { "Content-Type": "application/json" },
+    }),
+    params,
+  );
+
+function reset() {
+  vi.clearAllMocks();
+  dbState.callIndex = 0;
+  dbState.selectResults = [];
+  dbState.claimResult = [{ id: "G1" }];
+  dbState.setCalls = [];
+  dbState.insertValues = [];
+  dbState.deleted = 0;
+  mockAuth.mockResolvedValue(player);
+  mockGetVotingState.mockResolvedValue(state());
+  delete process.env.ABLY_API_KEY;
+}
 
 describe("GET /api/game/[id]/vote", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    dbMock.callIndex = 0;
-    dbMock.selectResults = [];
-    delete process.env.ABLY_API_KEY;
-    mockIsVoteWindowOpen.mockReturnValue(false);
-    mockResolveVoteWindow.mockResolvedValue(null);
-  });
+  beforeEach(reset);
 
-  it("unauthorized → 401", async () => {
+  it("unauthenticated → 401", async () => {
     mockAuth.mockResolvedValue(null);
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(401);
+    expect((await get()).status).toBe(401);
   });
 
-  it("non-player role → 401", async () => {
+  it("admin session → 401", async () => {
     mockAuth.mockResolvedValue({ user: { id: "admin", role: "admin" } });
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(401);
+    expect((await get()).status).toBe(401);
   });
 
-  it("game not found → 404", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    dbMock.selectResults = [
-      [], // no game found
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/NOTEXIST/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "NOTEXIST" }) });
-
-    expect(res.status).toBe(404);
+  it("unknown game → 404", async () => {
+    dbState.selectResults = [[]];
+    expect((await get()).status).toBe(404);
   });
 
-  it("not a participant → 403", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    dbMock.selectResults = [
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil" }],
-      [], // caller not a participant
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(403);
+  it("non-participant → 403", async () => {
+    dbState.selectResults = [[game()], []];
+    expect((await get()).status).toBe(403);
   });
 
-  it("window open → returns windowOpen:true and alive players list", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      // Game — null vote_window to avoid triggering lazy close logic
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
-      // Caller row (no special permissions)
-      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // All alive players
+  it("open round → alive players with live counts and the caller's own vote", async () => {
+    mockGetVotingState.mockResolvedValue(state({ open: round(2, -1000, 5000) }));
+    dbState.selectResults = [
+      [game()],
+      [{ permissions: null }],
       [
-        { id: 10, name: "Alice", avatarUrl: null, is_dead: 0, revived_at: null },
-        { id: 20, name: "Bob", avatarUrl: null, is_dead: 0, revived_at: null },
+        { id: 10, name: "Alice", is_dead: 0 },
+        { id: 20, name: "Bob", is_dead: 0 },
+        { id: 30, name: "Carl", is_dead: 1 },
       ],
-      // Vote tally
-      [],
-      // Existing vote by caller
-      [],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(true);
-  });
-
-  it("window open + see_killer caller → canVote:false in response", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      // Game — null vote_window to avoid triggering lazy close logic
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
-      // Caller has see_killer permission
-      [{ game_player_id: 1, permissions: '["see_killer"]', is_dead: 0, revived_at: null }],
-      // All alive players
-      [
-        { id: 10, name: "Alice", avatarUrl: null, is_dead: 0, revived_at: null },
-        { id: 20, name: "Bob", avatarUrl: null, is_dead: 0, revived_at: null },
-      ],
-      // Vote tally
-      [],
-      // Existing vote by caller
-      [],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(true);
-    expect(data.data.canVote).toBe(false);
-  });
-
-  it("window not open → returns windowOpen:false", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    dbMock.selectResults = [
-      // Game with no window set
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil" }],
-      // Caller row
-      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // Tally (empty)
-      [],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(false);
-  });
-
-  it("Spy caller (see_votes) → includes vote breakdown", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    dbMock.selectResults = [
-      // Game with no window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil" }],
-      // Caller row with see_votes
-      [{ game_player_id: 1, permissions: '["see_votes"]', is_dead: 0, revived_at: null }],
-      // Tally
-      [],
-      // Enriched votes
-      [{ voter_id: 10, voter_name: "Alice", target_id: 20 }],
-      // Player map
-      [{ user_id: 10, avatar_url: null, name: "Alice" }],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.votes).toBeDefined();
-  });
-
-  it("window open + Spy (see_votes) → includes full voter breakdown", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      // Game — null vote_window to avoid triggering lazy close logic
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", timezone: "UTC" }],
-      // Caller is Spy with see_votes
-      [{ game_player_id: 1, permissions: '["see_votes"]', is_dead: 0, revived_at: null }],
-      // All alive players
-      [
-        { id: 10, name: "Alice", avatarUrl: null, is_dead: 0, revived_at: null },
-        { id: 20, name: "Bob", avatarUrl: null, is_dead: 0, revived_at: null },
-      ],
-      // Vote tally
-      [{ target_id: 20, vote_count: 1 }],
-      // Existing vote by caller
+      [{ target_id: 20, vote_count: 3 }],
       [{ target_id: 20 }],
-      // Enriched votes
+    ];
+    const json = (await (await get()).json()).data;
+    expect(json.windowOpen).toBe(true);
+    expect(json.day).toBe(2);
+    expect(json.callerVotedFor).toBe(20);
+    expect(json.players).toEqual([
+      { id: 10, name: "Alice", voteCount: 0 },
+      { id: 20, name: "Bob", voteCount: 3 },
+    ]);
+    expect(json.window_close_utc_ms).toBe(NOW + 5000);
+    expect(json.votes).toBeUndefined();
+  });
+
+  it("open round + see_killer → canVote false", async () => {
+    mockGetVotingState.mockResolvedValue(state({ open: round(2, -1000, 5000) }));
+    dbState.selectResults = [[game()], [{ permissions: '["see_killer"]' }], [], [], []];
+    const json = (await (await get()).json()).data;
+    expect(json.canVote).toBe(false);
+  });
+
+  it("open round + see_votes → voter breakdown included", async () => {
+    mockGetVotingState.mockResolvedValue(state({ open: round(2, -1000, 5000) }));
+    dbState.selectResults = [
+      [game()],
+      [{ permissions: '["see_votes"]' }],
+      [{ id: 20, name: "Bob", is_dead: 0 }],
+      [],
+      [],
       [{ voter_id: 10, voter_name: "Alice", target_id: 20 }],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(true);
-    expect(data.data.votes).toBeDefined();
-  });
-
-  it("invalid session userId (NaN) → 401", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "notanumber", role: "player" } });
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(401);
-  });
-
-  it("lazy close: window ended → returns windowOpen:false with results", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    // Set vote window that has already ended (past time)
-    const now = new Date();
-    const pastEndH = String((now.getUTCHours() - 1 + 24) % 24).padStart(2, "0");
-    const pastEndM = String(now.getUTCMinutes()).padStart(2, "0");
-    const pastStartH = String((now.getUTCHours() - 2 + 24) % 24).padStart(2, "0");
-
-    dbMock.selectResults = [
-      // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
-      // Caller row
-      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // Lazy close: update().set().where().returning() returns the cleared game ID
-      // This is handled by the db.update mock
-      // Tally for lazy close (no votes = tie = no elimination)
-      [],
-      // Reloaded game
-      [{ vote_window_start: null, vote_window_end: null }],
-      // Tally for results
-      [],
-      // Evening dead
-      [],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(false);
-  });
-
-  it("lazy close: window ended + plurality elimination → updates game", async () => {
-    process.env.ABLY_API_KEY = "test-key";
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    // Set vote window that has already ended
-    const now = new Date();
-    const pastEndH = String((now.getUTCHours() - 1 + 24) % 24).padStart(2, "0");
-    const pastEndM = String(now.getUTCMinutes()).padStart(2, "0");
-    const pastStartH = String((now.getUTCHours() - 2 + 24) % 24).padStart(2, "0");
-
-    dbMock.selectResults = [
-      // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
-      // Caller row
-      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // Tally: player 20 has 2 votes, player 10 has 1 vote → plurality winner is 20
-      [{ target_id: 20, target_name: "Bob", vote_count: 2 }, { target_id: 10, target_name: "Alice", vote_count: 1 }],
-      // Killer check: target is NOT the killer
-      [],
-      // Reloaded game
-      [{ vote_window_start: null, vote_window_end: null }],
-      // Tally for results
-      [{ target_id: 20, target_name: "Bob", vote_count: 2 }],
-      // Evening dead
       [{ user_id: 20, name: "Bob" }],
     ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(false);
-    delete process.env.ABLY_API_KEY;
+    const json = (await (await get()).json()).data;
+    expect(json.votes).toEqual([
+      { voterId: 10, voterName: "Alice", targetId: 20, targetName: "Bob" },
+    ]);
   });
 
-  it("lazy close: tie vote → no elimination, windowOpen:false", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const pastEndH = String((now.getUTCHours() - 1 + 24) % 24).padStart(2, "0");
-    const pastEndM = String(now.getUTCMinutes()).padStart(2, "0");
-    const pastStartH = String((now.getUTCHours() - 2 + 24) % 24).padStart(2, "0");
-
-    dbMock.selectResults = [
-      // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
-      // Caller row
-      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // Tally: tie — both candidates have 3 votes, neither can be eliminated
-      [
-        { target_id: 10, target_name: "Alice", vote_count: 3 },
-        { target_id: 20, target_name: "Bob", vote_count: 3 },
-      ],
-      // Reloaded game
-      [{ vote_window_start: null, vote_window_end: null }],
-      // Tally for results
-      [
-        { target_id: 10, target_name: "Alice", vote_count: 3 },
-        { target_id: 20, target_name: "Bob", vote_count: 3 },
-      ],
-      // Evening dead — nobody eliminated
-      [],
-    ];
-
-    const { db } = await import("@/db");
-    const updateMock = db.update as ReturnType<typeof vi.fn>;
-    const setWhereFn = vi.fn(() =>
-      Object.assign(Promise.resolve([]), {
-        returning: vi.fn().mockResolvedValue([{ id: "G1" }]),
-      }),
+  it("before today's window → only the opening time, no results", async () => {
+    mockGetVotingState.mockResolvedValue(
+      state({ upcoming: round(2, 3600_000, 7200_000), currentNumber: 2 }),
     );
-    const setFn = vi.fn(() => ({ where: setWhereFn }));
-    updateMock.mockReturnValue({ set: setFn });
+    dbState.selectResults = [[game()], [{ permissions: null }]];
+    const json = (await (await get()).json()).data;
+    expect(json.windowOpen).toBe(false);
+    expect(json.window_open_utc_ms).toBe(NOW + 3600_000);
+    expect(json.results).toEqual([]);
+    expect(dbState.setCalls).toHaveLength(0);
+  });
+});
 
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
+describe("GET /api/game/[id]/vote — closing a finished round", () => {
+  beforeEach(reset);
 
-    expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(false);
-    // No player eliminated in a tie
-    expect(data.data.eliminated).toBeNull();
+  const finished = () =>
+    state({ last: round(2, -7200_000, -3600_000), upcoming: round(3, 80000_000, 90000_000), currentNumber: 2 });
+
+  // game, caller, claim → tally, voters → (winner update) → shown results
+  const seq = (tally: unknown[], voters: unknown[]) => [
+    [game({ vote_closed_day: 1 })],
+    [{ permissions: null }],
+    tally,
+    voters,
+    tally,
+  ];
+  const alive = (n: number) => Array.from({ length: n }, () => ({ is_dead: 0, permissions: null }));
+
+  it("strict majority of living voters → eliminated, game-over check, event published", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq(
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+      alive(5),
+    );
+    const json = (await (await get()).json()).data;
+    expect(json.windowOpen).toBe(false);
+    expect(json.eliminated).toEqual({ id: 20, name: "Bob" });
+    expect(dbState.setCalls.some((c) => c.vote_closed_day === 2)).toBe(true);
+    expect(dbState.setCalls.some((c) => c.is_dead === 1 && c.died_time_of_day === "evening")).toBe(true);
+    expect(mockCheckGameOver).toHaveBeenCalledWith("G1");
+    expect(mockPublish).toHaveBeenCalledWith("vote_closed", expect.objectContaining({ eliminated: { id: 20, name: "Bob" } }));
   });
 
-  it("lazy close: plurality without majority → no elimination", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const now = new Date();
-    const pastEndH = String((now.getUTCHours() - 1 + 24) % 24).padStart(2, "0");
-    const pastEndM = String(now.getUTCMinutes()).padStart(2, "0");
-    const pastStartH = String((now.getUTCHours() - 2 + 24) % 24).padStart(2, "0");
-
-    dbMock.selectResults = [
-      // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
-      // Caller row
-      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
-      // Tally: Alice has the most votes (4) but only 4/10 = 40% — no majority
-      [
-        { target_id: 10, target_name: "Alice", vote_count: 4 },
-        { target_id: 20, target_name: "Bob", vote_count: 3 },
-        { target_id: 30, target_name: "Carol", vote_count: 3 },
-      ],
-      // Reloaded game
-      [{ vote_window_start: null, vote_window_end: null }],
-      // Tally for results
-      [
-        { target_id: 10, target_name: "Alice", vote_count: 4 },
-        { target_id: 20, target_name: "Bob", vote_count: 3 },
-        { target_id: 30, target_name: "Carol", vote_count: 3 },
-      ],
-      // Evening dead — nobody eliminated
-      [],
-    ];
-
-    const { db } = await import("@/db");
-    const updateMock = db.update as ReturnType<typeof vi.fn>;
-    const setWhereFn = vi.fn(() =>
-      Object.assign(Promise.resolve([]), {
-        returning: vi.fn().mockResolvedValue([{ id: "G1" }]),
-      }),
+  it("a single vote among many living voters is NOT a majority", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq(
+      [{ target_id: 20, target_name: "Bob", vote_count: 1 }],
+      alive(6),
     );
-    const setFn = vi.fn(() => ({ where: setWhereFn }));
-    updateMock.mockReturnValue({ set: setFn });
+    const json = (await (await get()).json()).data;
+    expect(json.eliminated).toBeNull();
+    expect(dbState.setCalls.some((c) => c.is_dead === 1)).toBe(false);
+  });
 
-    const req = new NextRequest("http://localhost/api/game/G1/vote");
-    const res = await getVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
+  it("tie at the top → nobody eliminated", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq(
+      [
+        { target_id: 20, target_name: "Bob", vote_count: 2 },
+        { target_id: 30, target_name: "Carl", vote_count: 2 },
+      ],
+      alive(4),
+    );
+    expect((await (await get()).json()).data.eliminated).toBeNull();
+  });
 
+  it("see_killer observers do not count toward the majority", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq(
+      [{ target_id: 20, target_name: "Bob", vote_count: 2 }],
+      [...alive(3), { is_dead: 0, permissions: '["see_killer"]' }, { is_dead: 0, permissions: '["see_killer"]' }],
+    );
+    expect((await (await get()).json()).data.eliminated).toEqual({ id: 20, name: "Bob" });
+  });
+
+  it("missed rounds are closed in order, only the newest is announced", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = [
+      [game({ vote_closed_day: 0 })],
+      [{ permissions: null }],
+      [], // round 1 tally: no votes
+      [], // round 1 voters
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }], // round 2 tally
+      alive(4), // round 2 voters
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }], // shown results
+    ];
+    await get();
+    const claims = dbState.setCalls.filter((c) => "vote_closed_day" in c).map((c) => c.vote_closed_day);
+    expect(claims).toEqual([1, 2]);
+    expect(mockPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed realtime publish does not fail the request or undo the tally", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockPublish.mockRejectedValueOnce(new Error("ably down"));
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq(
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+      alive(5),
+    );
+    const res = await get();
     expect(res.status).toBe(200);
-    expect(data.data.windowOpen).toBe(false);
-    // Alice has 4/10 = 40% — not a majority, so no elimination
-    expect(data.data.eliminated).toBeNull();
+    expect((await res.json()).data.eliminated).toEqual({ id: 20, name: "Bob" });
+  });
+
+  it("round already tallied → no second close, elimination is looked up", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = [
+      [game({ vote_closed_day: 2 })],
+      [{ permissions: null }],
+      [{ id: 20, day: 2, name: "Bob" }],
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+    ];
+    const json = (await (await get()).json()).data;
+    expect(dbState.setCalls).toHaveLength(0);
+    expect(json.eliminated).toEqual({ id: 20, name: "Bob" });
+    expect(json.results).toEqual([{ playerId: 20, name: "Bob", voteCount: 3 }]);
+  });
+
+  it("losing the atomic claim to a concurrent request → does not eliminate again", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.claimResult = [];
+    dbState.selectResults = [
+      [game({ vote_closed_day: 1 })],
+      [{ permissions: null }],
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+      [{ is_dead: 0, permissions: null }],
+      [{ id: 20, day: 2, name: "Bob" }],
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+    ];
+    await get();
+    expect(dbState.setCalls.some((c) => c.is_dead === 1)).toBe(false);
+    expect(mockCheckGameOver).not.toHaveBeenCalled();
+  });
+
+  it("the vote window stays configured after closing (voting works on later days)", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq([], alive(4));
+    await get();
+    expect(dbState.setCalls.some((c) => "vote_window_start" in c || "vote_window_end" in c)).toBe(false);
+  });
+
+  it("inactive game is never closed by a read", async () => {
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = [[game({ status: "closed" })], [{ permissions: null }], [], []];
+    await get();
+    expect(dbState.setCalls).toHaveLength(0);
   });
 });
 
 describe("POST /api/game/[id]/vote", () => {
   beforeEach(() => {
-    vi.clearAllMocks();
-    dbMock.callIndex = 0;
-    dbMock.selectResults = [];
-    delete process.env.ABLY_API_KEY;
-    mockIsVoteWindowOpen.mockReturnValue(false);
-    mockResolveVoteWindow.mockResolvedValue(null);
+    reset();
+    mockGetVotingState.mockResolvedValue(state({ open: round(2, -1000, 5000) }));
   });
 
-  it("outside vote window → 403 'Voting is closed'", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+  const valid = () => [
+    [game()],
+    [{ id: 1, is_dead: 0, permissions: null }],
+    [{ id: 99 }],
+    [], // no previous vote
+    [{ vote_closed_day: 0 }],
+    [{ name: "Alice" }],
+    [{ name: "Bob" }],
+  ];
 
-    dbMock.selectResults = [
-      // Game lookup - no active window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null }],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(403);
-    expect(data.error).toBe("Voting is closed");
-  });
-
-  it("dead player → 403", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
-      // Caller is dead, no revival
-      [{ id: 1, is_dead: 1, revived_at: null }],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(403);
-  });
-
-  it("valid vote → 200", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
-      // Caller is alive
-      [{ id: 1, is_dead: 0, revived_at: null }],
-      // Voter user info
-      [{ name: "Alice", avatar_url: null }],
-      // Target user info
-      [{ name: "Bob", avatar_url: null }],
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.success).toBe(true);
-  });
-
-  it("unauthorized POST → 401", async () => {
+  it("unauthenticated → 401", async () => {
     mockAuth.mockResolvedValue(null);
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(401);
+    expect((await post({ targetId: 20 })).status).toBe(401);
   });
 
   it("invalid body → 422", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: "notanumber" }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(422);
+    expect((await post({ targetId: "x" })).status).toBe(422);
   });
 
-  it("second vote by same player → upserts with onConflictDoUpdate", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
-      [{ id: 1, is_dead: 0, revived_at: null }],
-      [{ name: "Alice", avatar_url: null }],
-      [{ name: "Charlie", avatar_url: null }],
-    ];
-
-    const { db } = await import("@/db");
-    const insertMock = db.insert as ReturnType<typeof vi.fn>;
-    const onConflictDoUpdateFn = vi.fn().mockResolvedValue([]);
-    const valuesFn = vi.fn(() => ({
-      returning: vi.fn().mockResolvedValue([{ id: 1 }]),
-      onConflictDoUpdate: onConflictDoUpdateFn,
-    }));
-    insertMock.mockReturnValue({ values: valuesFn });
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 30 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(200);
-    expect(data.success).toBe(true);
-    // Atomic upsert: insert + onConflictDoUpdate (no separate update call)
-    expect(insertMock).toHaveBeenCalled();
-    expect(onConflictDoUpdateFn).toHaveBeenCalled();
+  it("inactive game → 403", async () => {
+    dbState.selectResults = [[game({ status: "scheduled" })]];
+    expect((await post({ targetId: 20 })).status).toBe(403);
   });
 
-  it("game not found → 404", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-
-    dbMock.selectResults = [
-      [], // no game found
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/NOTEXIST/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "NOTEXIST" }) });
-
-    expect(res.status).toBe(404);
-  });
-
-  it("not a participant → 403", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
-      [], // caller not a participant
-    ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-
+  it("no open round → 403 'Voting is closed'", async () => {
+    mockGetVotingState.mockResolvedValue(state());
+    dbState.selectResults = [[game()]];
+    const res = await post({ targetId: 20 });
     expect(res.status).toBe(403);
+    expect((await res.json()).error).toBe("Voting is closed");
   });
 
-  it("valid vote with ABLY_API_KEY → publishes VOTE_CAST event", async () => {
-    vi.useFakeTimers();
-    process.env.ABLY_API_KEY = "test-key";
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
+  it("dead caller → 403", async () => {
+    dbState.selectResults = [[game()], [{ id: 1, is_dead: 1, permissions: null }]];
+    expect((await post({ targetId: 20 })).status).toBe(403);
+  });
 
-    dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
-      [{ id: 1, is_dead: 0, revived_at: null }],
+  it("see_killer observer → 403", async () => {
+    dbState.selectResults = [[game()], [{ id: 1, is_dead: 0, permissions: '["see_killer"]' }]];
+    expect((await post({ targetId: 20 })).status).toBe(403);
+  });
+
+  it("target that is dead or not in the game → 422", async () => {
+    dbState.selectResults = [[game()], [{ id: 1, is_dead: 0, permissions: null }], []];
+    expect((await post({ targetId: 999 })).status).toBe(422);
+    expect(dbState.insertValues).toHaveLength(0);
+  });
+
+  it("valid vote is stored against the open round's number", async () => {
+    dbState.selectResults = valid();
+    const res = await post({ targetId: 20 });
+    expect(res.status).toBe(200);
+    expect(dbState.insertValues[0]).toMatchObject({ game_id: "G1", day: 2, voter_id: 10, target_id: 20 });
+  });
+
+  it("a vote that lands after the round was tallied is dropped and refused", async () => {
+    dbState.selectResults = [
+      [game()],
+      [{ id: 1, is_dead: 0, permissions: null }],
+      [{ id: 99 }],
+      [],
+      [{ vote_closed_day: 2 }],
+    ];
+    const res = await post({ targetId: 20 });
+    expect(res.status).toBe(403);
+    expect(dbState.deleted).toBe(1);
+  });
+
+  it("self-vote is allowed", async () => {
+    dbState.selectResults = valid();
+    expect((await post({ targetId: 10 })).status).toBe(200);
+  });
+
+  it("public channel gets counters only; voter identity goes to the spy channel", async () => {
+    process.env.ABLY_API_KEY = "k";
+    dbState.selectResults = [
+      [game()],
+      [{ id: 1, is_dead: 0, permissions: null }],
+      [{ id: 99 }],
+      [{ target_id: 30 }], // previously voted for 30
+      [{ vote_closed_day: 0 }],
       [{ name: "Alice" }],
       [{ name: "Bob" }],
     ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    // Advance fake timers to fire the debounce callback
-    vi.runAllTimers();
-
-    expect(res.status).toBe(200);
-    expect(mockChannelGet).toHaveBeenCalled();
-    delete process.env.ABLY_API_KEY;
-    vi.useRealTimers();
+    await post({ targetId: 20 });
+    const calls = mockPublish.mock.calls as [string, Record<string, unknown>][];
+    const publicCall = calls.find(([, d]) => !("voterId" in d))!;
+    const spyCall = calls.find(([, d]) => "voterId" in d)!;
+    expect(publicCall[1]).toEqual({ targetId: 20, previousTargetId: 30 });
+    expect(spyCall[1]).toMatchObject({ voterId: 10, voterName: "Alice", targetId: 20, targetName: "Bob" });
   });
 
-  it("invalid session userId → 401", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "notanumber", role: "player" } });
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-
-    expect(res.status).toBe(401);
-  });
-
-  it("see_killer player → 403 'Players with killer knowledge cannot vote'", async () => {
-    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
-
-    dbMock.selectResults = [
-      // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
-      // Caller is alive but has see_killer permission (e.g. the Spy / Seer role)
-      [{ id: 1, is_dead: 0, revived_at: null, permissions: '["see_killer"]' }],
+  it("re-voting for the same target sends no public counter event", async () => {
+    process.env.ABLY_API_KEY = "k";
+    dbState.selectResults = [
+      [game()],
+      [{ id: 1, is_dead: 0, permissions: null }],
+      [{ id: 99 }],
+      [{ target_id: 20 }],
+      [{ vote_closed_day: 0 }],
+      [{ name: "Alice" }],
+      [{ name: "Bob" }],
     ];
-
-    const req = new NextRequest("http://localhost/api/game/G1/vote", {
-      method: "POST",
-      body: JSON.stringify({ targetId: 20 }),
-      headers: { "Content-Type": "application/json" },
-    });
-    const res = await postVote(req, { params: Promise.resolve({ id: "G1" }) });
-    const data = await res.json();
-
-    expect(res.status).toBe(403);
-    expect(data.error).toBe("Players with killer knowledge cannot vote");
+    await post({ targetId: 20 });
+    const calls = mockPublish.mock.calls as [string, Record<string, unknown>][];
+    expect(calls.every(([, d]) => "voterId" in d)).toBe(true);
   });
 });

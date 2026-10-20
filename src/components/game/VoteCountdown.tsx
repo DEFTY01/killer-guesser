@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { Timer } from "@phosphor-icons/react";
 
 interface VoteCountdownProps {
   /** ISO datetime string for when the vote window opens (nullable). */
@@ -57,29 +58,18 @@ export function VoteCountdown({
     `${String(seconds).padStart(2, "0")}s`,
   ].filter(Boolean);
 
+  // No aria-live here: the value changes every second and would be announced
+  // continuously. role="timer" keeps it discoverable without the noise.
   return (
     <div
       role="timer"
-      aria-live="polite"
       aria-label="Time remaining to vote"
-      className="flex items-center justify-center gap-2 rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-amber-800"
+      className="callout callout-accent items-center justify-center"
     >
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 20 20"
-        fill="currentColor"
-        className="w-4 h-4 shrink-0 text-amber-500"
-        aria-hidden="true"
-      >
-        <path
-          fillRule="evenodd"
-          d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-13a.75.75 0 0 0-1.5 0v5c0 .414.336.75.75.75h4a.75.75 0 0 0 0-1.5h-3.25V5Z"
-          clipRule="evenodd"
-        />
-      </svg>
+      <Timer className="size-5 shrink-0 text-accent" aria-hidden="true" />
       <span className="text-sm font-medium">
         Time remaining to vote:{" "}
-        <span className="font-bold tabular-nums">{parts.join(" ")}</span>
+        <span className="font-semibold tabular-nums">{parts.join(" ")}</span>
       </span>
     </div>
   );

@@ -2,7 +2,6 @@ import { db } from "@/db";
 import { events, game_players, games } from "@/db/schema";
 import { and, eq, gt, lte, sql } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import { cleanupPoller } from "@/lib/pollers";
 
 // ── Internal helpers ──────────────────────────────────────────────
 
@@ -77,12 +76,13 @@ async function archiveAndCleanEvents(gameId: string): Promise<void> {
 export async function checkGameOver(gameId: string): Promise<void> {
   // Load game metadata to determine team alignment.
   const [game] = await db
-    .select({ evil_team_is_team1: games.evil_team_is_team1 })
+    .select({ evil_team_is_team1: games.evil_team_is_team1, status: games.status })
     .from(games)
     .where(eq(games.id, gameId))
     .limit(1);
 
-  if (!game) return;
+  // A finished game keeps its winner; late deaths/tips must not re-run the end.
+  if (!game || game.status === "closed" || game.status === "deleted") return;
 
   const evilTeamId: "team1" | "team2" = game.evil_team_is_team1 === 1 ? "team1" : "team2";
   const goodTeamId: "team1" | "team2" = game.evil_team_is_team1 === 1 ? "team2" : "team1";
@@ -92,7 +92,7 @@ export async function checkGameOver(gameId: string): Promise<void> {
     .select({ team: game_players.team, is_dead: game_players.is_dead })
     .from(game_players)
     .where(eq(game_players.game_id, gameId))
-    .limit(50);
+    .limit(500);
 
   const aliveEvil = allPlayers.filter(
     (p) => p.team === evilTeamId && p.is_dead === 0,
@@ -141,7 +141,6 @@ export async function handleGoodWins(
   // for the duration of the (slower) archival queries.
   await archiveAndCleanEvents(gameId);
 
-  cleanupPoller(gameId);
   await publishGameEnded(gameId, goodTeamId);
 }
 
@@ -176,7 +175,6 @@ export async function handleEvilWins(
   // for the duration of the (slower) archival queries.
   await archiveAndCleanEvents(gameId);
 
-  cleanupPoller(gameId);
   await publishGameEnded(gameId, evilTeamId);
 }
 
@@ -216,14 +214,16 @@ export async function deleteGame(gameId: string): Promise<void> {
  *
  * @param gameId - The game's nanoid10 identifier.
  */
-export async function closeGame(gameId: string): Promise<void> {
+export async function closeGame(
+  gameId: string,
+  winnerTeam: "team1" | "team2" | null = null,
+): Promise<void> {
   await db.transaction(async (tx) => {
     await tx
       .update(games)
-      .set({ status: "closed" })
+      .set(winnerTeam ? { status: "closed", winner_team: winnerTeam } : { status: "closed" })
       .where(eq(games.id, gameId));
   });
 
-  cleanupPoller(gameId);
-  await publishGameEnded(gameId, null);
+  await publishGameEnded(gameId, winnerTeam);
 }

@@ -20,52 +20,42 @@ export default async function GameLayout({
   const user = session.user;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex flex-col">
+    <div className="flex min-h-dvh flex-col">
       {/* ── Top header ─────────────────────────────────────────── */}
-      <header
-        className="fixed top-0 inset-x-0 z-40 border-b border-white/20 dark:border-white/10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-sm"
-        style={{
-          paddingTop: "var(--safe-top)",
-          paddingLeft: "var(--safe-left)",
-          paddingRight: "var(--safe-right)",
-        }}
-      >
-        <div className="flex h-14 items-center justify-between px-4 max-w-2xl mx-auto w-full">
+      <header className="fixed inset-x-0 top-0 z-40 border-b border-line bg-surface/90 pl-[var(--safe-left)] pr-[var(--safe-right)] pt-[var(--safe-top)] backdrop-blur-md">
+        <div className="mx-auto flex h-14 w-full max-w-lg items-center justify-between px-4">
           <Link
             href="/lobby"
-            className="font-bold text-base text-indigo-700 dark:text-indigo-400 tracking-tight"
+            className="inline-flex min-h-11 items-center font-display text-base font-semibold tracking-wide text-fg"
           >
             Summit of Lies
           </Link>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-1">
             {user.avatar_url ? (
               <Image
                 src={blobImageSrc(user.avatar_url)}
                 alt={user.name ?? "Player"}
                 width={32}
                 height={32}
-                className="rounded-full object-cover"
+                className="mr-1 size-8 rounded-full object-cover"
                 unoptimized
               />
             ) : null}
-            <span className="hidden sm:block text-sm font-medium text-gray-700 dark:text-gray-300 max-w-[120px] truncate">
+            <span className="mr-1 hidden max-w-[120px] truncate text-sm font-medium text-muted sm:block">
               {user.name}
             </span>
             <ThemeToggle />
             <SignOutButton
               redirectTo="/login"
-              className="min-h-[44px] rounded-lg border border-gray-200 dark:border-gray-700 px-3 py-1.5 text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors"
+              className="btn btn-secondary btn-sm"
             />
           </div>
         </div>
       </header>
 
       {/* ── Page content ────────────────────────────────────────── */}
-      <main
-        className="flex-1 pt-14"
-        style={{ paddingTop: "calc(3.5rem + var(--safe-top))" }}
-      >
+      <main className="flex-1 pt-[calc(3.5rem+var(--safe-top))]">
         {children}
       </main>
     </div>

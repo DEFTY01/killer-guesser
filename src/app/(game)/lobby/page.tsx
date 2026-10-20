@@ -3,7 +3,9 @@
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { ArrowRight, Mountains } from "@phosphor-icons/react";
 import { useCountdown } from "@/hooks/useCountdown";
+import { Skeleton, SkeletonRow } from "@/components/ui/Skeleton";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -31,16 +33,6 @@ function setSelectedGameCookie(gameId: string) {
   document.cookie = `selectedGameId=${gameId}; path=/; SameSite=Lax`;
 }
 
-// ── Skeleton card ─────────────────────────────────────────────────
-
-function SkeletonCard({ tall = false }: { tall?: boolean }) {
-  return (
-    <div
-      className={`animate-pulse rounded-2xl bg-white/60 border border-white/40 ${tall ? "h-32" : "h-20"}`}
-    />
-  );
-}
-
 // ── Active game card ──────────────────────────────────────────────
 
 function ActiveCard({ game }: { game: LobbyGame }) {
@@ -49,24 +41,25 @@ function ActiveCard({ game }: { game: LobbyGame }) {
       href={`/game/${game.id}`}
       prefetch
       onClick={() => setSelectedGameCookie(game.id)}
-      className="w-full text-left rounded-2xl bg-white border border-gray-100 shadow-md p-5 flex items-center justify-between gap-4 hover:shadow-lg active:scale-[0.98] transition-all"
+      className="card flex items-center justify-between gap-4 p-5 transition-transform duration-150 active:scale-[0.98]"
     >
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="inline-flex items-center gap-1 rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-semibold text-green-700 uppercase tracking-wide">
-            <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse" />
-            LIVE
-          </span>
-        </div>
-        <p className="font-semibold text-gray-900 truncate text-lg">
-          {game.name}
-        </p>
-        <p className="text-sm text-gray-500">
+      <div className="min-w-0 flex-1 space-y-1.5">
+        {/* The one semantic live indicator */}
+        <span className="pill pill-success">
+          <span
+            className="size-1.5 animate-pulse rounded-full bg-success"
+            aria-hidden="true"
+          />
+          LIVE
+        </span>
+        <p className="truncate text-lg font-semibold text-fg">{game.name}</p>
+        <p className="text-sm text-muted">
           {game.player_count} player{game.player_count !== 1 ? "s" : ""}
         </p>
       </div>
-      <span className="shrink-0 text-indigo-600 font-bold text-lg">
-        Join →
+      <span className="btn btn-primary shrink-0">
+        Join
+        <ArrowRight className="size-5" aria-hidden="true" />
       </span>
     </Link>
   );
@@ -79,17 +72,13 @@ function CountdownDisplay({ startTime }: { startTime: number }) {
   const { hours, minutes, seconds, isExpired } = useCountdown(target);
 
   if (isExpired) {
-    return (
-      <span className="text-sm text-amber-600 font-medium">
-        Starting soon…
-      </span>
-    );
+    return <span className="text-sm font-medium text-muted">Starting soon…</span>;
   }
 
   const pad = (n: number) => String(n).padStart(2, "0");
 
   return (
-    <span className="text-sm font-mono text-indigo-600 font-semibold tabular-nums">
+    <span className="text-2xl font-semibold tabular-nums tracking-tight text-accent">
       {hours > 0 ? `${pad(hours)}h ` : ""}
       {pad(minutes)}m {pad(seconds)}s
     </span>
@@ -118,22 +107,19 @@ function ScheduledCard({ game }: { game: LobbyGame }) {
 
   return (
     <button
+      type="button"
       onClick={handleTap}
-      className="w-full text-left rounded-2xl bg-white border border-gray-100 shadow-sm p-4 flex items-center justify-between gap-4 hover:shadow-md active:scale-[0.98] transition-all"
+      className="card flex w-full flex-col gap-3 p-4 text-left transition-transform duration-150 active:scale-[0.98]"
     >
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 truncate">{game.name}</p>
-        <p className="text-xs text-gray-500 mt-0.5">{formattedDate}</p>
+      <div className="min-w-0">
+        <p className="truncate font-semibold text-fg">{game.name}</p>
+        <p className="mt-0.5 text-sm text-muted">{formattedDate}</p>
       </div>
-      <div className="shrink-0 text-right">
-        {isPast ? (
-          <span className="text-sm text-amber-600 font-medium">
-            Starting soon…
-          </span>
-        ) : (
-          <CountdownDisplay startTime={game.start_time} />
-        )}
-      </div>
+      {isPast ? (
+        <span className="text-sm font-medium text-muted">Starting soon…</span>
+      ) : (
+        <CountdownDisplay startTime={game.start_time} />
+      )}
     </button>
   );
 }
@@ -166,21 +152,18 @@ function PastCard({ game }: { game: LobbyGame }) {
 
   return (
     <button
+      type="button"
       onClick={() => router.push(`/game/${game.id}/summary`)}
-      className="w-full text-left rounded-xl bg-white/50 border border-gray-100 p-3 flex items-center justify-between gap-3 hover:bg-white/70 active:scale-[0.99] transition-all"
+      className="card flex min-h-14 w-full items-center justify-between gap-3 p-3 text-left shadow-none transition-transform duration-150 active:scale-[0.98]"
     >
-      <div className="flex-1 min-w-0">
-        <p className="font-medium text-gray-700 truncate text-sm">
-          {game.name}
-        </p>
-        <p className="text-xs text-gray-400 mt-0.5">{endDate}</p>
+      <div className="min-w-0 flex-1">
+        <p className="truncate text-sm font-medium text-fg">{game.name}</p>
+        <p className="mt-0.5 text-xs text-muted">{endDate}</p>
       </div>
       {resultLabel && (
         <span
-          className={`shrink-0 text-xs font-semibold px-2 py-0.5 rounded-full ${
-            resultLabel === "Won"
-              ? "bg-green-100 text-green-700"
-              : "bg-red-100 text-red-600"
+          className={`pill shrink-0 ${
+            resultLabel === "Won" ? "pill-success" : "pill-danger"
           }`}
         >
           {resultLabel}
@@ -190,7 +173,7 @@ function PastCard({ game }: { game: LobbyGame }) {
   );
 }
 
-// ── Section wrapper (fades in when visible) ───────────────────────
+// ── Section wrapper ───────────────────────────────────────────────
 
 function Section({
   title,
@@ -201,39 +184,27 @@ function Section({
   children: React.ReactNode;
   visible: boolean;
 }) {
+  if (!visible) return null;
   return (
-    <div
-      className={`transition-all duration-500 ${
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4 pointer-events-none"
-      }`}
-      aria-hidden={!visible}
-    >
-      <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
-        {title}
-      </h2>
+    <section className="animate-[fadeIn_300ms_var(--ease-out)_both]">
+      <h2 className="mb-3 px-1 text-sm font-semibold text-muted">{title}</h2>
       <div className="flex flex-col gap-3">{children}</div>
-    </div>
+    </section>
   );
 }
 
 // ── Empty state ───────────────────────────────────────────────────
 
-function EmptyState() {
+function EmptyState({ onRefresh }: { onRefresh: () => void }) {
   return (
-    <div className="flex flex-col items-center justify-center gap-4 py-24 text-center">
-      {/* Mountain icon */}
-      <svg
-        xmlns="http://www.w3.org/2000/svg"
-        viewBox="0 0 64 64"
-        className="w-16 h-16 text-indigo-200"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path d="M2 54 L22 18 L32 30 L42 14 L62 54 Z" />
-      </svg>
-      <p className="text-base font-medium text-gray-400 max-w-xs">
-        No games yet — your host will set one up!
+    <div className="flex flex-col items-center justify-center gap-4 py-20 text-center">
+      <Mountains className="size-14 text-muted" aria-hidden="true" />
+      <p className="max-w-xs text-base font-medium text-muted">
+        No games yet - your host will set one up!
       </p>
+      <button type="button" onClick={onRefresh} className="btn btn-secondary">
+        Refresh
+      </button>
     </div>
   );
 }
@@ -242,16 +213,16 @@ function EmptyState() {
 
 function LoadingSkeleton() {
   return (
-    <div className="flex flex-col gap-8">
+    <div className="flex flex-col gap-8" aria-hidden="true">
       <div className="flex flex-col gap-3">
-        <div className="h-3 w-24 rounded-full bg-gray-200 animate-pulse" />
-        <SkeletonCard tall />
-        <SkeletonCard tall />
+        <Skeleton className="h-4 w-24" />
+        <SkeletonRow tall />
+        <SkeletonRow tall />
       </div>
       <div className="flex flex-col gap-3">
-        <div className="h-3 w-28 rounded-full bg-gray-200 animate-pulse" />
-        <SkeletonCard />
-        <SkeletonCard />
+        <Skeleton className="h-4 w-28" />
+        <SkeletonRow />
+        <SkeletonRow />
       </div>
     </div>
   );
@@ -275,7 +246,13 @@ export default function LobbyPage() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchLobby();
+  }, [fetchLobby]);
+
+  const retry = useCallback(() => {
+    setError(null);
+    void fetchLobby();
   }, [fetchLobby]);
 
   const isLoading = data === null && error === null;
@@ -290,47 +267,50 @@ export default function LobbyPage() {
   const hasPast = (data?.past.length ?? 0) > 0;
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-6">
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Your Games</h1>
+    <div className="mx-auto w-full max-w-lg px-4 py-6">
+      <h1 className="mb-6 text-2xl font-semibold tracking-tight text-fg">
+        Your Games
+      </h1>
 
       {error && (
-        <div className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600">
-          {error}
+        <div role="alert" className="callout callout-danger items-center justify-between">
+          <span>{error}</span>
+          <button type="button" onClick={retry} className="btn btn-secondary btn-sm shrink-0">
+            Retry
+          </button>
         </div>
       )}
 
       {isLoading && <LoadingSkeleton />}
 
-      {!isLoading && isEmpty && <EmptyState />}
+      {!isLoading && isEmpty && <EmptyState onRefresh={retry} />}
 
-      {!isLoading && !isEmpty && (
+      {!isLoading && !isEmpty && data && (
         <div className="flex flex-col gap-8">
           {/* ── Section 1: Active games ──────────────────────── */}
           {hasActive ? (
             <Section title="Active" visible>
-              {data!.active.map((g) => (
+              {data.active.map((g) => (
                 <ActiveCard key={g.id} game={g} />
               ))}
             </Section>
           ) : (
-            <div>
-              <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
-                Active
-              </h2>
-              <p className="text-sm text-gray-400 px-1">No active game</p>
-            </div>
+            <section>
+              <h2 className="mb-3 px-1 text-sm font-semibold text-muted">Active</h2>
+              <p className="px-1 text-sm text-muted">No active game</p>
+            </section>
           )}
 
           {/* ── Section 2: Upcoming games ────────────────────── */}
           <Section title="Upcoming" visible={hasScheduled}>
-            {data!.scheduled.map((g) => (
+            {data.scheduled.map((g) => (
               <ScheduledCard key={g.id} game={g} />
             ))}
           </Section>
 
           {/* ── Section 3: Past games ────────────────────────── */}
           <Section title="Past Games" visible={hasPast}>
-            {data!.past.map((g) => (
+            {data.past.map((g) => (
               <PastCard key={g.id} game={g} />
             ))}
           </Section>

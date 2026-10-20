@@ -4,8 +4,10 @@ import { useState, useCallback } from "react";
 import { signIn } from "next-auth/react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { Check, CircleNotch, X } from "@phosphor-icons/react";
 import { blobImageSrc } from "@/lib/blob-image";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { Modal } from "@/components/ui/Modal";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -15,67 +17,15 @@ type Player = {
   avatarUrl: string | null;
 };
 
-type Props = {
-  players: Player[];
-};
-
-// ── Spinner ──────────────────────────────────────────────────────────────────
-
-function Spinner() {
-  return (
-    <svg
-      className="animate-spin"
-      style={{ width: 18, height: 18, display: "inline-block" }}
-      viewBox="0 0 24 24"
-      fill="none"
-      aria-hidden="true"
-    >
-      <circle
-        cx="12"
-        cy="12"
-        r="10"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeOpacity="0.25"
-      />
-      <path
-        d="M12 2a10 10 0 0 1 10 10"
-        stroke="currentColor"
-        strokeWidth="3"
-        strokeLinecap="round"
-      />
-    </svg>
-  );
-}
-
 // ── Checkmark badge ───────────────────────────────────────────────────────────
 
 function CheckBadge() {
   return (
     <span
       aria-hidden="true"
-      style={{
-        position: "absolute",
-        top: 4,
-        right: 4,
-        width: 20,
-        height: 20,
-        borderRadius: "50%",
-        background: "#7c3aed",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-      }}
+      className="absolute right-1 top-1 flex size-5 items-center justify-center rounded-full bg-accent text-accent-fg"
     >
-      <svg width="11" height="11" viewBox="0 0 11 11" fill="none">
-        <path
-          d="M2 5.5L4.5 8L9 3"
-          stroke="#fff"
-          strokeWidth="1.8"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
+      <Check className="size-3" />
     </span>
   );
 }
@@ -83,27 +33,12 @@ function CheckBadge() {
 // ── Avatar placeholder ────────────────────────────────────────────────────────
 
 function AvatarPlaceholder({ name }: { name: string }) {
-  const initial = name.charAt(0).toUpperCase();
   return (
     <div
       aria-hidden="true"
-      style={{
-        width: 64,
-        height: 64,
-        borderRadius: "50%",
-        background: "linear-gradient(135deg, #4c1d95, #7c3aed)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        margin: "0 auto 6px",
-        fontSize: 24,
-        fontWeight: 700,
-        color: "#fff",
-        fontFamily: "var(--font-cinzel), serif",
-        flexShrink: 0,
-      }}
+      className="mx-auto mb-1.5 flex size-16 shrink-0 items-center justify-center rounded-full bg-accent-soft text-2xl font-semibold text-accent"
     >
-      {initial}
+      {name.charAt(0).toUpperCase()}
     </div>
   );
 }
@@ -121,9 +56,16 @@ function isSafeAvatarUrl(url: string): boolean {
   }
 }
 
-export default function LoginScreen({ players }: Props) {
+const enter = "animate-[fadeInUp_600ms_var(--ease-out)_both]";
+
+export default function LoginScreen() {
   const [panelOpen, setPanelOpen] = useState(false);
+  const [step, setStep] = useState<"code" | "avatar" | "pin">("code");
+  const [code, setCode] = useState("");
+  const [gameName, setGameName] = useState("");
+  const [players, setPlayers] = useState<Player[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [pin, setPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -140,140 +82,109 @@ export default function LoginScreen({ players }: Props) {
     setPanelOpen(false);
   }, [loading]);
 
-  const selectPlayer = useCallback((id: string) => {
-    setSelectedId((prev) => (prev === id ? null : id));
+  const lookUpGame = useCallback(async () => {
+    if (loading || code.trim().length === 0) return;
+    setLoading(true);
     setError(null);
+    try {
+      const res = await fetch(
+        `/api/login/game?code=${encodeURIComponent(code.trim())}`,
+      );
+      const json = await res.json();
+      if (!res.ok || !json.success) {
+        setError("We couldn't find a game with that code.");
+        return;
+      }
+      setGameName(json.data.gameName as string);
+      setPlayers(json.data.players as Player[]);
+      setStep("avatar");
+    } catch {
+      setError("Network problem. Please try again.");
+    } finally {
+      setLoading(false);
+    }
+  }, [code, loading]);
+
+  const selectPlayer = useCallback((id: string) => {
+    setSelectedId(id);
+    setPin("");
+    setError(null);
+    setStep("pin");
+  }, []);
+
+  const goBack = useCallback(() => {
+    setError(null);
+    setPin("");
+    setStep((prev) => {
+      if (prev === "pin") return "avatar";
+      setSelectedId(null);
+      return "code";
+    });
   }, []);
 
   const handleSignIn = useCallback(async () => {
-    if (!selectedId || loading) return;
+    if (!selectedId || pin.length === 0 || loading) return;
     setLoading(true);
     setError(null);
 
     try {
       const result = await signIn("player", {
+        gameCode: code,
         userId: selectedId,
+        pin,
         redirect: false,
       });
 
       if (!result || result.error) {
-        setError("Sign in failed. Please try again.");
+        setError("Wrong PIN, or too many attempts. Ask your host if you're stuck.");
+        setPin("");
         setLoading(false);
         return;
       }
 
-      // Redirect to the lobby after a successful player sign-in.
       router.push("/lobby");
     } catch {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
     }
-  }, [selectedId, loading, router]);
+  }, [selectedId, pin, code, loading, router]);
 
   return (
     <>
       {/* ── Landing view ────────────────────────────────────────────── */}
-      <div
-        style={{
-          position: "relative",
-          zIndex: 2,
-          display: "flex",
-          flexDirection: "column",
-          alignItems: "center",
-          justifyContent: "center",
-          minHeight: "100dvh",
-          padding: "0 24px",
-          textAlign: "center",
-        }}
-      >
-        {/* Theme toggle — top-right corner */}
-        <div style={{ position: "absolute", top: 16, right: 16, zIndex: 10 }}>
+      <div className="relative z-[2] mx-auto flex min-h-dvh max-w-lg flex-col items-center justify-center px-6 text-center">
+        {/* Theme toggle, top-right corner */}
+        <div className="absolute right-4 top-[calc(1rem+var(--safe-top))]">
           <ThemeToggle />
         </div>
+
         <h1
-          style={{
-            fontFamily: "var(--font-cinzel), serif",
-            fontSize: "clamp(2rem, 5vw, 3.5rem)",
-            fontWeight: 700,
-            color: "var(--login-title-color)",
-            letterSpacing: "0.04em",
-            lineHeight: 1.15,
-            marginBottom: "16px",
-            animation: "fadeInUp 0.7s ease both",
-            animationDelay: "0.1s",
-            textShadow: "0 2px 24px rgba(124, 58, 237, 0.5)",
-          }}
+          className={`${enter} font-display text-4xl font-bold leading-tight tracking-wide text-fg sm:text-5xl`}
+          style={{ animationDelay: "100ms" }}
         >
           Summit of Lies
         </h1>
 
         <p
-          style={{
-            fontSize: "clamp(0.95rem, 2.5vw, 1.15rem)",
-            color: "var(--login-subtitle-color)",
-            marginBottom: "40px",
-            maxWidth: 420,
-            lineHeight: 1.6,
-            animation: "fadeInUp 0.7s ease both",
-            animationDelay: "0.25s",
-          }}
+          className={`${enter} mb-10 mt-4 max-w-sm text-base leading-relaxed text-muted`}
+          style={{ animationDelay: "200ms" }}
         >
           Uncover the truth. Survive the night.
         </p>
 
         <button
+          type="button"
           onClick={openPanel}
-          style={{
-            fontFamily: "var(--font-cinzel), serif",
-            fontSize: "1rem",
-            fontWeight: 600,
-            letterSpacing: "0.08em",
-            color: "#fff",
-            background: "linear-gradient(135deg, #5b21b6, #7c3aed)",
-            border: "none",
-            borderRadius: "12px",
-            padding: "14px 40px",
-            cursor: "pointer",
-            animation: "fadeInUp 0.7s ease both",
-            animationDelay: "0.42s",
-            boxShadow: "0 4px 24px rgba(124, 58, 237, 0.45)",
-            transition: "transform 0.15s, box-shadow 0.15s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.transform =
-              "translateY(-2px)";
-            (e.currentTarget as HTMLButtonElement).style.boxShadow =
-              "0 8px 28px rgba(124, 58, 237, 0.6)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLButtonElement).style.transform =
-              "translateY(0)";
-            (e.currentTarget as HTMLButtonElement).style.boxShadow =
-              "0 4px 24px rgba(124, 58, 237, 0.45)";
-          }}
+          className={`${enter} btn btn-primary min-h-12 px-10 text-base`}
+          style={{ animationDelay: "300ms" }}
         >
           Play Now
         </button>
 
         <Link
           href="/admin"
-          style={{
-            marginTop: "16px",
-            fontSize: "0.82rem",
-            color: "var(--login-admin-link-color)",
-            textDecoration: "none",
-            letterSpacing: "0.06em",
-            animation: "fadeInUp 0.7s ease both",
-            animationDelay: "0.55s",
-          }}
-          onMouseEnter={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.color =
-              "var(--login-title-color)";
-          }}
-          onMouseLeave={(e) => {
-            (e.currentTarget as HTMLAnchorElement).style.color =
-              "var(--login-admin-link-color)";
-          }}
+          className={`${enter} btn btn-ghost btn-sm mt-3`}
+          style={{ animationDelay: "400ms" }}
         >
           Admin Panel
         </Link>
@@ -286,231 +197,162 @@ export default function LoginScreen({ players }: Props) {
         aria-hidden="true"
       />
 
-      {/* ── Bottom-sheet / modal panel ───────────────────────────────── */}
-      <div
+      {/* ── Bottom-sheet / modal panel (native dialog) ───────────────── */}
+      <Modal
         className={`login-panel${panelOpen ? " panel-open" : ""}`}
-        role="dialog"
-        aria-modal="true"
-        aria-label="Select your avatar to sign in"
+        aria-label="Sign in to your game"
+        open={panelOpen}
+        exitMs={400}
+        onClose={closePanel}
       >
         {/* Drag handle */}
         <div
-          style={{
-            width: 44,
-            height: 4,
-            borderRadius: 2,
-            background: "var(--login-panel-handle)",
-            margin: "14px auto 0",
-            flexShrink: 0,
-          }}
+          className="mx-auto mt-3 h-1 w-10 shrink-0 rounded-full bg-line-strong sm:hidden"
           aria-hidden="true"
         />
 
         {/* Panel header */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            padding: "20px 24px 4px",
-          }}
-        >
-          <h2
-            style={{
-              fontFamily: "var(--font-cinzel), serif",
-              fontSize: "1.35rem",
-              fontWeight: 700,
-              color: "var(--login-heading-color)",
-              letterSpacing: "0.03em",
-            }}
-          >
-            Who are you?
+        <div className="flex items-center justify-between px-6 pb-1 pt-4">
+          <h2 className="text-xl font-semibold text-fg">
+            {step === "code" ? "Join a game" : "Who are you?"}
           </h2>
 
           <button
+            type="button"
             onClick={closePanel}
             disabled={loading}
             aria-label="Close panel"
-            style={{
-              background: "transparent",
-              border: "none",
-              color: "var(--login-close-btn-color)",
-              cursor: loading ? "not-allowed" : "pointer",
-              padding: 4,
-              borderRadius: 6,
-              lineHeight: 1,
-            }}
+            className="btn btn-ghost size-11 px-0"
           >
-            <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-              <path
-                d="M5 5l10 10M15 5L5 15"
-                stroke="currentColor"
-                strokeWidth="1.8"
-                strokeLinecap="round"
-              />
-            </svg>
+            <X className="size-5" aria-hidden="true" />
           </button>
         </div>
 
-        {/* Avatar grid */}
-        <div
-          style={{
-            padding: "16px 20px",
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fill, minmax(88px, 1fr))",
-            gap: 10,
-          }}
-        >
-          {players.length === 0 ? (
-            <p
-              style={{
-                gridColumn: "1 / -1",
-                color: "var(--login-empty-color)",
-                textAlign: "center",
-                padding: "24px 0",
-                fontSize: "0.9rem",
-              }}
-            >
-              No players found. Add players first.
+        {step === "code" && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void lookUpGame();
+            }}
+            className="flex flex-col gap-3 px-6 pb-6 pt-3"
+          >
+            <label htmlFor="game-code" className="text-sm text-muted">
+              Enter the game code from your host
+            </label>
+            <input
+              id="game-code"
+              value={code}
+              onChange={(e) => setCode(e.target.value.toUpperCase())}
+              autoComplete="off"
+              autoCapitalize="characters"
+              autoCorrect="off"
+              spellCheck={false}
+              maxLength={8}
+              placeholder="ABC234"
+              className="field h-16 text-center text-2xl font-semibold tracking-[0.3em]"
+            />
+          </form>
+        )}
+
+        {step === "avatar" && (
+          <div className="px-5 pt-2">
+            <p className="text-center text-sm text-muted">
+              {gameName} - tap your avatar
             </p>
-          ) : (
-            players.map((player, index) => (
-              <button
-                key={player.id}
-                className={`avatar-card${selectedId === player.id ? " selected" : ""}`}
-                onClick={() => selectPlayer(player.id)}
-                aria-pressed={selectedId === player.id}
-                aria-label={`Select ${player.nickname}`}
-                style={{
-                  animation: panelOpen
-                    ? `fadeIn 0.35s ease both`
-                    : undefined,
-                  animationDelay: panelOpen
-                    ? `${index * 50}ms`
-                    : undefined,
-                }}
-              >
-                {selectedId === player.id && <CheckBadge />}
-
-                {player.avatarUrl && isSafeAvatarUrl(player.avatarUrl) ? (
-                  <img
-                    src={blobImageSrc(player.avatarUrl)}
-                    alt={player.nickname}
-                    loading="eager"
-                    width={64}
-                    height={64}
-                    style={{
-                      width: 64,
-                      height: 64,
-                      borderRadius: "50%",
-                      objectFit: "cover",
-                      display: "block",
-                      margin: "0 auto 6px",
-                    }}
-                  />
-                ) : (
-                  <AvatarPlaceholder name={player.nickname} />
-                )}
-
-                <span
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(88px,1fr))] gap-2.5 pb-4 pt-3">
+              {players.map((player, index) => (
+                <button
+                  key={player.id}
+                  type="button"
+                  className={`avatar-card${player.id === selectedId ? " selected" : ""}`}
+                  onClick={() => selectPlayer(player.id)}
+                  aria-label={`Select ${player.nickname}`}
                   style={{
-                    display: "block",
-                    fontSize: "0.72rem",
-                    color: "var(--login-nickname-color)",
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
-                    maxWidth: "100%",
+                    animation: panelOpen ? `fadeIn 300ms var(--ease-out) both` : undefined,
+                    animationDelay: panelOpen ? `${index * 40}ms` : undefined,
                   }}
                 >
-                  {player.nickname}
-                </span>
-              </button>
-            ))
-          )}
-        </div>
+                  {player.avatarUrl && isSafeAvatarUrl(player.avatarUrl) ? (
+                    // eslint-disable-next-line @next/next/no-img-element -- avatars are fixed-size blobs served through blobImageSrc
+                    <img
+                      src={blobImageSrc(player.avatarUrl)}
+                      alt={player.nickname}
+                      loading="eager"
+                      width={64}
+                      height={64}
+                      className="mx-auto mb-1.5 block size-16 rounded-full object-cover"
+                    />
+                  ) : (
+                    <AvatarPlaceholder name={player.nickname} />
+                  )}
+                  <span className="block max-w-full truncate px-1 text-xs font-medium text-fg">
+                    {player.nickname}
+                  </span>
+                  {player.id === selectedId && <CheckBadge />}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
 
-        {/* Error message */}
-        {error && (
-          <p
-            role="alert"
-            style={{
-              margin: "0 24px 8px",
-              padding: "10px 14px",
-              borderRadius: 10,
-              background: "rgba(220, 38, 38, 0.15)",
-              border: "1px solid rgba(220, 38, 38, 0.35)",
-              color: "#fca5a5",
-              fontSize: "0.85rem",
+        {step === "pin" && selectedPlayer && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSignIn();
             }}
+            className="flex flex-col items-center gap-4 px-6 pb-2 pt-3"
           >
+            <p className="text-sm text-muted">
+              Hi <strong className="font-semibold text-fg">{selectedPlayer.nickname}</strong>
+              , enter your PIN
+            </p>
+            <input
+              aria-label="PIN"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 8))}
+              type="password"
+              inputMode="numeric"
+              autoComplete="one-time-code"
+              autoFocus
+              placeholder="••••"
+              className="field h-16 max-w-60 text-center text-3xl font-semibold tracking-[0.5em]"
+            />
+          </form>
+        )}
+
+        {error && (
+          <p role="alert" className="callout callout-danger mx-6 my-2">
             {error}
           </p>
         )}
 
-        {/* Footer: hint + sign-in button */}
-        <div
-          style={{
-            padding: "8px 24px 28px",
-            display: "flex",
-            flexDirection: "column",
-            gap: 12,
-          }}
-        >
-          <p
-            style={{
-              fontSize: "0.82rem",
-              color: "var(--login-hint-color)",
-              textAlign: "center",
-              minHeight: "1.2em",
-            }}
-            aria-live="polite"
-          >
-            {selectedPlayer ? (
-              <>
-                Signing in as{" "}
-                <strong style={{ color: "var(--login-hint-selected-color)" }}>
-                  {selectedPlayer.nickname}
-                </strong>
-              </>
-            ) : (
-              "Tap a card to select your avatar"
-            )}
-          </p>
-
-          <button
-            className="sign-in-btn"
-            onClick={handleSignIn}
-            disabled={!selectedId || loading}
-            style={{
-              fontFamily: "var(--font-cinzel), serif",
-              fontSize: "0.95rem",
-              fontWeight: 600,
-              letterSpacing: "0.06em",
-              color: "#fff",
-              background: "linear-gradient(135deg, #5b21b6, #7c3aed)",
-              border: "none",
-              borderRadius: "12px",
-              padding: "13px 24px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              gap: 10,
-              width: "100%",
-            }}
-            aria-label={
-              loading
-                ? "Signing in…"
-                : selectedPlayer
-                  ? `Sign in as ${selectedPlayer.nickname}`
-                  : "Sign In"
-            }
-          >
-            {loading && <Spinner />}
-            {loading ? "Signing in…" : "Sign In"}
-          </button>
+        <div className="flex gap-2.5 px-6 pb-7 pt-2">
+          {step !== "code" && (
+            <button
+              type="button"
+              onClick={goBack}
+              disabled={loading}
+              className="btn btn-secondary min-h-12"
+            >
+              Back
+            </button>
+          )}
+          {step !== "avatar" && (
+            <button
+              type="button"
+              className="sign-in-btn btn btn-primary min-h-12 flex-1"
+              onClick={step === "code" ? lookUpGame : handleSignIn}
+              disabled={loading || (step === "code" ? code.trim().length < 6 : pin.length < 4)}
+            >
+              {loading && (
+                <CircleNotch className="size-5 animate-spin" aria-hidden="true" />
+              )}
+              {step === "code" ? "Find my game" : "Sign In"}
+            </button>
+          )}
         </div>
-      </div>
+      </Modal>
     </>
   );
 }

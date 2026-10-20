@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { blobImageSrc } from "@/lib/blob-image";
 import type { User, Role } from "@/types";
 
@@ -181,6 +182,11 @@ export function NewGameWizard({ players, roles }: Props) {
   const [step, setStep] = useState<1 | 2 | 3 | 4>(1);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const [created, setCreated] = useState<{
+    id: string;
+    joinCode: string;
+    credentials: { name: string; pin: string }[];
+  } | null>(null);
 
   // ── Step 1 state ──────────────────────────────────────────────
   const [step1, setStep1] = useState<Step1State>({
@@ -428,7 +434,14 @@ export function NewGameWizard({ players, roles }: Props) {
         setSubmitError(data?.error ?? "Failed to create game");
         return;
       }
-      router.push(`/admin/games/${data.data.id}`);
+      const nameById = new Map(players.map((p) => [p.id, p.name]));
+      setCreated({
+        id: data.data.id as string,
+        joinCode: data.data.join_code as string,
+        credentials: (data.data.pins as { userId: number; pin: string }[]).map(
+          (c) => ({ name: nameById.get(c.userId) ?? `#${c.userId}`, pin: c.pin }),
+        ),
+      });
     } catch {
       setSubmitError("Network error — please try again");
     } finally {
@@ -437,6 +450,50 @@ export function NewGameWizard({ players, roles }: Props) {
   }
 
   // ── Render helpers ─────────────────────────────────────────────
+
+  if (created) {
+    const shareText = [
+      `Game code: ${created.joinCode}`,
+      ...created.credentials.map((c) => `${c.name}: ${c.pin}`),
+    ].join("\n");
+    return (
+      <div className="max-w-md space-y-4">
+        <h1 className="text-xl font-semibold">Game created</h1>
+        <p className="text-sm text-gray-600">
+          Share the code with everyone and give each player their own PIN. PINs
+          are shown only now; you can issue a new one later from the game page.
+        </p>
+        <div className="rounded-xl border p-4 text-center">
+          <div className="text-xs uppercase tracking-widest text-gray-500">Game code</div>
+          <div className="font-mono text-3xl tracking-[0.3em]">{created.joinCode}</div>
+        </div>
+        <ul className="divide-y rounded-xl border">
+          {created.credentials.map((c) => (
+            <li key={c.name} className="flex items-center justify-between px-4 py-2">
+              <span>{c.name}</span>
+              <span className="font-mono tracking-widest">{c.pin}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="flex gap-3">
+          <button
+            type="button"
+            className="min-h-11 rounded-lg border px-4"
+            onClick={() => void navigator.clipboard?.writeText(shareText)}
+          >
+            Copy all
+          </button>
+          <button
+            type="button"
+            className="min-h-11 flex-1 rounded-lg bg-blue-600 px-4 font-medium text-white"
+            onClick={() => router.push(`/admin/games/${created.id}`)}
+          >
+            I saved them — open game
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   const selectedPlayers = players.filter((p) =>
     step2.selectedIds.includes(p.id),
@@ -447,12 +504,12 @@ export function NewGameWizard({ players, roles }: Props) {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
-        <a
+        <Link
           href="/admin/games"
           className="text-sm text-gray-500 hover:text-gray-700"
         >
           ← Games
-        </a>
+        </Link>
         <h1 className="text-2xl font-bold text-gray-900">New Game</h1>
       </div>
 

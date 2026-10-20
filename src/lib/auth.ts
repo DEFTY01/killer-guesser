@@ -1,8 +1,6 @@
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
-import { db } from "@/db";
-import { users, game_players, games } from "@/db/schema";
-import { and, eq, or } from "drizzle-orm";
+import { verifyPlayerLogin } from "@/lib/playerLogin";
 import crypto from "crypto";
 import { authConfig } from "./auth.config";
 
@@ -12,7 +10,7 @@ import { authConfig } from "./auth.config";
  * Spreads the edge-safe authConfig (JWT/session callbacks, pages) and adds
  * the two Credentials providers that require Node.js + database access:
  *
- * 1. "player" — Avatar-click login flow.
+ * 1. "player" — Game code + avatar + per-game PIN.
  * 2. "admin"  — Password-only login flow (timingSafeEqual via Node crypto).
  */
 export const { handlers, signIn, signOut, auth } = NextAuth({
@@ -21,47 +19,18 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
     // ── Provider 1: player ────────────────────────────────────────
     Credentials({
       id: "player",
-      name: "Avatar login",
+      name: "Game code login",
       credentials: {
+        gameCode: { label: "Game code", type: "text" },
         userId: { label: "User ID", type: "text" },
+        pin: { label: "PIN", type: "password" },
       },
       async authorize(credentials) {
-        const userId = Number(credentials?.userId);
-        if (!userId || isNaN(userId)) return null;
-
-        // Verify user exists and is active.
-        const [user] = await db
-          .select()
-          .from(users)
-          .where(and(eq(users.id, userId), eq(users.is_active, 1)))
-          .limit(1);
-
-        if (!user) return null;
-
-        // Find an active or scheduled game this player belongs to.
-        const [playerEntry] = await db
-          .select({ gameId: game_players.game_id })
-          .from(game_players)
-          .innerJoin(games, eq(game_players.game_id, games.id))
-          .where(
-            and(
-              eq(game_players.user_id, userId),
-              or(eq(games.status, "active"), eq(games.status, "scheduled")),
-            ),
-          )
-          .limit(1);
-
-        if (!playerEntry) {
-          throw new Error("No active game found. Ask your host!");
-        }
-
-        return {
-          id: String(user.id),
-          name: user.name,
-          avatar_url: user.avatar_url,
-          role: "player" as const,
-          activeGameId: playerEntry.gameId,
-        };
+        return verifyPlayerLogin({
+          gameCode: String(credentials?.gameCode ?? ""),
+          userId: Number(credentials?.userId),
+          pin: String(credentials?.pin ?? ""),
+        });
       },
     }),
 
