@@ -4,18 +4,11 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { mockSelectReturn, mockDbSelect, mockDbFrom, mockDbWhere, mockDbLimit, mockDbInnerJoin } =
   vi.hoisted(() => {
     const ret = vi.fn().mockResolvedValue([]);
-    const limit = vi.fn(() => ({ then: ret.then?.bind(ret) }));
-    const where = vi.fn(() => ({ limit }));
-    const innerJoin = vi.fn(() => ({ where }));
-    const from = vi.fn(() => ({ where, innerJoin }));
+    const limit = vi.fn((..._args: unknown[]): Promise<Record<string, unknown>[]> => ret());
+    const where = vi.fn((..._args: unknown[]) => ({ limit }));
+    const innerJoin = vi.fn((..._args: unknown[]) => ({ where }));
+    const from = vi.fn((..._args: unknown[]) => ({ where, innerJoin }));
     const select = vi.fn(() => ({ from }));
-
-    // Make limit thenable / awaitable by returning a promise
-    Object.defineProperty(limit, "then", {
-      value: (onResolve: (v: unknown) => void, onReject?: (e: unknown) => void) =>
-        ret().then(onResolve, onReject),
-      writable: true,
-    });
 
     return {
       mockSelectReturn: ret,

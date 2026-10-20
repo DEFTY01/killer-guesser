@@ -711,6 +711,8 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
     if (!data) return;
     const key = `role_reveal_shown_${gameId}`;
     if (!sessionStorage.getItem(key)) {
+      // sessionStorage is only readable after mount, so state must be set here.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowRoleReveal(true);
     }
   }, [data, gameId]);

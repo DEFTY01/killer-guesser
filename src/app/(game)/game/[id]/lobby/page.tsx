@@ -58,6 +58,8 @@ export default async function GameLobbyStatusPage({
   await activateGameIfReady(joinedGame.id);
 
   if (joinedGame.status === "scheduled") {
+    // Server component: runs once per request, so reading the clock is safe.
+    // eslint-disable-next-line react-hooks/purity
     const nowUnix = Math.floor(Date.now() / 1000);
     if (joinedGame.startTime <= nowUnix) {
       // Game was just activated by activateGameIfReady

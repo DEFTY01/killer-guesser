@@ -121,6 +121,7 @@ export function AvatarUpload({
         >
           Choose image
         </Button>
+        {/* eslint-disable-next-line react-hooks/refs -- re-renders via setPreview when a file is picked */}
         {inputRef.current?.files?.[0] && (
           <Button
             size="sm"

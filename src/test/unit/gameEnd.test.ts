@@ -24,7 +24,7 @@ const { mockPublish, mockChannelGet, txMock, mockTransaction, mockSelect, mockDb
     const selectChain = {
       from: vi.fn(),
     };
-    const sel = vi.fn(() => selectChain);
+    const sel = vi.fn((): unknown => selectChain);
     selectChain.from = vi.fn(() => ({
       where: vi.fn(() => ({
         limit: vi.fn().mockResolvedValue([]),

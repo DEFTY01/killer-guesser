@@ -402,6 +402,8 @@ export default function GameEditorClient({
   }, [game.id]);
 
   useEffect(() => {
+    // Fetch-on-mount; loadOverrides sets loading state synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadOverrides();
   }, [loadOverrides]);
 

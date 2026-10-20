@@ -149,11 +149,14 @@ const VoteTileRow = memo(function VoteTileRow({
     if (!isSelf) onSelect(player.id);
   }, [isSelf, onSelect, player.id]);
   useEffect(() => {
+    // Server-provided count replaces the locally incremented one on refetch.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setVoteCount(player.voteCount);
   }, [player.voteCount]);
   useEffect(() => {
-    dispatchRef.current.set(player.id, setVoteCount);
-    return () => { dispatchRef.current.delete(player.id); };
+    const dispatchers = dispatchRef.current;
+    dispatchers.set(player.id, setVoteCount);
+    return () => { dispatchers.delete(player.id); };
   }, [player.id, dispatchRef]);
   return (
     <PlayerTile
@@ -250,6 +253,8 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   useEffect(() => {
     if (data?.windowOpen && data.callerVotedFor) {
+      // Sync the selection with the server-reported vote.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSelectedId(data.callerVotedFor);
     }
   }, [data]);
@@ -388,6 +393,8 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
   // ── Window not open – show before-window message or results ──────
 
   if (!data.windowOpen) {
+    // Only decides which message to show; a stale value self-corrects on refetch.
+    // eslint-disable-next-line react-hooks/purity
     const nowMs = Date.now();
     const opensMs = data.window_open_utc_ms;
     const isBeforeWindow = opensMs !== undefined && nowMs < opensMs;

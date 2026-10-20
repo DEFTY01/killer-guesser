@@ -126,8 +126,8 @@ export const PlayerCard = memo(function PlayerCard({
 
     // First mount: set ref and apply dead style immediately (no animation).
     if (prev === null) {
+      // useState(isDead) already applied the initial style.
       prevIsDeadRef.current = current;
-      setShowDeadStyle(current === 1);
       return;
     }
 
@@ -143,9 +143,9 @@ export const PlayerCard = memo(function PlayerCard({
 
     // Transition to alive (revive): remove dead style immediately.
     if (current !== 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setShowDeadStyle(false);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [player.is_dead, deathAnimationDelayMs]);
 
   // ── Avatar click handler (shared between Mayor and default) ─

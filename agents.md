@@ -23,7 +23,7 @@ files, and boilerplate code.
 **Owns:**
 - `src/db/schema.ts`
 - `src/db/index.ts`
-- `drizzle/` (migration files)
+- `src/db/migrations/` (migration files)
 
 **Constraints:** Must run `npm run db:generate` after every schema change and
 commit the resulting migration files.

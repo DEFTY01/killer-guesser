@@ -42,7 +42,6 @@
 ```
 killer-guesser/
 ├── docs/                      # Developer documentation (architecture, auth, avatar, DB, deployment)
-├── drizzle/                   # Auto-generated Drizzle migration files (do not edit manually)
 ├── src/
 │   ├── app/
 │   │   ├── (admin)/           # Admin route group (login, dashboard)

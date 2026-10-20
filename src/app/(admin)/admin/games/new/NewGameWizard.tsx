@@ -3,6 +3,7 @@
 import { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { blobImageSrc } from "@/lib/blob-image";
 import type { User, Role } from "@/types";
 
@@ -447,12 +448,12 @@ export function NewGameWizard({ players, roles }: Props) {
   return (
     <div className="max-w-2xl">
       <div className="flex items-center gap-4 mb-6">
-        <a
+        <Link
           href="/admin/games"
           className="text-sm text-gray-500 hover:text-gray-700"
         >
           ← Games
-        </a>
+        </Link>
         <h1 className="text-2xl font-bold text-gray-900">New Game</h1>
       </div>
 

@@ -393,6 +393,7 @@ export default function LoginScreen({ players }: Props) {
                 {selectedId === player.id && <CheckBadge />}
 
                 {player.avatarUrl && isSafeAvatarUrl(player.avatarUrl) ? (
+                  // eslint-disable-next-line @next/next/no-img-element -- avatars are fixed-size blobs served through blobImageSrc
                   <img
                     src={blobImageSrc(player.avatarUrl)}
                     alt={player.nickname}

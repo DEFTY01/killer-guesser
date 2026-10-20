@@ -289,11 +289,10 @@ describe("assignTeamsAndRoles", () => {
     }
   });
 
-  // ── throws on insufficient evil roles ───────────────────────────
+  // ── cycles evil roles when there are fewer roles than evil players ──
 
-  it("throws when there are not enough Evil roles to fill the Evil team", () => {
-    // 15 players, adminCap = 3 → resolveKillerCap(15, 3) = 3
-    // but only 2 is_evil roles → throws
+  it("cycles Evil roles when there are fewer Evil roles than Evil players", () => {
+    // 15 players, adminCap = 3 → resolveKillerCap(15, 3) = 3, only 2 evil roles
     const players = Array.from({ length: 15 }, (_, i) => i + 1);
     const input: AssignmentInput = {
       ...baseInput,
@@ -301,13 +300,13 @@ describe("assignTeamsAndRoles", () => {
       team1MaxPlayers: 3,
       team1Roles: [
         { roleId: 10, chancePercent: 100, isEvil: true }, // Killer
-        { roleId: 11, chancePercent: 50, isEvil: true },  // one more
-        // only 2 evil roles but need 3
+        { roleId: 11, chancePercent: 50, isEvil: true },
       ],
     };
-    expect(() => assignTeamsAndRoles(input)).toThrow(
-      "Not enough Evil roles to fill the Evil team. Add more Evil roles or reduce the Evil team cap.",
-    );
+    const evil = assignTeamsAndRoles(input).filter((r) => r.team === "team1");
+    expect(evil).toHaveLength(3);
+    expect(evil.filter((r) => r.roleId === 10)).toHaveLength(1);
+    expect(evil.filter((r) => r.roleId === 11)).toHaveLength(2);
   });
 
   // ── throws if killerRoleId on Good team ─────────────────────────
