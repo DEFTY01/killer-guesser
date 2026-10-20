@@ -1,105 +1,113 @@
 @import "tailwindcss";
 
-@theme {
-  --color-surface: var(--bg-surface);
-  --color-text-primary: var(--text-primary);
-  --color-text-muted: var(--text-muted);
-  --color-border: var(--border);
+/* ── Design tokens ────────────────────────────────────────────────
+ * Semantic CSS variables live in :root (light) and .dark (dark). The
+ * `dark` class is set on <html> by the theme script / next-themes.
+ * Tailwind utilities (bg-surface, text-fg, border-line, ...) map to them.
+ * Contrast notes (WCAG AA): muted on surface >= 5.2:1 (light) / 6.2:1 (dark),
+ * accent on surface >= 5.2:1, accent-contrast on accent >= 5.7:1.
+ */
+@theme inline {
+  --color-app: var(--app);
+  --color-surface: var(--surface);
+  --color-elevated: var(--surface-elevated);
+  --color-fg: var(--text);
+  --color-muted: var(--text-muted);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-accent: var(--accent);
+  --color-accent-fg: var(--accent-contrast);
+  --color-accent-soft: var(--accent-soft);
+  --color-danger: var(--danger);
+  --color-danger-fg: var(--danger-contrast);
+  --color-danger-soft: var(--danger-soft);
+  --color-success: var(--success);
+  --color-success-soft: var(--success-soft);
+  --radius-control: 12px;
+  --radius-card: 20px;
+  --font-display: var(--font-cinzel), serif;
 }
 
 @layer base {
   :root {
-    --background: #ffffff;
-    --foreground: #171717;
     --safe-top: env(safe-area-inset-top, 0px);
     --safe-bottom: env(safe-area-inset-bottom, 0px);
     --safe-left: env(safe-area-inset-left, 0px);
     --safe-right: env(safe-area-inset-right, 0px);
-    --bg-primary: #F7FBFF;
-    --bg-surface: #FFFFFF;
-    --text-primary: #0D1B2A;
-    --text-muted: #6B7280;
-    --border: #E5E7EB;
+
+    --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-sheet: cubic-bezier(0.32, 0.72, 0, 1);
+
+    /* Light: cool off-white */
+    --app: #f4f5fa;
+    --app-top: #f4f5fa;
+    --surface: #fcfcff;
+    --surface-elevated: #eceef7;
+    --text: #12172a;
+    --text-muted: #5a6480;
+    --border: rgba(18, 23, 42, 0.12);
+    --border-strong: #8a91a8;
+    --accent: #5b4bdb;
+    --accent-contrast: #f8f9fd;
+    --accent-soft: rgba(91, 75, 219, 0.1);
+    --danger: #c0392b;
+    --danger-contrast: #f8f9fd;
+    --danger-soft: rgba(192, 57, 43, 0.1);
+    --success: #176b48;
+    --success-soft: rgba(23, 107, 72, 0.1);
+    --scrim: rgba(18, 23, 42, 0.55);
+    --shadow: 0 1px 2px rgba(18, 23, 42, 0.06),
+      0 8px 24px -12px rgba(18, 23, 42, 0.18);
+    --mountain: #e3e6f3;
+    --stars-opacity: 0;
     --bg-image: none;
-    --bg-image-opacity: 0.15;
-    /* ── Login page text colors (light mode defaults) ── */
-    --login-title-color: #1a1a2e;
-    --login-subtitle-color: #4b5563;
-    --login-admin-link-color: #9ca3af;
-    --login-panel-handle: rgba(0, 0, 0, 0.12);
-    --login-heading-color: #1a1a2e;
-    --login-close-btn-color: rgba(0, 0, 0, 0.4);
-    --login-empty-color: rgba(0, 0, 0, 0.4);
-    --login-nickname-color: rgba(0, 0, 0, 0.65);
-    --login-hint-color: rgba(0, 0, 0, 0.45);
-    --login-hint-selected-color: rgba(0, 0, 0, 0.7);
+
+    --background: var(--app);
+    --foreground: var(--text);
   }
 
-  /* System preference fallback */
-  @media (prefers-color-scheme: dark) {
-    :root:not(.light) {
-      --background: #0a0a0a;
-      --foreground: #ededed;
-      --bg-primary: #0D1B2A;
-      --bg-surface: #1A2B3C;
-      --text-primary: #F7FBFF;
-      --text-muted: #9CA3AF;
-      --border: #2D3F50;
-      --bg-image: none;
-      --bg-image-opacity: 0.25;
-      /* ── Login page text colors (dark mode) ── */
-      --login-title-color: #e8e0ff;
-      --login-subtitle-color: rgba(200, 190, 240, 0.8);
-      --login-admin-link-color: rgba(200, 190, 240, 0.5);
-      --login-panel-handle: rgba(255, 255, 255, 0.2);
-      --login-heading-color: #e8e0ff;
-      --login-close-btn-color: rgba(200, 190, 240, 0.6);
-      --login-empty-color: rgba(200, 190, 240, 0.5);
-      --login-nickname-color: rgba(220, 210, 255, 0.85);
-      --login-hint-color: rgba(200, 190, 240, 0.55);
-      --login-hint-selected-color: rgba(200, 190, 240, 0.85);
-    }
-  }
-
-  /* next-themes class-based overrides */
+  /* Dark: deep blue-slate */
   .dark {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-    --bg-primary: #0D1B2A;
-    --bg-surface: #1A2B3C;
-    --text-primary: #F7FBFF;
-    --text-muted: #9CA3AF;
-    --border: #2D3F50;
-    --bg-image: none;
-    --bg-image-opacity: 0.25;
-    /* ── Login page text colors (dark mode) ── */
-    --login-title-color: #e8e0ff;
-    --login-subtitle-color: rgba(200, 190, 240, 0.8);
-    --login-admin-link-color: rgba(200, 190, 240, 0.5);
-    --login-panel-handle: rgba(255, 255, 255, 0.2);
-    --login-heading-color: #e8e0ff;
-    --login-close-btn-color: rgba(200, 190, 240, 0.6);
-    --login-empty-color: rgba(200, 190, 240, 0.5);
-    --login-nickname-color: rgba(220, 210, 255, 0.85);
-    --login-hint-color: rgba(200, 190, 240, 0.55);
-    --login-hint-selected-color: rgba(200, 190, 240, 0.85);
+    --app: #0b1020;
+    --app-top: #080c18;
+    --surface: #121a2e;
+    --surface-elevated: #18223b;
+    --text: #e8ecf6;
+    --text-muted: #98a2bd;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: #6b7694;
+    --accent: #8b7cf6;
+    --accent-contrast: #0b1020;
+    --accent-soft: rgba(139, 124, 246, 0.14);
+    --danger: #f27a7a;
+    --danger-contrast: #0b1020;
+    --danger-soft: rgba(242, 122, 122, 0.12);
+    --success: #5fd3a0;
+    --success-soft: rgba(95, 211, 160, 0.12);
+    --scrim: rgba(5, 8, 18, 0.7);
+    --shadow: 0 8px 24px -12px rgba(3, 6, 16, 0.6);
+    --mountain: #070b17;
+    --stars-opacity: 1;
   }
 
-  .light {
-    --background: #ffffff;
-    --foreground: #171717;
-    --bg-primary: #F7FBFF;
-    --bg-surface: #FFFFFF;
-    --text-primary: #0D1B2A;
-    --text-muted: #6B7280;
-    --border: #E5E7EB;
-    --bg-image: none;
-    --bg-image-opacity: 0.15;
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--accent);
+    outline-offset: 2px;
+  }
+
+  /* The dialog itself takes focus when it opens; only its controls need a ring. */
+  dialog:focus-visible {
+    outline: none;
   }
 }
 
 html {
   overflow-x: hidden;
+}
+
+/* Lock page scroll while a native modal <dialog> is open */
+body:has(dialog[open]) {
+  overflow: hidden;
 }
 
 body {
@@ -124,47 +132,30 @@ summary {
   -webkit-tap-highlight-color: transparent;
 }
 
-/* ── Prevent iOS auto-zoom on form focus ────────────────────────── */
-
+/* Prevent iOS auto-zoom on form focus */
 input,
 select,
 textarea {
   font-size: max(16px, 1rem);
 }
 
-/* ── Night background ───────────────────────────────────────────── */
+/* ── Night background (decorative mountains + stars) ───────────── */
 
 .night-bg {
-  background-color: #0D1B2A;
-  background-image: linear-gradient(180deg, #02020d 0%, #05091a 55%, #0a1230 100%);
+  background-color: var(--app);
+  background-image: var(--bg-light-image, none);
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   min-height: 100dvh;
 }
 
-/* Light mode: snowy white default, or custom image via CSS variable */
-.light .night-bg,
-:root[class~="light"] .night-bg {
-  background-color: #F7FBFF;
-  background-image: var(--bg-light-image);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
+.dark .night-bg {
+  background-image: var(--bg-dark-image, none),
+    linear-gradient(180deg, var(--app-top) 0%, var(--app) 60%);
 }
 
-/* Dark mode: dark blue default, or custom image via CSS variable */
-.dark .night-bg,
-:root[class~="dark"] .night-bg {
-  background-color: #0D1B2A;
-  background-image: var(--bg-dark-image),
-    linear-gradient(180deg, #02020d 0%, #05091a 55%, #0a1230 100%);
-  background-size: cover;
-  background-position: center;
-  background-repeat: no-repeat;
-}
-
-/* Star field — box-shadow on a 1 × 1 px fixed element */
+/* Star field: box-shadow on a 1 x 1 px fixed element */
 .night-bg::before {
   content: "";
   position: fixed;
@@ -174,6 +165,7 @@ textarea {
   height: 1px;
   border-radius: 50%;
   background: #fff;
+  opacity: var(--stars-opacity);
   box-shadow:
     45px 32px 0 0 rgba(255, 255, 255, 0.9),
     123px 15px 0 0 rgba(255, 255, 255, 0.7),
@@ -222,19 +214,7 @@ textarea {
     1470px 360px 0 0 rgba(255, 255, 255, 0.6),
     1590px 315px 0 0 rgba(255, 255, 255, 0.8),
     1700px 345px 0 0 rgba(255, 255, 255, 0.7),
-    1820px 300px 0 0 rgba(255, 255, 255, 0.9),
-    60px 430px 0 0 rgba(255, 255, 255, 0.6),
-    180px 460px 0 0 rgba(255, 255, 255, 0.7),
-    300px 410px 0 0 rgba(255, 255, 255, 0.8),
-    420px 490px 0 0 rgba(255, 255, 255, 0.5),
-    540px 445px 0 0 rgba(255, 255, 255, 0.7),
-    660px 475px 0 0 rgba(255, 255, 255, 0.6),
-    780px 455px 0 0 rgba(255, 255, 255, 0.8),
-    900px 510px 0 0 rgba(255, 255, 255, 0.5),
-    1020px 470px 0 0 rgba(255, 255, 255, 0.6),
-    1140px 500px 0 0 rgba(255, 255, 255, 0.7),
-    1260px 465px 0 0 rgba(255, 255, 255, 0.8),
-    1380px 495px 0 0 rgba(255, 255, 255, 0.5);
+    1820px 300px 0 0 rgba(255, 255, 255, 0.9);
   z-index: 0;
   pointer-events: none;
 }
@@ -247,7 +227,7 @@ textarea {
   left: 0;
   right: 0;
   height: 42vh;
-  background: #030510;
+  background: var(--mountain);
   clip-path: polygon(
     0% 100%,
     0% 88%,
@@ -273,7 +253,7 @@ textarea {
   pointer-events: none;
 }
 
-/* ── Animations ─────────────────────────────────────────────────── */
+/* ── Keyframes ───────────────────────────────────────────────────── */
 
 @keyframes fadeInUp {
   from {
@@ -297,66 +277,305 @@ textarea {
   }
 }
 
-/* ── Login panel (bottom-sheet on mobile, modal on desktop) ─────── */
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+}
+
+@keyframes sheet-in-bottom {
+  from {
+    translate: 0 100%;
+  }
+}
+
+@keyframes sheet-in-center {
+  from {
+    translate: 0 24px;
+    opacity: 0;
+  }
+}
+
+@keyframes shimmer {
+  to {
+    background-position-x: -200%;
+  }
+}
+
+/* ── Components ──────────────────────────────────────────────────── */
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 44px;
+    padding: 0 1.25rem;
+    border-radius: var(--radius-control);
+    border: 1px solid transparent;
+    font-size: 0.9375rem;
+    font-weight: 600;
+    line-height: 1.2;
+    text-decoration: none;
+    cursor: pointer;
+    transition:
+      background-color 150ms ease,
+      border-color 150ms ease,
+      transform 120ms var(--ease-out),
+      opacity 150ms ease;
+  }
+  .btn:active:not(:disabled) {
+    transform: scale(0.98);
+  }
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+  }
+  .btn-sm {
+    padding: 0 0.75rem;
+    font-size: 0.8125rem;
+  }
+  .btn-primary {
+    background: var(--accent);
+    color: var(--accent-contrast);
+  }
+  .btn-secondary {
+    background: var(--surface-elevated);
+    color: var(--text);
+    border-color: var(--border);
+  }
+  .btn-danger {
+    background: var(--danger);
+    color: var(--danger-contrast);
+  }
+  .btn-danger-soft {
+    background: var(--danger-soft);
+    color: var(--danger);
+    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  }
+  .btn-ghost {
+    background: transparent;
+    color: var(--text-muted);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .btn-primary:hover:not(:disabled) {
+      background: color-mix(in srgb, var(--accent) 88%, var(--text));
+    }
+    .btn-secondary:hover:not(:disabled) {
+      border-color: var(--border-strong);
+    }
+    .btn-ghost:hover:not(:disabled) {
+      color: var(--text);
+      background: var(--surface-elevated);
+    }
+  }
+
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow);
+  }
+
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 9999px;
+    padding: 0.125rem 0.625rem;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    background: var(--surface-elevated);
+    color: var(--text-muted);
+  }
+  .pill-danger {
+    background: var(--danger-soft);
+    color: var(--danger);
+  }
+  .pill-success {
+    background: var(--success-soft);
+    color: var(--success);
+  }
+  .pill-accent {
+    background: var(--accent-soft);
+    color: var(--accent);
+  }
+
+  .callout {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border);
+    background: var(--surface);
+    padding: 0.75rem 1rem;
+    font-size: 0.875rem;
+    color: var(--text);
+  }
+  .callout-accent {
+    background: var(--accent-soft);
+    border-color: color-mix(in srgb, var(--accent) 30%, transparent);
+  }
+  .callout-danger {
+    background: var(--danger-soft);
+    border-color: color-mix(in srgb, var(--danger) 30%, transparent);
+  }
+  .callout-success {
+    background: var(--success-soft);
+    border-color: color-mix(in srgb, var(--success) 30%, transparent);
+  }
+
+  .field {
+    width: 100%;
+    min-height: 48px;
+    padding: 0 0.875rem;
+    border-radius: var(--radius-control);
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+  }
+  .field::placeholder {
+    color: var(--text-muted);
+  }
+
+  .skeleton {
+    background-color: var(--surface-elevated);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in srgb, var(--text) 7%, transparent) 50%,
+      transparent 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 1.6s linear infinite;
+  }
+}
+
+/* ── Native <dialog> modals ──────────────────────────────────────── */
+
+dialog {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  max-width: none;
+  max-height: none;
+}
+
+dialog::backdrop {
+  background: var(--scrim);
+}
+
+dialog[open]::backdrop {
+  animation: fade 200ms ease-out;
+}
+
+/* Centered card modal */
+.modal {
+  margin: auto;
+  width: min(calc(100% - 2rem), 24rem);
+  max-height: min(88dvh, 40rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-card);
+  box-shadow: var(--shadow);
+}
+
+.modal[open] {
+  animation: modal-in 220ms var(--ease-out);
+}
+
+/* Full-viewport modal (role reveal, lightbox) */
+.modal-full {
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 1rem;
+}
+
+.modal-full[open] {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade 200ms ease-out;
+}
+
+/* ── Login panel (bottom sheet on phones, centered card on larger) ─ */
 
 .login-panel {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
-  max-height: 82vh;
-  border-radius: 20px 20px 0 0;
-  background: rgba(8, 8, 28, 0.96);
-  backdrop-filter: blur(24px);
-  -webkit-backdrop-filter: blur(24px);
-  transform: translateY(100%);
-  transition: transform 0.45s cubic-bezier(0.32, 0, 0.17, 1);
-  z-index: 50;
+  inset: auto 0 0 0;
+  margin: 0;
+  width: 100%;
+  max-height: min(88dvh, 40rem);
   overflow-y: auto;
   overscroll-behavior: contain;
-  will-change: transform;
+  background: var(--surface);
+  border-top: 1px solid var(--border);
+  border-radius: 20px 20px 0 0;
   padding-bottom: var(--safe-bottom);
+  padding-left: var(--safe-left);
+  padding-right: var(--safe-right);
+  translate: 0 100%;
+  transition: translate 400ms var(--ease-sheet);
+}
+
+.login-panel::backdrop {
+  background: transparent;
 }
 
 .login-panel.panel-open {
-  transform: translateY(0);
+  translate: 0 0;
 }
 
-@media (min-width: 640px) {
+.login-panel[open].panel-open {
+  animation: sheet-in-bottom 400ms var(--ease-sheet);
+}
+
+@media (min-width: 640px), (orientation: landscape) and (max-width: 639px) {
   .login-panel {
-    top: 50%;
-    left: 50%;
-    right: auto;
-    bottom: auto;
-    width: 520px;
-    max-width: 92vw;
-    max-height: 88vh;
-    border-radius: 20px;
-    transform: translate(-50%, calc(-50% + 28px));
+    inset: 0;
+    margin: auto;
+    width: min(30rem, 92vw);
+    height: fit-content;
+    max-height: min(88dvh, 40rem);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow);
+    translate: 0 24px;
     opacity: 0;
-    pointer-events: none;
     transition:
-      transform 0.45s cubic-bezier(0.32, 0, 0.17, 1),
-      opacity 0.4s ease;
+      translate 300ms var(--ease-out),
+      opacity 250ms ease;
   }
 
   .login-panel.panel-open {
-    transform: translate(-50%, -50%);
+    translate: 0 0;
     opacity: 1;
-    pointer-events: auto;
+  }
+
+  .login-panel[open].panel-open {
+    animation: sheet-in-center 300ms var(--ease-out);
   }
 }
-
-/* ── Backdrop ────────────────────────────────────────────────────── */
 
 .login-backdrop {
   position: fixed;
   inset: 0;
-  background: rgba(0, 0, 0, 0.55);
-  backdrop-filter: blur(4px);
-  -webkit-backdrop-filter: blur(4px);
+  background: var(--scrim);
   opacity: 0;
-  transition: opacity 0.4s ease;
+  transition: opacity 300ms ease;
   z-index: 40;
   pointer-events: none;
 }
@@ -366,71 +585,48 @@ textarea {
   pointer-events: auto;
 }
 
-/* ── Avatar card ─────────────────────────────────────────────────── */
+/* ── Avatar card (login) ─────────────────────────────────────────── */
 
 .avatar-card {
   cursor: pointer;
-  border: 2px solid transparent;
-  border-radius: 12px;
-  padding: 8px 4px 6px;
+  min-height: 44px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-control);
+  padding: 10px 4px 8px;
   text-align: center;
-  background: rgba(255, 255, 255, 0.05);
-  transition:
-    border-color 0.2s,
-    box-shadow 0.2s;
+  background: var(--surface-elevated);
   position: relative;
   user-select: none;
   -webkit-user-select: none;
+  transition:
+    border-color 150ms ease,
+    box-shadow 150ms ease,
+    transform 120ms var(--ease-out);
 }
 
-.avatar-card:hover {
-  background: rgba(255, 255, 255, 0.09);
+.avatar-card:active {
+  transform: scale(0.98);
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .avatar-card:hover {
+    border-color: var(--border-strong);
+  }
 }
 
 .avatar-card.selected {
-  border-color: #7c3aed;
-  box-shadow:
-    0 0 0 2px rgba(124, 58, 237, 0.3),
-    0 0 18px rgba(124, 58, 237, 0.35);
-}
-
-/* ── Light mode overrides for login panel & avatar cards ─────────── */
-
-.light .login-panel,
-:root:not(.dark):not([class~="dark"]) .login-panel {
-  background: rgba(248, 246, 255, 0.98);
-  border: 1px solid rgba(124, 58, 237, 0.15);
-}
-
-.light .avatar-card,
-:root:not(.dark):not([class~="dark"]) .avatar-card {
-  background: rgba(0, 0, 0, 0.03);
-}
-
-.light .avatar-card:hover,
-:root:not(.dark):not([class~="dark"]) .avatar-card:hover {
-  background: rgba(0, 0, 0, 0.06);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
 }
 
 /* ── Sign-in button state ────────────────────────────────────────── */
 
-.sign-in-btn {
-  transition:
-    opacity 0.25s,
-    box-shadow 0.25s;
-}
-
 .sign-in-btn:disabled {
-  opacity: 0.38;
-  box-shadow: none;
+  opacity: 0.45;
   cursor: not-allowed;
 }
 
-.sign-in-btn:not(:disabled) {
-  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.45);
-}
-
-/* ── Player grid — auto-fill with minmax for iPhone responsiveness ── */
+/* ── Player grid ─────────────────────────────────────────────────── */
 
 .player-grid {
   display: grid;
@@ -438,53 +634,8 @@ textarea {
   gap: 12px;
 }
 
-/* ── Modal slide screens — GPU-accelerated transitions ─────────── */
-
-.modal-slide-screen {
-  will-change: transform;
-}
-
-/* ── Safe-area padding for login-panel in portrait ──────────────── */
-
-.login-panel {
-  padding-left: var(--safe-left);
-  padding-right: var(--safe-right);
-}
-
-/* ── Landscape phones (< 640 px wide): centered card, not bottom-sheet ─ */
-
-@media (orientation: landscape) and (max-width: 639px) {
-  .login-panel {
-    top: 50%;
-    left: 50%;
-    right: auto;
-    bottom: auto;
-    width: min(480px, 90vw);
-    max-width: 90vw;
-    max-height: 90svh;
-    border-radius: 20px;
-    padding-left: max(16px, var(--safe-left));
-    padding-right: max(16px, var(--safe-right));
-    transform: translate(-50%, calc(-50% + 28px));
-    opacity: 0;
-    pointer-events: none;
-    transition:
-      transform 0.45s cubic-bezier(0.32, 0, 0.17, 1),
-      opacity 0.4s ease;
-  }
-
-  .login-panel.panel-open {
-    transform: translate(-50%, -50%);
-    opacity: 1;
-    pointer-events: auto;
-  }
-}
-
-/* ── Landscape mobile: game-board cards → horizontal scroll row ─── */
-/* ── Landscape mobile: vote tiles → 4-column grid ───────────────── */
-
+/* Landscape phones: board becomes a horizontal row, vote grid 4 columns */
 @media (orientation: landscape) and (max-height: 500px) {
-  /* Game board player grid: single scrollable row */
   .player-grid-board {
     display: flex;
     flex-direction: row;
@@ -492,7 +643,6 @@ textarea {
     -webkit-overflow-scrolling: touch;
     scroll-snap-type: x mandatory;
     gap: 8px;
-    /* hide scrollbar on webkit while keeping scroll behavior */
     scrollbar-width: none;
   }
 
@@ -506,24 +656,16 @@ textarea {
     scroll-snap-align: start;
   }
 
-  /* Vote player-tile grid: 4 columns */
   .player-grid-vote {
     grid-template-columns: repeat(4, minmax(0, 1fr));
     gap: 8px;
   }
 }
 
-/* ── Sub-320px overrides ─────────────────────────────────────────── */
-
 @media (max-width: 319px) {
   .player-grid {
     grid-template-columns: repeat(auto-fill, minmax(80px, 1fr));
     gap: 8px;
-  }
-
-  .login-panel {
-    padding-left: max(12px, var(--safe-left));
-    padding-right: max(12px, var(--safe-right));
   }
 }
 

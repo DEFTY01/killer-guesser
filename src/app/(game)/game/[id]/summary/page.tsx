@@ -7,6 +7,7 @@ import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { games, game_players, roles, users, votes } from "@/db/schema";
 import { and, asc, count, eq } from "drizzle-orm";
+import { ArrowLeft, Skull, Trophy } from "@phosphor-icons/react/dist/ssr";
 
 export const metadata: Metadata = { title: "Game Summary" };
 
@@ -45,19 +46,19 @@ function PlayerRow({
 }) {
   const isDead = player.is_dead === 1 && player.revived_at === null;
   const isUndead = player.is_dead === 1 && player.revived_at !== null;
-  // Seer (see_killer): use red border for Killers, otherwise use role color
-  const borderColor = isKiller ? "#c0392b" : (player.role_color ?? "#2E6DA4");
+  // Seer (see_killer): red border for Killers, otherwise neutral
+  const killerBorder = isKiller ? { borderColor: "#c0392b" } : undefined;
 
   return (
     <div
-      className={`flex items-center gap-3 rounded-xl p-3 border bg-white ${
-        isCallerTeam ? "ring-2 ring-indigo-400 ring-offset-1" : ""
+      className={`card flex items-center gap-3 p-3 ${
+        isCallerTeam ? "ring-2 ring-accent" : ""
       }`}
-      style={{ borderColor }}
+      style={killerBorder}
     >
       {/* Avatar */}
       <div
-        className={`relative w-12 h-12 rounded-full overflow-hidden bg-gray-100 shrink-0 ${isDead ? "grayscale opacity-70" : ""}`}
+        className={`relative size-12 shrink-0 overflow-hidden rounded-full bg-accent-soft ${isDead ? "grayscale opacity-70" : ""}`}
       >
         {player.avatar_url ? (
           <Image
@@ -69,33 +70,35 @@ function PlayerRow({
             unoptimized
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-lg font-bold text-gray-500">
+          <div className="flex h-full w-full items-center justify-center text-lg font-semibold text-accent">
             {player.name.charAt(0).toUpperCase()}
           </div>
         )}
       </div>
 
       {/* Info */}
-      <div className="flex-1 min-w-0">
-        <p className="font-semibold text-gray-900 truncate">{player.name}</p>
-        <p className="text-xs text-gray-500">
+      <div className="min-w-0 flex-1">
+        <p className="truncate font-semibold text-fg">{player.name}</p>
+        <p className="flex items-center gap-1.5 text-xs text-muted">
+          {/* Role color is data, shown as a swatch; text stays neutral for contrast */}
           <span
-            className="font-medium"
-            style={{ color: player.role_color ?? undefined }}
-          >
-            {player.role_name ?? "Unknown"}
-          </span>
-          {" · "}
-          <span className="text-gray-400">{teamName}</span>
+            className="size-2.5 shrink-0 rounded-full"
+            style={{ backgroundColor: player.role_color ?? undefined }}
+            aria-hidden="true"
+          />
+          <span className="font-medium text-fg">{player.role_name ?? "Unknown"}</span>
+          <span aria-hidden="true">/</span>
+          <span>{teamName}</span>
         </p>
         {isDead && player.died_location && (
-          <p className="text-xs text-red-500 mt-0.5">
-            ✝ {player.died_location}
+          <p className="mt-0.5 flex items-center gap-1 text-xs text-danger">
+            <Skull className="size-3.5 shrink-0" aria-hidden="true" />
+            {player.died_location}
             {player.died_time_of_day ? ` (${player.died_time_of_day})` : ""}
           </p>
         )}
         {isDead && accusedPlayerName && (
-          <p className="text-xs text-orange-500 mt-0.5">
+          <p className="mt-0.5 text-xs text-muted">
             Died because accused {accusedPlayerName}
           </p>
         )}
@@ -104,17 +107,11 @@ function PlayerRow({
       {/* Status badge */}
       <div className="shrink-0">
         {isDead ? (
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-100 text-red-600">
-            Dead
-          </span>
+          <span className="pill pill-danger">Dead</span>
         ) : isUndead ? (
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-purple-100 text-purple-600">
-            Undead
-          </span>
+          <span className="pill pill-accent">Undead</span>
         ) : (
-          <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-green-100 text-green-700">
-            Survived
-          </span>
+          <span className="pill pill-success">Survived</span>
         )}
       </div>
     </div>
@@ -125,14 +122,13 @@ function PlayerRow({
 
 function ErrorCard({ message }: { message: string }) {
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8">
-      <div className="rounded-2xl border border-red-200 bg-red-50 p-6">
-        <h1 className="text-xl font-bold text-red-900">Summary unavailable</h1>
-        <p className="mt-2 text-red-700">{message}</p>
-        <Link
-          href="/lobby"
-          className="mt-4 inline-flex items-center rounded-lg bg-red-600 px-4 py-2 text-sm font-semibold text-white hover:bg-red-700"
-        >
+    <div className="mx-auto w-full max-w-lg px-4 py-8">
+      <div className="card p-6">
+        <h1 className="text-xl font-semibold text-fg">Summary unavailable</h1>
+        <p className="mt-2 text-muted" role="alert">
+          {message}
+        </p>
+        <Link href="/lobby" className="btn btn-primary mt-4">
           Back to lobby
         </Link>
       </div>
@@ -289,17 +285,15 @@ export default async function GameSummaryPage({
     .sort((a, b) => a - b);
 
   return (
-    <div className="max-w-2xl mx-auto px-4 py-8 space-y-6">
+    <div className="mx-auto w-full max-w-lg space-y-6 px-4 py-6">
       {/* ── Header ──────────────────────────────────────────── */}
       <div>
-        <Link
-          href="/lobby"
-          className="text-sm text-indigo-600 hover:text-indigo-700 font-medium mb-3 inline-flex items-center gap-1"
-        >
-          ← Back to lobby
+        <Link href="/lobby" className="btn btn-ghost -ml-3 mb-1">
+          <ArrowLeft className="size-5" aria-hidden="true" />
+          Back to lobby
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 mt-1">{game.name}</h1>
-        <p className="text-sm text-gray-500 mt-0.5">
+        <h1 className="mt-1 text-2xl font-semibold tracking-tight text-fg">{game.name}</h1>
+        <p className="mt-0.5 text-sm text-muted">
           {new Date(game.start_time * 1000).toLocaleDateString(undefined, {
             weekday: "short",
             month: "short",
@@ -311,9 +305,9 @@ export default async function GameSummaryPage({
 
       {/* ── Winner banner ────────────────────────────────── */}
       {game.winner_team ? (
-        <div className="rounded-2xl bg-amber-50 border border-amber-200 p-5 text-center">
-          <div className="text-4xl mb-2">🏆</div>
-          <p className="text-lg font-bold text-amber-900">
+        <div className="card p-5 text-center">
+          <Trophy className="mx-auto mb-2 size-10 text-accent" aria-hidden="true" />
+          <p className="text-lg font-semibold text-fg">
             {game.winner_team === "team1"
               ? game.team1_name
               : game.winner_team === "team2"
@@ -325,25 +319,23 @@ export default async function GameSummaryPage({
             <p
               className={`mt-1 text-sm font-semibold ${
                 callerTeam === game.winner_team
-                  ? "text-green-700"
-                  : "text-red-600"
+                  ? "text-success"
+                  : "text-danger"
               }`}
             >
-              {callerTeam === game.winner_team
-                ? "You won! 🎉"
-                : "You lost. 😞"}
+              {callerTeam === game.winner_team ? "You won!" : "You lost."}
             </p>
           )}
         </div>
       ) : (
-        <div className="rounded-2xl bg-gray-50 border border-gray-200 p-5 text-center">
-          <p className="text-gray-500 font-medium">Game ended without a winner</p>
+        <div className="card p-5 text-center">
+          <p className="font-medium text-muted">Game ended without a winner</p>
         </div>
       )}
 
       {/* ── Players ──────────────────────────────────────── */}
       <section>
-        <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+        <h2 className="mb-3 px-1 text-sm font-semibold text-muted">
           Players
         </h2>
         <div className="space-y-2">
@@ -380,24 +372,24 @@ export default async function GameSummaryPage({
       {/* ── Vote history ─────────────────────────────────── */}
       {dayNumbers.length > 0 && (
         <section>
-          <h2 className="text-xs font-semibold uppercase tracking-widest text-gray-400 mb-3">
+          <h2 className="mb-3 px-1 text-sm font-semibold text-muted">
             Vote History
           </h2>
           <div className="space-y-4">
             {dayNumbers.map((day) => (
               <div key={day}>
-                <p className="text-sm font-semibold text-gray-600 mb-2">
+                <p className="mb-2 px-1 text-sm font-semibold text-fg">
                   Day {day}
                 </p>
-                <div className="space-y-1">
+                <div className="space-y-1.5">
                   {votesByDay[day]
                     .sort((a, b) => b.vote_count - a.vote_count)
                     .map((v) => (
                       <div
                         key={v.target_id}
-                        className="flex items-center gap-2 rounded-lg bg-white border border-gray-100 px-3 py-2"
+                        className="flex items-center gap-2 rounded-control border border-line bg-surface px-3 py-2"
                       >
-                        <div className="relative w-7 h-7 rounded-full overflow-hidden bg-gray-100 shrink-0">
+                        <div className="relative size-7 shrink-0 overflow-hidden rounded-full bg-accent-soft">
                           {v.target_avatar ? (
                             <Image
                               src={blobImageSrc(v.target_avatar)}
@@ -408,15 +400,15 @@ export default async function GameSummaryPage({
                               unoptimized
                             />
                           ) : (
-                            <div className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
+                            <div className="flex h-full w-full items-center justify-center text-xs font-semibold text-accent">
                               {v.target_name.charAt(0).toUpperCase()}
                             </div>
                           )}
                         </div>
-                        <span className="flex-1 text-sm text-gray-700">
+                        <span className="flex-1 text-sm text-fg">
                           {v.target_name}
                         </span>
-                        <span className="text-sm font-bold text-gray-900">
+                        <span className="text-sm font-semibold text-fg">
                           {v.vote_count} vote{v.vote_count !== 1 ? "s" : ""}
                         </span>
                       </div>

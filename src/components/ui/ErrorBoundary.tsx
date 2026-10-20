@@ -32,14 +32,17 @@ export class ErrorBoundary extends React.Component<
   render() {
     if (this.state.hasError) {
       return (
-        <div className="flex flex-col items-center justify-center min-h-[200px] gap-4 p-6 text-center">
-          <p className="text-gray-700 font-medium">
+        <div
+          role="alert"
+          className="mx-auto flex min-h-[200px] max-w-lg flex-col items-center justify-center gap-4 p-6 text-center"
+        >
+          <p className="font-medium text-fg">
             Something went wrong. Please reload the page.
           </p>
           <button
             type="button"
             onClick={() => window.location.reload()}
-            className="inline-flex items-center justify-center rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-700 transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            className="btn btn-primary"
           >
             Retry
           </button>

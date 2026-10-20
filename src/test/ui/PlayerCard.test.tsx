@@ -180,6 +180,7 @@ describe("PlayerCard", () => {
 
     const card = container.firstChild as HTMLElement;
     // Role-color borders are no longer applied; gray border is used for all non-killer cards.
-    expect(card.style.border).toContain("rgb(229, 231, 235)");
+    expect(card.className).toContain("border-line");
+    expect(card.style.border).not.toContain("rgb(192, 57, 43)");
   });
 });

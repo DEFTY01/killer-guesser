@@ -23,6 +23,7 @@
   "dependencies": {
     "@auth/drizzle-adapter": "^1.11.1",
     "@libsql/client": "^0.17.0",
+    "@phosphor-icons/react": "^2.1.10",
     "@vercel/blob": "^2.3.1",
     "ably": "^2.19.0",
     "date-fns": "^4.1.0",

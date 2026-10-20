@@ -3,9 +3,20 @@
 import { useEffect, useState, useCallback, useRef, memo } from "react";
 import Image from "next/image";
 import Link from "next/link";
+import {
+  ArrowLeft,
+  ArrowRight,
+  CaretDown,
+  Check,
+  CheckCircle,
+  Eye,
+  Skull,
+  Timer,
+} from "@phosphor-icons/react";
 import { useAbly } from "@/hooks/useAbly";
 import { useCountdown } from "@/hooks/useCountdown";
 import { ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
+import { Skeleton, SkeletonCard } from "@/components/ui/Skeleton";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -67,6 +78,65 @@ function utcMsToLocalTime(utcMs: number): string {
   });
 }
 
+const pageClass = "mx-auto w-full max-w-lg space-y-6 px-4 py-6";
+
+// ── Shared bits ───────────────────────────────────────────────────
+
+function BackLink({ gameId }: { gameId: string }) {
+  return (
+    <Link href={`/game/${gameId}`} className="btn btn-ghost -ml-3">
+      <ArrowLeft className="size-5" aria-hidden="true" />
+      Back to board
+    </Link>
+  );
+}
+
+function PageTitle({ title, day }: { title: string; day: number }) {
+  return (
+    <div className="space-y-1">
+      <h1 className="text-2xl font-semibold tracking-tight text-fg">{title}</h1>
+      <p className="text-sm text-muted">Day {day}</p>
+    </div>
+  );
+}
+
+function Avatar({
+  url,
+  name,
+  className,
+  sizes,
+  textClass,
+}: {
+  url: string | null;
+  name: string;
+  className: string;
+  sizes: string;
+  textClass: string;
+}) {
+  return (
+    <div
+      className={`relative shrink-0 overflow-hidden rounded-full bg-accent-soft ${className}`}
+    >
+      {url ? (
+        <Image
+          src={url}
+          alt={name}
+          fill
+          sizes={sizes}
+          className="object-cover"
+          unoptimized
+        />
+      ) : (
+        <span
+          className={`flex h-full w-full items-center justify-center font-semibold text-accent ${textClass}`}
+        >
+          {name.charAt(0).toUpperCase()}
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ── PlayerTile ────────────────────────────────────────────────────
 
 function PlayerTile({
@@ -89,39 +159,38 @@ function PlayerTile({
       disabled={isSelf}
       aria-pressed={isSelected}
       aria-label={`Vote for ${player.name}`}
-      className={`flex flex-col items-center gap-1.5 rounded-2xl border-2 p-3 transition-all focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 disabled:opacity-50 disabled:cursor-default ${
+      className={`relative flex min-h-11 flex-col items-center gap-1.5 rounded-control border p-3 transition-[border-color,background-color,transform] duration-150 active:scale-[0.98] disabled:cursor-default disabled:opacity-50 disabled:active:scale-100 ${
         isSelected
-          ? "border-indigo-500 bg-indigo-50 shadow-md"
-          : "border-gray-200 bg-white hover:border-indigo-300 hover:shadow-sm"
+          ? "border-accent bg-accent-soft ring-1 ring-accent"
+          : "border-line bg-surface"
       }`}
     >
-      <div className="relative w-14 h-14 rounded-full overflow-hidden bg-gray-100 shrink-0">
-        {player.avatarUrl ? (
-          <Image
-            src={player.avatarUrl}
-            alt={player.name}
-            fill
-            sizes="56px"
-            className="object-cover"
-            unoptimized
-          />
-        ) : (
-          <span className="flex h-full w-full items-center justify-center text-lg font-bold text-gray-500">
-            {player.name.charAt(0).toUpperCase()}
-          </span>
-        )}
-      </div>
-      <span className="text-xs font-semibold text-gray-900 truncate max-w-full">
+      {isSelected && (
+        <span
+          aria-hidden="true"
+          className="absolute right-1.5 top-1.5 flex size-5 items-center justify-center rounded-full bg-accent text-accent-fg"
+        >
+          <Check className="size-3" />
+        </span>
+      )}
+      <Avatar
+        url={player.avatarUrl}
+        name={player.name}
+        className="size-14"
+        sizes="56px"
+        textClass="text-lg"
+      />
+      <span className="max-w-full truncate text-xs font-semibold text-fg">
         {player.name}
-        {isSelf && <span className="ml-1 text-gray-400">(you)</span>}
+        {isSelf && <span className="ml-1 font-normal text-muted">(you)</span>}
       </span>
       {player.voteCount > 0 && (
-        <span className="rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-bold text-indigo-700">
+        <span className="pill pill-accent">
           {player.voteCount} {player.voteCount === 1 ? "vote" : "votes"}
         </span>
       )}
       {totalVotes > 0 && player.voteCount === 0 && (
-        <span className="text-xs text-gray-300">0 votes</span>
+        <span className="text-xs text-muted">0 votes</span>
       )}
     </button>
   );
@@ -178,9 +247,9 @@ function VoteWindowCountdown({ endUtcMs }: { endUtcMs: number }) {
   if (isExpired) return null;
 
   return (
-    <div className="flex items-center justify-center gap-1 text-sm text-amber-700 font-semibold">
-      <span aria-hidden="true">⏱</span>
-      <span>
+    <div className="flex items-center gap-1.5 text-sm font-semibold text-accent">
+      <Timer className="size-4" aria-hidden="true" />
+      <span className="tabular-nums">
         Closes in{" "}
         {hours > 0 && `${hours}h `}
         {minutes > 0 && `${minutes}m `}
@@ -364,14 +433,24 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   // ── Render ──────────────────────────────────────────────────
 
+  const fade = `transition-opacity duration-300 ${closing ? "opacity-0" : "opacity-100"}`;
+
   if (error) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-6">
-        <div
-          role="alert"
-          className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600"
-        >
-          {error}
+      <div className={pageClass}>
+        <BackLink gameId={gameId} />
+        <div role="alert" className="callout callout-danger items-center justify-between">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => {
+              setError(null);
+              fetchData();
+            }}
+            className="btn btn-secondary btn-sm shrink-0"
+          >
+            Retry
+          </button>
         </div>
       </div>
     );
@@ -379,18 +458,18 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   if (!data) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-4 animate-pulse">
-        <div className="h-7 w-48 rounded-full bg-gray-200" />
-        <div className="grid grid-cols-3 gap-3">
+      <div className={pageClass} aria-hidden="true">
+        <Skeleton className="h-8 w-48" />
+        <div className="player-grid player-grid-vote">
           {Array.from({ length: 6 }).map((_, i) => (
-            <div key={i} className="h-28 rounded-2xl bg-gray-200" />
+            <SkeletonCard key={i} />
           ))}
         </div>
       </div>
     );
   }
 
-  // ── Window not open – show before-window message or results ──────
+  // ── Window not open: before-window message or results ─────────────
 
   if (!data.windowOpen) {
     // Only decides which message to show; a stale value self-corrects on refetch.
@@ -401,24 +480,12 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
     if (isBeforeWindow) {
       return (
-        <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-          <div className="text-center space-y-1">
-            <h1 className="text-2xl font-bold text-gray-900">Daily Vote</h1>
-            <p className="text-sm text-gray-500">Day {day}</p>
-          </div>
-          <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-6 text-center text-amber-800 space-y-1">
+        <div className={pageClass}>
+          <BackLink gameId={gameId} />
+          <PageTitle title="Daily Vote" day={day} />
+          <div role="status" className="callout flex-col items-center gap-1 py-5 text-center">
             <p className="font-semibold">Voting is not open yet.</p>
-            <p className="text-sm text-amber-600">
-              Opens at {utcMsToLocalTime(opensMs)}
-            </p>
-          </div>
-          <div className="flex justify-center">
-            <Link
-              href={`/game/${gameId}`}
-              className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-            >
-              ← Back to board
-            </Link>
+            <p className="text-sm text-muted">Opens at {utcMsToLocalTime(opensMs)}</p>
           </div>
         </div>
       );
@@ -433,32 +500,25 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
     const hasMajority = eliminated !== undefined && eliminated !== null;
 
     return (
-      <div
-        className="max-w-2xl mx-auto px-4 py-6 space-y-6"
-        style={{
-          transition: "opacity 0.3s ease",
-          opacity: closing ? 0 : 1,
-        }}
-      >
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-gray-900">Vote Results</h1>
-          <p className="text-sm text-gray-500">Day {day}</p>
-        </div>
+      <div className={`${pageClass} ${fade}`}>
+        <BackLink gameId={gameId} />
+        <PageTitle title="Vote Results" day={day} />
 
         {eliminated ? (
-          <div className="rounded-xl bg-red-50 border border-red-200 px-4 py-3 text-center text-red-700 font-semibold">
-            ☠ {eliminated.name} was eliminated by vote.
+          <div role="status" className="callout callout-danger items-center justify-center font-semibold">
+            <Skull className="size-5 shrink-0" aria-hidden="true" />
+            {eliminated.name} was eliminated by vote.
           </div>
         ) : (
           !hasMajority && (
-            <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-3 text-center text-amber-700 font-semibold">
-              It&apos;s a tie — no one was eliminated.
+            <div role="status" className="callout justify-center font-semibold">
+              It&apos;s a tie - no one was eliminated.
             </div>
           )
         )}
 
         {sorted.length === 0 ? (
-          <p className="text-center text-gray-400 py-8">No votes yet</p>
+          <p className="py-8 text-center text-muted">No votes yet</p>
         ) : (
           <ul className="space-y-3">
             {sorted.map((r) => {
@@ -467,31 +527,28 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
               return (
                 <li
                   key={r.playerId}
-                  className={`rounded-xl border px-4 py-3 shadow-sm overflow-hidden ${
-                    isEliminated
-                      ? "border-red-300 bg-red-50"
-                      : "border-gray-100 bg-white"
+                  className={`card overflow-hidden px-4 py-3 ${
+                    isEliminated ? "border-danger" : ""
                   }`}
                 >
-                  <div className="flex items-center justify-between mb-1.5">
+                  <div className="mb-2 flex items-center justify-between gap-2">
                     <span
-                      className={`font-semibold ${isEliminated ? "text-red-700" : "text-gray-900"}`}
+                      className={`flex items-center gap-1.5 font-semibold ${isEliminated ? "text-danger" : "text-fg"}`}
                     >
                       {isEliminated && (
-                        <span aria-hidden="true" className="mr-1">
-                          ☠
-                        </span>
+                        <Skull className="size-5 shrink-0" aria-hidden="true" />
                       )}
                       {r.name}
+                      {isEliminated && <span className="sr-only">(eliminated)</span>}
                     </span>
-                    <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-sm font-semibold text-indigo-700">
+                    <span className="pill pill-accent text-sm">
                       {r.voteCount} vote{r.voteCount !== 1 ? "s" : ""}
                     </span>
                   </div>
-                  <div className="h-2 rounded-full bg-gray-100 overflow-hidden">
+                  <div className="h-2 overflow-hidden rounded-full bg-elevated">
                     <div
-                      className={`h-full rounded-full transition-all duration-700 ${
-                        isEliminated ? "bg-red-400" : "bg-indigo-400"
+                      className={`h-full rounded-full transition-[width] duration-700 ${
+                        isEliminated ? "bg-danger" : "bg-accent"
                       }`}
                       style={{ width: `${pct}%` }}
                     />
@@ -502,19 +559,10 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
           </ul>
         )}
 
-        {/* Spy: voter→target breakdown on closed view */}
+        {/* Spy: voter -> target breakdown on closed view */}
         {liveVotes.length > 0 && (
           <SpyPanel votes={liveVotes} />
         )}
-
-        <div className="flex justify-center">
-          <Link
-            href={`/game/${gameId}`}
-            className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-          >
-            ← Back to board
-          </Link>
-        </div>
       </div>
     );
   }
@@ -523,24 +571,14 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   if (!data.windowOpen) {
     return (
-      <div className="max-w-2xl mx-auto px-4 py-6 space-y-6">
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-gray-900">Voting</h1>
-          <p className="text-sm text-gray-500">Day {day}</p>
-        </div>
-        <div className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-6 text-center text-amber-800">
+      <div className={pageClass}>
+        <BackLink gameId={gameId} />
+        <PageTitle title="Voting" day={day} />
+        <div role="status" className="callout flex-col items-center gap-1 py-5 text-center">
           <p className="font-semibold">Voting is not currently open.</p>
-          <p className="text-sm mt-1 text-amber-600">
+          <p className="text-sm text-muted">
             Check back when the vote window is active.
           </p>
-        </div>
-        <div className="flex justify-center">
-          <Link
-            href={`/game/${gameId}`}
-            className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-          >
-            ← Back to board
-          </Link>
         </div>
       </div>
     );
@@ -555,24 +593,19 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   if (!openData.canVote) {
     return (
-      <div
-        className="max-w-2xl mx-auto px-4 py-6 space-y-6"
-        style={{ transition: "opacity 0.3s ease", opacity: closing ? 0 : 1 }}
-      >
-        <div className="text-center space-y-1">
-          <h1 className="text-2xl font-bold text-gray-900">Vote</h1>
-          <p className="text-sm text-gray-500">Day {day}</p>
+      <div className={`${pageClass} ${fade}`}>
+        <BackLink gameId={gameId} />
+        <div className="space-y-1">
+          <PageTitle title="Vote" day={day} />
           <VoteWindowCountdown endUtcMs={openData.window_close_utc_ms} />
         </div>
 
-        <div
-          role="status"
-          className="rounded-xl bg-amber-50 border border-amber-200 px-4 py-5 text-center space-y-1"
-        >
-          <p className="font-semibold text-amber-800">
-            🕵️ You are an observer — you cannot vote.
+        <div role="status" className="callout callout-accent flex-col gap-1">
+          <p className="flex items-center gap-2 font-semibold">
+            <Eye className="size-5 shrink-0 text-accent" aria-hidden="true" />
+            You are an observer - you cannot vote.
           </p>
-          <p className="text-sm text-amber-600">
+          <p className="text-sm text-muted">
             Your role grants you knowledge that would give an unfair advantage
             in the vote. You may watch the vote unfold below.
           </p>
@@ -593,44 +626,30 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
           ))}
         </div>
 
-        {/* Spy view: voter→target breakdown */}
+        {/* Spy view: voter -> target breakdown */}
         {liveVotes.length > 0 && <SpyPanel votes={liveVotes} />}
-
-        <div className="flex justify-center">
-          <Link
-            href={`/game/${gameId}`}
-            className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-          >
-            ← Back to board
-          </Link>
-        </div>
       </div>
     );
   }
 
   return (
-    <div
-      className="max-w-2xl mx-auto px-4 py-6 space-y-6"
-      style={{ transition: "opacity 0.3s ease", opacity: closing ? 0 : 1 }}
-    >
-      <div className="text-center space-y-1">
-        <h1 className="text-2xl font-bold text-gray-900">Vote</h1>
-        <p className="text-sm text-gray-500">Day {day}</p>
+    <div className={`${pageClass} pb-[calc(6.5rem+var(--safe-bottom))] ${fade}`}>
+      <BackLink gameId={gameId} />
+      <div className="space-y-1">
+        <PageTitle title="Vote" day={day} />
         <VoteWindowCountdown endUtcMs={openData.window_close_utc_ms} />
       </div>
 
       {voteError && (
-        <div
-          role="alert"
-          className="rounded-xl bg-red-50 border border-red-100 p-4 text-sm text-red-600 text-center"
-        >
+        <div role="alert" className="callout callout-danger">
           {voteError}
         </div>
       )}
 
       {hasConfirmedVote && !selectedChanged && (
-        <div className="rounded-xl bg-green-50 border border-green-200 px-4 py-3 text-center text-green-700 text-sm font-semibold">
-          ✓ Your vote is cast — tap another player to change it.
+        <div role="status" className="callout callout-success items-center font-semibold">
+          <CheckCircle className="size-5 shrink-0 text-success" aria-hidden="true" />
+          Your vote is cast - tap another player to change it.
         </div>
       )}
 
@@ -649,34 +668,32 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         ))}
       </div>
 
-      {/* Confirm button */}
-      <div className="flex justify-center">
-        <button
-          type="button"
-          onClick={handleConfirmVote}
-          disabled={submitting || selectedId === null || (selectedId === openData.callerVotedFor)}
-          className="inline-flex items-center justify-center gap-2 rounded-xl bg-indigo-600 px-8 py-3 text-base font-semibold text-white shadow-md hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-        >
-          {submitting
-            ? "Voting…"
-            : selectedId === null
-              ? "Select a player"
-              : selectedId === openData.callerVotedFor
-                ? "✓ Voted"
-                : "Confirm Vote"}
-        </button>
-      </div>
-
-      {/* Spy view: voter→target breakdown */}
+      {/* Spy view: voter -> target breakdown */}
       {liveVotes.length > 0 && <SpyPanel votes={liveVotes} />}
 
-      <div className="flex justify-center">
-        <Link
-          href={`/game/${gameId}`}
-          className="inline-flex items-center justify-center rounded-xl border border-gray-300 bg-white px-5 py-2.5 text-sm font-semibold text-gray-700 hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-400 focus:ring-offset-2"
-        >
-          ← Back to board
-        </Link>
+      {/* Sticky confirm bar */}
+      <div className="fixed inset-x-0 bottom-0 z-40 border-t border-line bg-surface/95 pb-[var(--safe-bottom)] pl-[var(--safe-left)] pr-[var(--safe-right)] backdrop-blur-md">
+        <div className="mx-auto max-w-lg px-4 py-3">
+          <button
+            type="button"
+            onClick={handleConfirmVote}
+            disabled={submitting || selectedId === null || (selectedId === openData.callerVotedFor)}
+            className="btn btn-primary min-h-12 w-full text-base"
+          >
+            {submitting ? (
+              "Voting…"
+            ) : selectedId === null ? (
+              "Select a player"
+            ) : selectedId === openData.callerVotedFor ? (
+              <>
+                <Check className="size-5" aria-hidden="true" />
+                Voted
+              </>
+            ) : (
+              "Confirm Vote"
+            )}
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -687,66 +704,55 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 function SpyPanel({ votes }: { votes: VoteEntry[] }) {
   const [open, setOpen] = useState(true);
   return (
-    <div className="rounded-xl border border-gray-200 bg-gray-50 overflow-hidden">
+    <div className="card overflow-hidden">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="w-full flex items-center justify-between px-4 py-3 text-left focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+        className="flex min-h-11 w-full items-center justify-between px-4 py-3 text-left"
         aria-expanded={open}
       >
-        <span className="text-sm font-semibold text-gray-700">
-          Secret Info 🕵️
+        <span className="flex items-center gap-2 text-sm font-semibold text-fg">
+          <Eye className="size-5 text-accent" aria-hidden="true" />
+          Secret Info
         </span>
-        <span
-          className={`text-gray-400 text-xs transition-transform duration-200 inline-block${open ? " rotate-180" : ""}`}
+        <CaretDown
+          className={`size-4 text-muted transition-transform duration-200${open ? " rotate-180" : ""}`}
           aria-hidden="true"
-        >
-          ▼
-        </span>
+        />
       </button>
       {open && (
-        <div className="px-4 pb-4 space-y-2">
+        <div className="space-y-2 px-4 pb-4">
           {votes.length === 0 ? (
-            <p className="text-sm text-gray-400">No votes yet.</p>
+            <p className="text-sm text-muted">No votes yet.</p>
           ) : (
             <ul className="space-y-2">
               {votes.map((v) => (
                 <li
                   key={v.voterId}
-                  className="flex items-center gap-2 text-sm text-gray-700"
+                  className="flex items-center gap-2 text-sm text-fg"
                 >
-                  <MiniAvatar url={v.voterAvatarUrl} name={v.voterName} />
-                  <span className="font-semibold truncate">{v.voterName}</span>
-                  <span className="text-gray-400" aria-hidden="true">
-                    →
-                  </span>
-                  <MiniAvatar url={v.targetAvatarUrl} name={v.targetName} />
-                  <span className="font-semibold truncate">{v.targetName}</span>
+                  <Avatar
+                    url={v.voterAvatarUrl}
+                    name={v.voterName}
+                    className="size-8"
+                    sizes="32px"
+                    textClass="text-xs"
+                  />
+                  <span className="truncate font-semibold">{v.voterName}</span>
+                  <ArrowRight className="size-4 shrink-0 text-muted" aria-hidden="true" />
+                  <Avatar
+                    url={v.targetAvatarUrl}
+                    name={v.targetName}
+                    className="size-8"
+                    sizes="32px"
+                    textClass="text-xs"
+                  />
+                  <span className="truncate font-semibold">{v.targetName}</span>
                 </li>
               ))}
             </ul>
           )}
         </div>
-      )}
-    </div>
-  );
-}
-
-function MiniAvatar({
-  url,
-  name,
-}: {
-  url: string | null;
-  name: string;
-}) {
-  return (
-    <div className="relative w-8 h-8 rounded-full overflow-hidden bg-gray-200 shrink-0">
-      {url ? (
-        <Image src={url} alt={name} fill sizes="32px" className="object-cover" unoptimized />
-      ) : (
-        <span className="flex h-full w-full items-center justify-center text-xs font-bold text-gray-500">
-          {name.charAt(0).toUpperCase()}
-        </span>
       )}
     </div>
   );

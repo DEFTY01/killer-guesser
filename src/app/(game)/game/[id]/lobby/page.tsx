@@ -137,37 +137,34 @@ function ScheduledLobby({
   });
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 space-y-6">
+    <div className="mx-auto w-full max-w-lg space-y-6 px-4 py-8">
       {/* Status card */}
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-amber-900">{gameName}</h1>
-        <p className="mt-2 text-base text-amber-800">
-          The game has not started yet — please wait.
+      <div className="card p-6">
+        <h1 className="text-xl font-semibold text-fg">{gameName}</h1>
+        <p className="mt-2 text-base text-fg">
+          The game has not started yet - please wait.
         </p>
-        <p className="mt-1 text-sm text-amber-700">
+        <p className="mt-1 text-sm text-muted">
           Scheduled start: {formattedDate}
         </p>
-        <Link
-          href="/lobby"
-          className="mt-5 inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-        >
+        <Link href="/lobby" className="btn btn-primary mt-5">
           Back to lobby
         </Link>
       </div>
 
       {/* Participants */}
       {participants.length > 0 && (
-        <div>
-          <h2 className="text-sm font-semibold uppercase tracking-widest text-gray-400 mb-3 px-1">
+        <section>
+          <h2 className="mb-3 px-1 text-sm font-semibold text-muted">
             Participants ({participants.length})
           </h2>
           <div className="player-grid">
             {participants.map((player) => (
               <div
                 key={player.id}
-                className="flex flex-col items-center gap-2 rounded-2xl bg-white border border-gray-100 shadow-sm p-3 text-center"
+                className="card flex flex-col items-center gap-2 p-3 text-center"
               >
-                <div className="relative w-16 h-16 rounded-full overflow-hidden bg-indigo-100 shrink-0">
+                <div className="relative size-16 shrink-0 overflow-hidden rounded-full bg-accent-soft">
                   {player.avatar_url ? (
                     <Image
                       src={blobImageSrc(player.avatar_url)}
@@ -178,18 +175,18 @@ function ScheduledLobby({
                       unoptimized
                     />
                   ) : (
-                    <div className="flex h-full w-full items-center justify-center text-2xl font-bold text-indigo-400 select-none">
+                    <div className="flex h-full w-full select-none items-center justify-center text-2xl font-semibold text-accent">
                       {player.name.charAt(0).toUpperCase()}
                     </div>
                   )}
                 </div>
-                <p className="text-sm font-semibold text-gray-800 leading-tight truncate w-full px-1">
+                <p className="w-full truncate px-1 text-sm font-semibold leading-tight text-fg">
                   {player.name}
                 </p>
               </div>
             ))}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
@@ -207,15 +204,12 @@ function StatusCard({
   hint?: string;
 }) {
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8">
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 p-6 shadow-sm">
-        <h1 className="text-xl font-bold text-amber-900">{title}</h1>
-        <p className="mt-2 text-base text-amber-800">{message}</p>
-        {hint ? <p className="mt-2 text-sm text-amber-700">{hint}</p> : null}
-        <Link
-          href="/lobby"
-          className="mt-5 inline-flex items-center rounded-lg bg-amber-600 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-700"
-        >
+    <div className="mx-auto w-full max-w-lg px-4 py-8">
+      <div className="card p-6">
+        <h1 className="text-xl font-semibold text-fg">{title}</h1>
+        <p className="mt-2 text-base text-fg">{message}</p>
+        {hint ? <p className="mt-2 text-sm text-muted">{hint}</p> : null}
+        <Link href="/lobby" className="btn btn-primary mt-5">
           Back to lobby
         </Link>
       </div>

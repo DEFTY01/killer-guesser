@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { Cards } from "@phosphor-icons/react";
+import { Modal } from "@/components/ui/Modal";
+import { readableOn, roleColorOrDefault } from "@/components/game/roleColor";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -20,6 +23,10 @@ export interface RoleRevealModalProps {
  * - Shows a mystery card face-down initially.
  * - Tapping/clicking flips the card to reveal role name, team, and description.
  * - A "Got it!" button appears after the flip to dismiss the modal.
+ *
+ * Contrast: the admin-chosen role color only fills a header band whose text
+ * color is computed from luminance. Description text sits on the neutral
+ * surface so it holds AA for any role color.
  */
 export function RoleRevealModal({
   roleName,
@@ -31,18 +38,21 @@ export function RoleRevealModal({
   const [flipped, setFlipped] = useState(false);
 
   const reveal = () => setFlipped(true);
+  const band = roleColorOrDefault(roleColor);
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4"
-      role="dialog"
-      aria-modal="true"
+    <Modal
+      className="modal-full"
       aria-labelledby="role-reveal-title"
+      dismissible={flipped}
+      onClose={onClose}
     >
       <div className="flex flex-col items-center gap-6">
         {/* Flip card */}
         <div
-          style={{ perspective: "1200px", width: "min(240px, 70vw)", height: "min(340px, 75svh)" }}
+          className={`h-[min(22rem,70svh)] w-[min(16rem,76vw)] [perspective:1200px] ${
+            flipped ? "" : "cursor-pointer"
+          }`}
           onClick={!flipped ? reveal : undefined}
           onKeyDown={(e) => {
             if (!flipped && (e.key === "Enter" || e.key === " ")) {
@@ -53,79 +63,59 @@ export function RoleRevealModal({
           tabIndex={flipped ? -1 : 0}
           role={flipped ? undefined : "button"}
           aria-label={flipped ? undefined : "Tap to reveal your role"}
-          className={flipped ? "" : "cursor-pointer"}
         >
           <div
-            style={{
-              position: "relative",
-              width: "100%",
-              height: "100%",
-              transformStyle: "preserve-3d",
-              transition: "transform 0.7s cubic-bezier(0.4,0,0.2,1)",
-              transform: flipped ? "rotateY(180deg)" : "rotateY(0deg)",
-            }}
+            className={`relative h-full w-full transition-transform duration-[600ms] ease-[cubic-bezier(0.77,0,0.175,1)] [transform-style:preserve-3d] ${
+              flipped ? "[transform:rotateY(180deg)]" : ""
+            }`}
           >
-            {/* Front face (— mystery card) */}
-            <div
-              className="absolute inset-0 rounded-3xl flex flex-col items-center justify-center gap-4 shadow-2xl"
-              style={{
-                backfaceVisibility: "hidden",
-                background: "linear-gradient(135deg,#1e3a5f 0%,#0f2040 100%)",
-                border: "2px solid rgba(255,255,255,0.12)",
-              }}
-            >
-              <div className="text-7xl select-none">🃏</div>
-              <p className="text-white text-base font-semibold text-center px-4">
+            {/* Front face (mystery card) */}
+            <div className="card absolute inset-0 flex flex-col items-center justify-center gap-4 bg-elevated [backface-visibility:hidden]">
+              <Cards className="size-16 text-accent" aria-hidden="true" />
+              <p className="px-4 text-center text-base font-semibold text-fg">
                 Your role is…
               </p>
-              <p className="text-white/50 text-xs">Tap to reveal</p>
+              <p className="text-xs text-muted">Tap to reveal</p>
             </div>
 
-            {/* Back face (— role reveal) */}
-            <div
-              className="absolute inset-0 rounded-3xl flex flex-col items-center justify-center gap-3 shadow-2xl p-6"
-              style={{
-                backfaceVisibility: "hidden",
-                transform: "rotateY(180deg)",
-                background: roleColor
-                  ? `linear-gradient(135deg,${roleColor}ee 0%,${roleColor}99 100%)`
-                  : "linear-gradient(135deg,#2E6DA4ee 0%,#2E6DA499 100%)",
-                border: "2px solid rgba(255,255,255,0.18)",
-              }}
-            >
-              <p className="text-white/70 text-xs font-bold uppercase tracking-widest">
+            {/* Back face (role reveal) */}
+            <div className="card absolute inset-0 flex flex-col overflow-hidden [backface-visibility:hidden] [transform:rotateY(180deg)]">
+              <p className="px-5 pt-5 text-center text-xs font-semibold text-muted">
                 Your Role
               </p>
-              <p
-                id="role-reveal-title"
-                className="text-white text-3xl font-bold text-center"
+              <div
+                className="mx-4 mt-2 rounded-control px-4 py-5 text-center"
+                style={{ backgroundColor: band, color: readableOn(band) }}
               >
-                {roleName ?? "Unknown"}
-              </p>
-              {teamName && (
-                <span className="text-white/90 text-sm font-semibold bg-white/20 px-4 py-1 rounded-full">
-                  {teamName}
-                </span>
-              )}
-              {roleDescription && (
-                <p className="text-white/80 text-sm text-center leading-relaxed">
-                  {roleDescription}
+                <p
+                  id="role-reveal-title"
+                  className="font-display text-3xl font-bold leading-tight"
+                >
+                  {roleName ?? "Unknown"}
                 </p>
-              )}
+              </div>
+              <div className="flex flex-1 flex-col items-center gap-3 overflow-y-auto p-5">
+                {teamName && (
+                  <span className="pill bg-elevated px-4 py-1 text-sm text-fg">
+                    {teamName}
+                  </span>
+                )}
+                {roleDescription && (
+                  <p className="text-center text-sm leading-relaxed text-muted">
+                    {roleDescription}
+                  </p>
+                )}
+              </div>
             </div>
           </div>
         </div>
 
         {flipped && (
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-2xl bg-white px-8 py-3 text-sm font-bold text-gray-900 shadow-xl hover:bg-gray-100 transition-colors focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-black/80"
-          >
+          <button type="button" onClick={onClose} className="btn btn-primary px-8">
             Got it!
           </button>
         )}
       </div>
-    </div>
+    </Modal>
   );
 }
