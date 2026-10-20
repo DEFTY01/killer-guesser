@@ -33,11 +33,14 @@ function getAblyClient(): InstanceType<typeof Ably.Realtime> {
  * @param channelName - The Ably channel to subscribe to (use `ABLY_CHANNELS.*`).
  * @param eventName   - The event name to listen for (use `ABLY_EVENTS.*`).
  * @param onMessage   - Callback invoked with each received `Message`.
+ * @param enabled     - When false nothing is subscribed (e.g. a channel this
+ *                      user is not allowed to read).
  */
 export function useAbly(
   channelName: string,
   eventName: string,
   onMessage: (message: Message) => void,
+  enabled: boolean = true,
 ): void {
   const callbackRef = useRef(onMessage);
   useEffect(() => {
@@ -52,6 +55,7 @@ export function useAbly(
   const activeSubRef = useRef<{ channelName: string; eventName: string } | null>(null);
 
   useEffect(() => {
+    if (!enabled) return undefined;
     if (
       activeSubRef.current?.channelName === channelName &&
       activeSubRef.current?.eventName === eventName
@@ -79,5 +83,5 @@ export function useAbly(
         // Ignore cleanup errors
       }
     };
-  }, [channelName, eventName, stableCallback]);
+  }, [channelName, eventName, stableCallback, enabled]);
 }

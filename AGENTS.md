@@ -30,7 +30,7 @@ Real-time social-deduction game for ski trips: Next.js 16 App Router, TypeScript
 
 - Never commit real secrets to `.env.example`; use placeholders.
 - Never send a bare `.select()` of `game_players` to a browser: it carries `pin_hash`. Use `safeGamePlayerColumns` (`src/db/gamePlayerColumns.ts`).
-- Never put other players' role colours, teams or roles in an API response or a realtime event: each role colour is unique, so it reveals the Killer.
+- Never put other players' role colours, teams or roles in an API response or a realtime event: each role colour is unique, so it reveals the Killer. Votes are secret: the public `vote-*` channel carries counters only; voter identity goes on `spy-*`, which only `see_votes` roles may subscribe to (`src/app/api/ably/token/route.ts`).
 - `drizzle-kit migrate` cannot build a fresh database (duplicate `0013` migrations, hand-written ones missing from the journal); build local and CI databases with `npm run db:push`, and add new schema changes with `npm run db:generate`.
 - Tests mock the db chain; type mock return as `unknown` (see `src/test/unit/gameEnd.test.ts`) or `tsc` fails.
 <!-- /bmad:context -->

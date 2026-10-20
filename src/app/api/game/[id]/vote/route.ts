@@ -5,7 +5,8 @@ import { db } from "@/db";
 import { game_players, games, roles, users, votes } from "@/db/schema";
 import { and, count, eq } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import { closeRound, findEliminated, loadResults, parsePermissions } from "@/lib/voteClose";
+import { closeRound, findEliminated, loadResults } from "@/lib/voteClose";
+import { parsePermissions } from "@/lib/permissions";
 import { getVotingState } from "@/lib/votingState";
 import type { Round } from "@/lib/voteRound";
 
@@ -234,7 +235,8 @@ const voteSchema = z.object({
  * - Caller must be a living participant without killer knowledge.
  * - Target must be a living participant (voting for yourself is allowed).
  * - Upserts, so a vote can be changed until the round closes.
- * - Publishes a `vote_cast` event on the round's channel.
+ * - Publishes counter-only `vote_cast` on the public round channel and the
+ *   full detail on the `see_votes`-only spy channel.
  */
 export async function POST(
   req: NextRequest,
@@ -364,6 +366,12 @@ export async function POST(
     );
   }
 
+  const [previousVote] = await db
+    .select({ target_id: votes.target_id })
+    .from(votes)
+    .where(and(eq(votes.game_id, gameId), eq(votes.day, day), eq(votes.voter_id, userId)))
+    .limit(1);
+
   // Atomic upsert on the unique (game_id, day, voter_id) constraint.
   await db
     .insert(votes)
@@ -396,18 +404,26 @@ export async function POST(
   ]);
 
   if (process.env.ABLY_API_KEY) {
-    // One event per vote: collapsing votes would drop every voter but the last.
-    const channel = ablyServer.channels.get(ABLY_CHANNELS.vote(gameId, day));
-    channel
-      .publish(ABLY_EVENTS.vote_cast, {
-        voterId: userId,
-        voterName: voterUser?.name ?? "Unknown",
-        targetId,
-        targetName: targetUser?.name ?? "Unknown",
-      })
-      .catch((err: unknown) => {
-        console.error("[vote] VOTE_CAST publish failed:", err);
-      });
+    const previousTargetId = previousVote?.target_id ?? null;
+    const publish = (channelName: string, data: Record<string, unknown>) =>
+      ablyServer.channels
+        .get(channelName)
+        .publish(ABLY_EVENTS.vote_cast, data)
+        .catch((err: unknown) => {
+          console.error("[vote] vote_cast publish failed:", err);
+        });
+
+    // Public channel: counters only. Voting is secret, so no voter identity.
+    if (previousTargetId !== targetId) {
+      void publish(ABLY_CHANNELS.vote(gameId, day), { targetId, previousTargetId });
+    }
+    // Spy channel: full detail, subscribable only with `see_votes`.
+    void publish(ABLY_CHANNELS.spy(gameId, day), {
+      voterId: userId,
+      voterName: voterUser?.name ?? "Unknown",
+      targetId,
+      targetName: targetUser?.name ?? "Unknown",
+    });
   }
 
   return NextResponse.json({ success: true });

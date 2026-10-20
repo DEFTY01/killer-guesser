@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { ablyServer } from "@/lib/ably";
 import { db } from "@/db";
-import { game_players, games } from "@/db/schema";
+import { game_players, games, roles } from "@/db/schema";
+import { parsePermissions } from "@/lib/permissions";
 import { and, eq, inArray } from "drizzle-orm";
 
 type Capability = Record<string, "subscribe"[]>;
@@ -12,8 +13,9 @@ type Capability = Record<string, "subscribe"[]>;
  *
  * Issues a short-lived, subscribe-only Ably token request. The browser never
  * sees the API key. Players can only subscribe to the channels of games they
- * actually take part in, so one game cannot listen in on another; admins may
- * subscribe to any game.
+ * actually take part in, so one game cannot listen in on another. The spy
+ * channel (who voted for whom) additionally needs the `see_votes` permission.
+ * Admins may subscribe to any game.
  */
 export async function GET() {
   const session = await auth();
@@ -33,14 +35,15 @@ export async function GET() {
 
   let capability: Capability;
   if (session.user.role === "admin") {
-    capability = { "game-*": ["subscribe"], "vote-*": ["subscribe"] };
+    capability = { "game-*": ["subscribe"], "vote-*": ["subscribe"], "spy-*": ["subscribe"] };
   } else {
     const userId = Number(session.user.id);
     const memberships = Number.isInteger(userId)
       ? await db
-          .select({ gameId: game_players.game_id })
+          .select({ gameId: game_players.game_id, permissions: roles.permissions })
           .from(game_players)
           .innerJoin(games, eq(game_players.game_id, games.id))
+          .leftJoin(roles, eq(game_players.role_id, roles.id))
           .where(
             and(
               eq(game_players.user_id, userId),
@@ -57,9 +60,12 @@ export async function GET() {
       );
     }
     capability = {};
-    for (const { gameId } of memberships) {
+    for (const { gameId, permissions } of memberships) {
       capability[`game-${gameId}`] = ["subscribe"];
       capability[`vote-${gameId}-*`] = ["subscribe"];
+      if (parsePermissions(permissions).includes("see_votes")) {
+        capability[`spy-${gameId}-*`] = ["subscribe"];
+      }
     }
   }
 

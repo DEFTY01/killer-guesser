@@ -1,21 +1,11 @@
 import { db } from "@/db";
 import { game_players, games, roles, users, votes } from "@/db/schema";
 import { and, count, eq, lt, sql } from "drizzle-orm";
-import type { RolePermission } from "@/lib/role-constants";
+import { parsePermissions } from "@/lib/permissions";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
 
 type Executor = Pick<typeof db, "select" | "update">;
-
-export function parsePermissions(raw: string | null | undefined): RolePermission[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? (parsed as RolePermission[]) : [];
-  } catch {
-    return [];
-  }
-}
 
 /** Vote counts per target for one round, with target names. */
 export async function loadResults(gameId: string, day: number, executor: Executor = db) {

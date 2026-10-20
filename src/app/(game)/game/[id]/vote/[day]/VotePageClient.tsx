@@ -284,7 +284,6 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
   const closedRef = useRef(false);
 
   const countDispatchRef = useRef<Map<number, React.Dispatch<React.SetStateAction<number>>>>(new Map());
-  const voterTargetRef = useRef<Map<number, number>>(new Map());
   const [hasVotes, setHasVotes] = useState(false);
 
   // ── Load data ──────────────────────────────────────────────
@@ -301,9 +300,6 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
         setData(d);
         if (d.votes) setLiveVotes(d.votes);
         if (d.windowOpen) {
-          if (d.votes) {
-            d.votes.forEach((v) => { voterTargetRef.current.set(v.voterId, v.targetId); });
-          }
           if (d.players.some((p) => p.voteCount > 0)) setHasVotes(true);
         }
         if (!d.windowOpen) {
@@ -370,44 +366,46 @@ export default function VotePageClient({ gameId, day }: VotePageClientProps) {
 
   const canSeeVotes = !!(data?.votes !== undefined);
 
+  // Public channel: counters only, voting stays secret.
   useAbly(
     ABLY_CHANNELS.vote(gameId, day),
     ABLY_EVENTS.vote_cast,
-    useCallback(
-      (msg) => {
-        const payload = msg.data as VoteEntry;
-        if (canSeeVotes) {
-          setLiveVotes((prev) => {
-            const idx = prev.findIndex((v) => v.voterId === payload.voterId);
-            if (idx >= 0) {
-              const next = [...prev];
-              next[idx] = payload;
-              return next;
-            }
-            return [...prev, payload];
-          });
+    useCallback((msg) => {
+      const payload = msg.data as { targetId: number; previousTargetId: number | null };
+      countDispatchRef.current.get(payload.targetId)?.((c) => c + 1);
+      if (payload.previousTargetId !== null && payload.previousTargetId !== payload.targetId) {
+        countDispatchRef.current.get(payload.previousTargetId)?.((c) => Math.max(0, c - 1));
+      }
+      setHasVotes(true);
+    }, []),
+  );
+
+  // Spy channel: who voted for whom. Only readable with `see_votes`.
+  useAbly(
+    ABLY_CHANNELS.spy(gameId, day),
+    ABLY_EVENTS.vote_cast,
+    useCallback((msg) => {
+      const payload = msg.data as VoteEntry;
+      setLiveVotes((prev) => {
+        const idx = prev.findIndex((v) => v.voterId === payload.voterId);
+        if (idx >= 0) {
+          const next = [...prev];
+          next[idx] = payload;
+          return next;
         }
-        const oldTargetId = voterTargetRef.current.get(payload.voterId) ?? null;
-        voterTargetRef.current.set(payload.voterId, payload.targetId);
-        countDispatchRef.current.get(payload.targetId)?.(c => c + 1);
-        if (oldTargetId !== null && oldTargetId !== payload.targetId) {
-          countDispatchRef.current.get(oldTargetId)?.(c => Math.max(0, c - 1));
-        }
-        setHasVotes(true);
-        if (canSeeVotes) {
-          setData((prev) => {
-            if (!prev?.windowOpen) return prev;
-            const existing = prev.votes ?? [];
-            const idx = existing.findIndex((v) => v.voterId === payload.voterId);
-            const votes = idx >= 0
-              ? [...existing.slice(0, idx), payload, ...existing.slice(idx + 1)]
-              : [...existing, payload];
-            return { ...prev, votes };
-          });
-        }
-      },
-      [canSeeVotes],
-    ),
+        return [...prev, payload];
+      });
+      setData((prev) => {
+        if (!prev?.windowOpen) return prev;
+        const existing = prev.votes ?? [];
+        const idx = existing.findIndex((v) => v.voterId === payload.voterId);
+        const votes = idx >= 0
+          ? [...existing.slice(0, idx), payload, ...existing.slice(idx + 1)]
+          : [...existing, payload];
+        return { ...prev, votes };
+      });
+    }, []),
+    canSeeVotes,
   );
 
   // ── Ably: VOTE_CLOSED ───────────────────────────────────────

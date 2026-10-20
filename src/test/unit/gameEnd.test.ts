@@ -71,6 +71,7 @@ vi.mock("@/lib/ably", () => ({
   ABLY_CHANNELS: {
     game: (id: string) => `game-${id}`,
     vote: (id: string, day: number) => `vote-${id}-${day}`,
+    spy: (id: string, day: number) => `spy-${id}-${day}`,
   },
   ABLY_EVENTS: {
     player_died: "player_died",

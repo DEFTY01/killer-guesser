@@ -26,6 +26,7 @@ vi.mock("@/lib/ably", () => ({
   ABLY_CHANNELS: {
     game: (id: string) => `game-${id}`,
     vote: (id: string, day: number) => `vote-${id}-${day}`,
+    spy: (id: string, day: number) => `spy-${id}-${day}`,
   },
   ABLY_EVENTS: { vote_cast: "vote_cast", vote_closed: "vote_closed" },
 }));
@@ -367,6 +368,7 @@ describe("POST /api/game/[id]/vote", () => {
     [game()],
     [{ id: 1, is_dead: 0, permissions: null }],
     [{ id: 99 }],
+    [], // no previous vote
     [{ vote_closed_day: 0 }],
     [{ name: "Alice" }],
     [{ name: "Bob" }],
@@ -422,6 +424,7 @@ describe("POST /api/game/[id]/vote", () => {
       [game()],
       [{ id: 1, is_dead: 0, permissions: null }],
       [{ id: 99 }],
+      [],
       [{ vote_closed_day: 2 }],
     ];
     const res = await post({ targetId: 20 });
@@ -434,13 +437,38 @@ describe("POST /api/game/[id]/vote", () => {
     expect((await post({ targetId: 10 })).status).toBe(200);
   });
 
-  it("publishes one vote_cast per vote on the round's channel", async () => {
+  it("public channel gets counters only; voter identity goes to the spy channel", async () => {
     process.env.ABLY_API_KEY = "k";
-    dbState.selectResults = valid();
+    dbState.selectResults = [
+      [game()],
+      [{ id: 1, is_dead: 0, permissions: null }],
+      [{ id: 99 }],
+      [{ target_id: 30 }], // previously voted for 30
+      [{ vote_closed_day: 0 }],
+      [{ name: "Alice" }],
+      [{ name: "Bob" }],
+    ];
     await post({ targetId: 20 });
-    expect(mockPublish).toHaveBeenCalledWith(
-      "vote_cast",
-      expect.objectContaining({ voterId: 10, targetId: 20, voterName: "Alice", targetName: "Bob" }),
-    );
+    const calls = mockPublish.mock.calls as [string, Record<string, unknown>][];
+    const publicCall = calls.find(([, d]) => !("voterId" in d))!;
+    const spyCall = calls.find(([, d]) => "voterId" in d)!;
+    expect(publicCall[1]).toEqual({ targetId: 20, previousTargetId: 30 });
+    expect(spyCall[1]).toMatchObject({ voterId: 10, voterName: "Alice", targetId: 20, targetName: "Bob" });
+  });
+
+  it("re-voting for the same target sends no public counter event", async () => {
+    process.env.ABLY_API_KEY = "k";
+    dbState.selectResults = [
+      [game()],
+      [{ id: 1, is_dead: 0, permissions: null }],
+      [{ id: 99 }],
+      [{ target_id: 20 }],
+      [{ vote_closed_day: 0 }],
+      [{ name: "Alice" }],
+      [{ name: "Bob" }],
+    ];
+    await post({ targetId: 20 });
+    const calls = mockPublish.mock.calls as [string, Record<string, unknown>][];
+    expect(calls.every(([, d]) => "voterId" in d)).toBe(true);
   });
 });

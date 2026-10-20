@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 const { mockAuth, mockCreateTokenRequest, state } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockCreateTokenRequest: vi.fn(),
-  state: { memberships: [] as { gameId: string }[] },
+  state: { memberships: [] as { gameId: string; permissions?: string | null }[] },
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
@@ -14,7 +14,9 @@ vi.mock("@/db", () => ({
   db: {
     select: () => ({
       from: () => ({
-        innerJoin: () => ({ where: () => ({ limit: async () => state.memberships }) }),
+        innerJoin: () => ({
+          leftJoin: () => ({ where: () => ({ limit: async () => state.memberships }) }),
+        }),
       }),
     }),
   },
@@ -22,6 +24,7 @@ vi.mock("@/db", () => ({
 vi.mock("@/db/schema", () => ({
   game_players: { game_id: "gid", user_id: "uid" },
   games: { id: "id", status: "status" },
+  roles: { id: "id", permissions: "permissions" },
 }));
 vi.mock("drizzle-orm", () => ({ eq: vi.fn(), and: vi.fn(), inArray: vi.fn() }));
 
@@ -53,6 +56,15 @@ describe("GET /api/ably/token", () => {
     });
   });
 
+  it("only see_votes players may read the spy channel (who voted for whom)", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    state.memberships = [{ gameId: "G1", permissions: '["see_votes"]' }, { gameId: "G2", permissions: null }];
+    await GET();
+    const cap = mockCreateTokenRequest.mock.calls[0][0].capability;
+    expect(cap["spy-G1-*"]).toEqual(["subscribe"]);
+    expect(cap["spy-G2-*"]).toBeUndefined();
+  });
+
   it("player in no live game gets no token", async () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
     expect((await GET()).status).toBe(403);
@@ -65,6 +77,7 @@ describe("GET /api/ably/token", () => {
     expect(mockCreateTokenRequest.mock.calls[0][0].capability).toEqual({
       "game-*": ["subscribe"],
       "vote-*": ["subscribe"],
+      "spy-*": ["subscribe"],
     });
   });
 });
