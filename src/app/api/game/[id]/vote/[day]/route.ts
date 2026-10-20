@@ -5,7 +5,6 @@ import { db } from "@/db";
 import { game_players, games, roles, users, votes } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
-import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -116,19 +115,15 @@ export async function GET(
       avatar_url: users.avatar_url,
       is_dead: game_players.is_dead,
       revived_at: game_players.revived_at,
-      role_color: roles.color_hex,
     })
     .from(game_players)
     .innerJoin(users, eq(game_players.user_id, users.id))
-    .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(eq(game_players.game_id, gameId))
     .orderBy(users.name)
     .limit(50);
 
-  const normalizedPlayers = players.map((p) => ({
-    ...p,
-    role_color: p.role_color ?? DEFAULT_ROLE_COLOR,
-  }));
+  // Role colours are never sent for other players: they would reveal the Killer.
+  const normalizedPlayers = players;
 
   // ── Check if caller already voted today ───────────────────────
   const [existingVote] = await db

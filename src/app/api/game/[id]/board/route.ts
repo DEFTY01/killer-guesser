@@ -11,7 +11,6 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { activateGameIfReady } from "@/lib/activateGame";
-import { DEFAULT_ROLE_COLOR } from "@/lib/role-constants";
 import type { RolePermission } from "@/lib/role-constants";
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -171,39 +170,27 @@ export async function GET(
       is_dead: game_players.is_dead,
       is_revived: game_players.is_revived,
       revived_at: game_players.revived_at,
-      role_color: roles.color_hex,
     })
     .from(game_players)
     .innerJoin(users, eq(game_players.user_id, users.id))
-    .leftJoin(roles, eq(game_players.role_id, roles.id))
     .where(eq(game_players.game_id, gameId))
     .orderBy(users.name)
     .limit(50);
 
-  // Normalise: replace null role_color with the default blue
-  const normalizedPlayers = players.map((p) => ({
-    ...p,
-    role_color: p.role_color ?? DEFAULT_ROLE_COLOR,
-  }));
-
-  // ── Mayor anonymisation: strip role_color data ────────────────
-  // The Mayor's view is deliberately equalized — they cannot see role colours.
-  // Strip every field except the bare minimum needed to render a face-and-name card.
-  const isMayor = callerRow.role_name === "Mayor";
-
-  // ?slim reduces the player list to the minimum fields needed for lightweight
-  // components (e.g. a live score card or dead-player overlay).
-  const responsePlayers = (slim || isMayor)
-    ? normalizedPlayers.map(({ id, user_id, name, avatar_url, is_dead, is_revived, revived_at }) => ({
-        id,
-        user_id,
-        name,
-        avatar_url,
-        is_dead,
-        is_revived,
-        revived_at,
-      }))
-    : normalizedPlayers;
+  // Other players' role colours are never sent: each role has its own colour,
+  // so they would reveal the Killer to anyone reading the network response.
+  // The caller's own colour is returned in `caller.role_color`.
+  const responsePlayers = players.map(
+    ({ id, user_id, name, avatar_url, is_dead, is_revived, revived_at }) => ({
+      id,
+      user_id,
+      name,
+      avatar_url,
+      is_dead,
+      is_revived,
+      revived_at,
+    }),
+  );
 
   // ── Current game day ──────────────────────────────────────────
   const nowUnix = Math.floor(Date.now() / 1000);

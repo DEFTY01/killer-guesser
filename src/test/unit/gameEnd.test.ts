@@ -239,6 +239,7 @@ describe("checkGameOver", () => {
   function setupCheckGameOver(
     evil_team_is_team1: number,
     players: Array<{ team: string; is_dead: number }>,
+    status = "active",
   ) {
     let callCount = 0;
     mockSelect.mockImplementation(() => {
@@ -248,7 +249,7 @@ describe("checkGameOver", () => {
         return {
           from: () => ({
             where: () => ({
-              limit: vi.fn().mockResolvedValue([{ evil_team_is_team1 }]),
+              limit: vi.fn().mockResolvedValue([{ evil_team_is_team1, status }]),
             }),
           }),
         };
@@ -294,6 +295,19 @@ describe("checkGameOver", () => {
     } finally {
       delete process.env.ABLY_API_KEY;
     }
+  });
+
+  it("ignores an already closed game so the winner is not overwritten", async () => {
+    setupCheckGameOver(
+      1,
+      [
+        { team: "team1", is_dead: 1 },
+        { team: "team2", is_dead: 0 },
+      ],
+      "closed",
+    );
+    await checkGameOver("game-already-closed");
+    expect(findSetCall((a) => a.status === "closed")).toBeUndefined();
   });
 
   it("does not close game when both teams have alive players", async () => {
