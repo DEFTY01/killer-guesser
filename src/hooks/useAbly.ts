@@ -63,7 +63,9 @@ export function useAbly(
     try {
       const client = getAblyClient();
       channel = client.channels.get(channelName);
-      channel.subscribe(eventName, stableCallback);
+      // Attach failures (realtime offline or unconfigured) must not surface as
+      // unhandled rejections; the board resyncs on visibility/online instead.
+      void Promise.resolve(channel.subscribe(eventName, stableCallback)).catch(() => {});
       activeSubRef.current = { channelName, eventName };
     } catch {
       return undefined;
