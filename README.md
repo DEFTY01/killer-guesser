@@ -105,7 +105,6 @@ npm run dev
 | `NEXTAUTH_URL` | App base URL (e.g. `http://localhost:3000`) |
 | `ADMIN_PASSWORD` | Admin panel password |
 | `ABLY_API_KEY` | Ably server-side API key |
-| `NEXT_PUBLIC_ABLY_API_KEY` | Ably client-side key |
 | `BLOB_READ_WRITE_TOKEN` | Vercel Blob token |
 
 ---

@@ -5,16 +5,14 @@ import { useEffect, useCallback, useRef } from "react";
 import type { Message } from "ably";
 
 // ── Singleton client ──────────────────────────────────────────────
-// Initialised once per browser session using the public API key.
-// The key is expected to be a token-capable key (publishable from the browser).
+// Initialised once per browser session. Auth goes through /api/ably/token,
+// which issues subscribe-only tokens, so no API key reaches the browser.
 
 let ablyClient: InstanceType<typeof Ably.Realtime> | null = null;
 
 function getAblyClient(): InstanceType<typeof Ably.Realtime> {
   if (!ablyClient) {
-    ablyClient = new Ably.Realtime({
-      key: process.env.NEXT_PUBLIC_ABLY_API_KEY ?? "",
-    });
+    ablyClient = new Ably.Realtime({ authUrl: "/api/ably/token" });
   }
   return ablyClient;
 }
