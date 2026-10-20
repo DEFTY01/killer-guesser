@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/db";
 import { games, game_settings, game_players, roles, users } from "@/db/schema";
-import { asc, eq, isNull, and } from "drizzle-orm";
+import { asc, eq, isNull, and, sql } from "drizzle-orm";
 import { generateJoinCode } from "@/lib/credentials";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { notFound, redirect } from "next/navigation";
@@ -50,6 +50,7 @@ export default async function GameDetailPage({
         is_revived: game_players.is_revived,
         died_at: game_players.died_at,
         has_tipped: game_players.has_tipped,
+        has_pin: sql<number>`${game_players.pin_hash} is not null`,
         name: users.name,
         avatar_url: users.avatar_url,
         role_name: roles.name,

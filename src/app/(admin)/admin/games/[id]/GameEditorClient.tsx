@@ -50,6 +50,7 @@ interface PlayerRow {
   is_revived: number;
   died_at: number | null;
   has_tipped: number;
+  has_pin: number;
   name: string;
   avatar_url: string | null;
   role_name: string | null;
@@ -142,7 +143,8 @@ export default function GameEditorClient({
   // Per-row busy states
   const [deadBusy, setDeadBusy] = useState<Set<number>>(new Set());
   const [pinBusy, setPinBusy] = useState<Set<number>>(new Set());
-  const [issuedPins, setIssuedPins] = useState<Record<number, string>>({});
+  const [pinInput, setPinInput] = useState<Record<number, string>>({});
+  const [pinError, setPinError] = useState<Record<number, string>>({});
   const [roleBusy, setRoleBusy] = useState<Set<number>>(new Set());
 
   // ── Game-level actions ─────────────────────────────────────────
@@ -238,17 +240,27 @@ export default function GameEditorClient({
 
   // ── Per-player actions ─────────────────────────────────────────
 
-  const issuePin = useCallback(
-    async (player: PlayerRow) => {
+  const savePin = useCallback(
+    async (player: PlayerRow, pin?: string) => {
       setPinBusy((s) => new Set(s).add(player.id));
+      setPinError((e) => ({ ...e, [player.id]: "" }));
       try {
         const res = await fetch(
           `/api/admin/games/${game.id}/players/${player.id}/pin`,
-          { method: "POST" },
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(pin ? { pin } : {}),
+          },
         );
         const json = await res.json();
         if (json.success) {
-          setIssuedPins((prev) => ({ ...prev, [player.id]: json.data.pin as string }));
+          setPlayers((ps) =>
+            ps.map((p) => (p.id === player.id ? { ...p, has_pin: pin ? 1 : 0 } : p)),
+          );
+          setPinInput((v) => ({ ...v, [player.id]: "" }));
+        } else {
+          setPinError((e) => ({ ...e, [player.id]: (json.error as string) ?? "Failed" }));
         }
       } finally {
         setPinBusy((s) => {
@@ -946,19 +958,47 @@ export default function GameEditorClient({
                       >
                         {p.is_dead ? "Revive" : "Mark Dead"}
                       </button>
-                      <button
-                        onClick={() => issuePin(p)}
-                        disabled={pinBusy.has(p.id)}
-                        className="ml-2 rounded px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 disabled:opacity-50"
-                        aria-label={`Issue new PIN for ${p.name}`}
-                      >
-                        New PIN
-                      </button>
-                      {issuedPins[p.id] && (
-                        <span className="ml-2 font-mono text-sm font-semibold tracking-widest text-indigo-600 dark:text-indigo-300">
-                          {issuedPins[p.id]}
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`text-xs ${p.has_pin ? "text-green-600 dark:text-green-400" : "text-amber-600 dark:text-amber-400"}`}
+                        >
+                          {p.has_pin ? "PIN set" : "No PIN yet"}
                         </span>
-                      )}
+                        <button
+                          onClick={() => savePin(p)}
+                          disabled={pinBusy.has(p.id) || !p.has_pin}
+                          className="rounded px-2.5 py-1 text-xs font-medium bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 disabled:opacity-50"
+                          aria-label={`Reset PIN for ${p.name}`}
+                        >
+                          Reset PIN
+                        </button>
+                        <input
+                          value={pinInput[p.id] ?? ""}
+                          onChange={(e) =>
+                            setPinInput((v) => ({
+                              ...v,
+                              [p.id]: e.target.value.replace(/\D/g, "").slice(0, 4),
+                            }))
+                          }
+                          inputMode="numeric"
+                          placeholder="1234"
+                          aria-label={`New PIN for ${p.name}`}
+                          className="w-16 rounded border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 px-2 py-1 text-xs text-gray-900 dark:text-gray-100"
+                        />
+                        <button
+                          onClick={() => savePin(p, pinInput[p.id])}
+                          disabled={pinBusy.has(p.id) || (pinInput[p.id] ?? "").length !== 4}
+                          className="rounded px-2.5 py-1 text-xs font-medium bg-indigo-600 text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-1 focus:ring-indigo-500 disabled:opacity-50"
+                          aria-label={`Set PIN for ${p.name}`}
+                        >
+                          Set PIN
+                        </button>
+                        {pinError[p.id] && (
+                          <span className="text-xs text-red-600" role="alert">
+                            {pinError[p.id]}
+                          </span>
+                        )}
+                      </div>
                     </td>
                   </tr>
                 ))}

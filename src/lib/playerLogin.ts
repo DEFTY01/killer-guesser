@@ -5,6 +5,7 @@ import {
   MAX_PIN_ATTEMPTS,
   PIN_LENGTH,
   PIN_LOCK_SECONDS,
+  hashPin,
   normalizeJoinCode,
   verifyPin,
 } from "@/lib/credentials";
@@ -15,17 +16,23 @@ export type PlayerLoginInput = {
   gameCode: string;
   userId: number;
   pin: string;
+  /** True when the player is choosing their PIN for the first time (or after an admin reset). */
+  setPin?: boolean;
 };
 
+export const PIN_NOT_SET = "PIN_NOT_SET";
+
 /**
- * Verifies a player's game code + per-game PIN.
+ * Verifies a player's game code + per-game PIN. A player without a PIN yet
+ * (first login or after an admin reset) chooses one by logging in with
+ * `setPin`; the first request wins.
  *
  * Failures are deliberately uniform so a caller cannot tell a wrong code from
  * a wrong player. After MAX_PIN_ATTEMPTS wrong PINs the player is locked for
  * PIN_LOCK_SECONDS; the counter lives in the database so it holds across
  * serverless instances.
  */
-export async function verifyPlayerLogin({ gameCode, userId, pin }: PlayerLoginInput) {
+export async function verifyPlayerLogin({ gameCode, userId, pin, setPin = false }: PlayerLoginInput) {
   const code = normalizeJoinCode(gameCode);
   if (!code || !Number.isInteger(userId) || !/^\d+$/.test(pin) || pin.length !== PIN_LENGTH) {
     throw new Error(INVALID_LOGIN);
@@ -56,7 +63,29 @@ export async function verifyPlayerLogin({ gameCode, userId, pin }: PlayerLoginIn
   if (!row) throw new Error(INVALID_LOGIN);
 
   if (!row.pinHash) {
-    throw new Error("No PIN set for you yet. Ask your host!");
+    // No PIN yet (first login, or the admin reset it). The player must say
+    // explicitly that they are choosing one, so a typo is never taken as the PIN.
+    if (!setPin) throw new Error(PIN_NOT_SET);
+
+    // The first request wins; a parallel claim matches no row.
+    const [claimed] = await db
+      .update(game_players)
+      .set({
+        pin_hash: await hashPin(pin),
+        pin_failed_attempts: 0,
+        pin_locked_until: null,
+      })
+      .where(and(eq(game_players.id, row.gamePlayerId), isNull(game_players.pin_hash)))
+      .returning({ id: game_players.id });
+    if (!claimed) throw new Error(INVALID_LOGIN);
+
+    return {
+      id: String(userId),
+      name: row.userName,
+      avatar_url: row.avatarUrl,
+      role: "player" as const,
+      activeGameId: row.gameId,
+    };
   }
 
   const now = Math.floor(Date.now() / 1000);

@@ -15,6 +15,8 @@ type Player = {
   id: string;
   nickname: string;
   avatarUrl: string | null;
+  /** False until the player has chosen a PIN (first login or after an admin reset). */
+  hasPin: boolean;
 };
 
 // ── Checkmark badge ───────────────────────────────────────────────────────────
@@ -60,12 +62,13 @@ const enter = "animate-[fadeInUp_600ms_var(--ease-out)_both]";
 
 export default function LoginScreen() {
   const [panelOpen, setPanelOpen] = useState(false);
-  const [step, setStep] = useState<"code" | "avatar" | "pin">("code");
+  const [step, setStep] = useState<"code" | "avatar" | "pin" | "newpin">("code");
   const [code, setCode] = useState("");
   const [gameName, setGameName] = useState("");
   const [players, setPlayers] = useState<Player[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [pin, setPin] = useState("");
+  const [confirmPin, setConfirmPin] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const router = useRouter();
@@ -82,41 +85,51 @@ export default function LoginScreen() {
     setPanelOpen(false);
   }, [loading]);
 
+  const fetchGame = useCallback(async (): Promise<{ gameName: string; players: Player[] } | null> => {
+    const res = await fetch(`/api/login/game?code=${encodeURIComponent(code.trim())}`);
+    const json = await res.json();
+    if (!res.ok || !json.success) return null;
+    return json.data as { gameName: string; players: Player[] };
+  }, [code]);
+
   const lookUpGame = useCallback(async () => {
     if (loading || code.trim().length === 0) return;
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(
-        `/api/login/game?code=${encodeURIComponent(code.trim())}`,
-      );
-      const json = await res.json();
-      if (!res.ok || !json.success) {
+      const game = await fetchGame();
+      if (!game) {
         setError("We couldn't find a game with that code.");
         return;
       }
-      setGameName(json.data.gameName as string);
-      setPlayers(json.data.players as Player[]);
+      setGameName(game.gameName);
+      setPlayers(game.players);
       setStep("avatar");
     } catch {
       setError("Network problem. Please try again.");
     } finally {
       setLoading(false);
     }
-  }, [code, loading]);
+  }, [code, loading, fetchGame]);
 
-  const selectPlayer = useCallback((id: string) => {
-    setSelectedId(id);
-    setPin("");
-    setError(null);
-    setStep("pin");
-  }, []);
+  const selectPlayer = useCallback(
+    (id: string) => {
+      const player = players.find((p) => p.id === id);
+      setSelectedId(id);
+      setPin("");
+      setConfirmPin("");
+      setError(null);
+      setStep(player && !player.hasPin ? "newpin" : "pin");
+    },
+    [players],
+  );
 
   const goBack = useCallback(() => {
     setError(null);
     setPin("");
+    setConfirmPin("");
     setStep((prev) => {
-      if (prev === "pin") return "avatar";
+      if (prev === "pin" || prev === "newpin") return "avatar";
       setSelectedId(null);
       return "code";
     });
@@ -124,6 +137,8 @@ export default function LoginScreen() {
 
   const handleSignIn = useCallback(async () => {
     if (!selectedId || pin.length === 0 || loading) return;
+    const choosing = step === "newpin";
+    if (choosing && pin !== confirmPin) return;
     setLoading(true);
     setError(null);
 
@@ -132,12 +147,31 @@ export default function LoginScreen() {
         gameCode: code,
         userId: selectedId,
         pin,
+        ...(choosing ? { setPin: "1" } : {}),
         redirect: false,
       });
 
       if (!result || result.error) {
-        setError("Wrong PIN, or too many attempts. Ask your host if you're stuck.");
         setPin("");
+        setConfirmPin("");
+        // The PIN situation may have changed (the admin reset it, or someone
+        // else chose one first): refresh and send the player to the right step.
+        const game = await fetchGame().catch(() => null);
+        const current = game?.players.find((p) => p.id === selectedId);
+        if (game) setPlayers(game.players);
+        if (current && !choosing && !current.hasPin) {
+          setStep("newpin");
+          setError("Your PIN was reset. Choose a new one.");
+        } else if (current && choosing && current.hasPin) {
+          setStep("pin");
+          setError("Someone already chose a PIN for this player. Enter it, or ask your host to reset it.");
+        } else {
+          setError(
+            choosing
+              ? "Could not save your PIN. Please try again."
+              : "Wrong PIN, or too many attempts. Ask your host if you're stuck.",
+          );
+        }
         setLoading(false);
         return;
       }
@@ -147,7 +181,7 @@ export default function LoginScreen() {
       setError("An unexpected error occurred. Please try again.");
       setLoading(false);
     }
-  }, [selectedId, pin, code, loading, router]);
+  }, [selectedId, pin, confirmPin, step, code, loading, router, fetchGame]);
 
   return (
     <>
@@ -321,6 +355,45 @@ export default function LoginScreen() {
           </form>
         )}
 
+        {step === "newpin" && selectedPlayer && (
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void handleSignIn();
+            }}
+            className="flex flex-col items-center gap-3 px-6 pb-2 pt-3"
+          >
+            <p className="text-center text-sm text-muted">
+              Hi <strong className="font-semibold text-fg">{selectedPlayer.nickname}</strong>
+              , choose a 4-digit PIN. You will use it every time you sign in.
+            </p>
+            <input
+              aria-label="New PIN"
+              value={pin}
+              onChange={(e) => setPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              autoFocus
+              placeholder="••••"
+              className="field h-14 max-w-60 text-center text-3xl font-semibold tracking-[0.5em]"
+            />
+            <input
+              aria-label="Confirm PIN"
+              value={confirmPin}
+              onChange={(e) => setConfirmPin(e.target.value.replace(/\D/g, "").slice(0, 4))}
+              type="password"
+              inputMode="numeric"
+              autoComplete="new-password"
+              placeholder="••••"
+              className="field h-14 max-w-60 text-center text-3xl font-semibold tracking-[0.5em]"
+            />
+            {confirmPin.length === 4 && pin !== confirmPin && (
+              <p role="status" className="text-sm text-danger">The two PINs do not match.</p>
+            )}
+          </form>
+        )}
+
         {error && (
           <p role="alert" className="callout callout-danger mx-6 my-2">
             {error}
@@ -343,12 +416,19 @@ export default function LoginScreen() {
               type="button"
               className="sign-in-btn btn btn-primary min-h-12 flex-1"
               onClick={step === "code" ? lookUpGame : handleSignIn}
-              disabled={loading || (step === "code" ? code.trim().length < 6 : pin.length < 4)}
+              disabled={
+                loading ||
+                (step === "code"
+                  ? code.trim().length < 6
+                  : step === "newpin"
+                    ? pin.length < 4 || pin !== confirmPin
+                    : pin.length < 4)
+              }
             >
               {loading && (
                 <CircleNotch className="size-5 animate-spin" aria-hidden="true" />
               )}
-              {step === "code" ? "Find my game" : "Sign In"}
+              {step === "code" ? "Find my game" : step === "newpin" ? "Save PIN and sign in" : "Sign In"}
             </button>
           )}
         </div>

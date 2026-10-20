@@ -1,18 +1,29 @@
 import { NextRequest, NextResponse } from "next/server";
+import { z } from "zod";
 import { db } from "@/db";
 import { game_players } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
-import { generatePin, hashPin } from "@/lib/credentials";
+import { PIN_LENGTH, hashPin } from "@/lib/credentials";
+
+const bodySchema = z
+  .object({
+    pin: z
+      .string()
+      .regex(new RegExp(`^\\d{${PIN_LENGTH}}$`), `PIN must be ${PIN_LENGTH} digits`)
+      .optional(),
+  })
+  .default({});
 
 /**
  * POST /api/admin/games/[id]/players/[playerId]/pin
  *
- * Issues a fresh PIN for one game player and clears any lockout. The PIN is
- * returned once; only its hash is stored.
+ * Without a body: resets the player's PIN. They choose a new one the next
+ * time they sign in. With `{ pin }`: the admin sets that PIN directly.
+ * Either way any lockout is cleared. Only a hash is ever stored.
  */
 export async function POST(
-  _req: NextRequest,
+  req: NextRequest,
   { params }: { params: Promise<{ id: string; playerId: string }> },
 ) {
   if (!(await requireAdmin())) {
@@ -31,11 +42,20 @@ export async function POST(
     );
   }
 
-  const pin = generatePin();
+  const raw = await req.json().catch(() => ({}));
+  const parsed = bodySchema.safeParse(raw ?? {});
+  if (!parsed.success) {
+    return NextResponse.json(
+      { success: false, error: parsed.error.issues[0]?.message },
+      { status: 422 },
+    );
+  }
+
+  const { pin } = parsed.data;
   const [updated] = await db
     .update(game_players)
     .set({
-      pin_hash: await hashPin(pin),
+      pin_hash: pin ? await hashPin(pin) : null,
       pin_failed_attempts: 0,
       pin_locked_until: null,
     })
@@ -49,5 +69,5 @@ export async function POST(
     );
   }
 
-  return NextResponse.json({ success: true, data: { pin } });
+  return NextResponse.json({ success: true, data: { hasPin: Boolean(pin) } });
 }
