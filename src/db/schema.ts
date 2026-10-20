@@ -53,6 +53,8 @@ export const games = sqliteTable("games", {
   /** 1 = team1 is the Evil team (default). 0 = team2 is the Evil team. */
   evil_team_is_team1: integer("evil_team_is_team1").notNull().default(1),
   winner_team: text("winner_team"),
+  /** Short code players enter to find this game on the login screen. */
+  join_code: text("join_code").unique(),
   /** Last game day whose vote has been tallied; the window itself stays configured. */
   vote_closed_day: integer("vote_closed_day").notNull().default(0),
   created_at: integer("created_at")
@@ -98,6 +100,11 @@ export const game_players = sqliteTable("game_players", {
   has_tipped: integer("has_tipped").notNull().default(0),
   tipped_user_id: integer("tipped_user_id").references(() => users.id),
   death_reason: text("death_reason"),
+  /** scrypt hash of the player's per-game PIN (null until the admin issues one). */
+  pin_hash: text("pin_hash"),
+  pin_failed_attempts: integer("pin_failed_attempts").notNull().default(0),
+  /** Unix seconds until which PIN attempts are refused after too many failures. */
+  pin_locked_until: integer("pin_locked_until"),
 }, (t) => [index("game_players_game_user_idx").on(t.game_id, t.user_id)]);
 
 // ── votes ─────────────────────────────────────────────────────────

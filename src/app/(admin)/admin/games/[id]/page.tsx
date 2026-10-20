@@ -2,7 +2,8 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { db } from "@/db";
 import { games, game_settings, game_players, roles, users } from "@/db/schema";
-import { asc, eq } from "drizzle-orm";
+import { asc, eq, isNull, and } from "drizzle-orm";
+import { generateJoinCode } from "@/lib/credentials";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { notFound, redirect } from "next/navigation";
 import GameEditorClient from "./GameEditorClient";
@@ -19,8 +20,18 @@ export default async function GameDetailPage({
 
   const { id } = await params;
 
-  const [game] = await db.select().from(games).where(eq(games.id, id)).limit(1);
+  let [game] = await db.select().from(games).where(eq(games.id, id)).limit(1);
   if (!game) notFound();
+
+  // Games created before join codes existed get one the first time an admin opens them.
+  if (!game.join_code) {
+    const [withCode] = await db
+      .update(games)
+      .set({ join_code: generateJoinCode() })
+      .where(and(eq(games.id, id), isNull(games.join_code)))
+      .returning();
+    if (withCode) game = withCode;
+  }
 
   const [[settings], players, allRoles] = await Promise.all([
     db
