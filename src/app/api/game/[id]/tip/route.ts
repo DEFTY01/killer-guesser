@@ -216,6 +216,16 @@ export async function POST(
     // Trigger game-end logic (archives events, closes game, publishes GAME_ENDED).
     await checkGameOver(gameId);
 
+    // Players need to see the Killer go down even when the game goes on.
+    if (process.env.ABLY_API_KEY) {
+      try {
+        const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+        await channel.publish(ABLY_EVENTS.player_died, { player_id: suspectId });
+      } catch (err) {
+        console.error("[tip] player_died publish failed:", err);
+      }
+    }
+
     return NextResponse.json({ success: true, data: { correct: true } });
   }
 

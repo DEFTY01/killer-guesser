@@ -2,16 +2,17 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
+const { mockAuth, mockCheckGameOver, mockPublish } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
   mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
+  mockPublish: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
 vi.mock("@/lib/ably", () => ({
-  ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },
+  ablyServer: { channels: { get: vi.fn(() => ({ publish: mockPublish })) } },
   ABLY_CHANNELS: { game: (id: string) => `game-${id}` },
   ABLY_EVENTS: { player_died: "player_died", game_ended: "game_ended" },
 }));
@@ -227,5 +228,17 @@ describe("POST /api/game/[id]/tip", () => {
     });
 
     expect(res.status).toBe(403);
+  });
+
+  it("correct guess announces the Killer's death to everyone", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    dbState.selectResults = [
+      [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
+      [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Killer" }],
+      [{ status: "active" }],
+    ];
+    await postTip(makeRequest({ suspectId: 20 }), { params: Promise.resolve({ id: "G1" }) });
+    expect(mockPublish).toHaveBeenCalledWith("player_died", { player_id: 20 });
   });
 });

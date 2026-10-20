@@ -101,5 +101,10 @@ export async function PATCH(
     );
   }
 
-  return NextResponse.json({ success: true, data: updated });
+  // Never send PIN hashes or lockout counters back to the browser.
+  const { pin_hash, pin_failed_attempts, pin_locked_until, ...safe } = updated;
+  void pin_hash;
+  void pin_failed_attempts;
+  void pin_locked_until;
+  return NextResponse.json({ success: true, data: safe });
 }

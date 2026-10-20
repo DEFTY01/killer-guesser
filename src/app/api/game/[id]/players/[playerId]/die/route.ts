@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
-import { game_players } from "@/db/schema";
+import { game_players, games } from "@/db/schema";
 import { and, eq } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
@@ -71,7 +71,20 @@ export async function PATCH(
 
   const { location, time_of_day } = parsed.data;
 
-  // Update only the record the calling user owns.
+  const [game] = await db
+    .select({ status: games.status })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+  if (game?.status !== "active") {
+    return NextResponse.json(
+      { success: false, error: "Game is not active" },
+      { status: 403 },
+    );
+  }
+
+  // Update only the living record the calling user owns, so repeat calls
+  // cannot overwrite where and when the death happened.
   const [updated] = await db
     .update(game_players)
     .set({
@@ -85,27 +98,38 @@ export async function PATCH(
         eq(game_players.id, numericPlayerId),
         eq(game_players.game_id, gameId),
         eq(game_players.user_id, userId),
+        eq(game_players.is_dead, 0),
       ),
     )
-    .returning();
+    .returning({
+      id: game_players.id,
+      user_id: game_players.user_id,
+      is_dead: game_players.is_dead,
+      died_at: game_players.died_at,
+      died_location: game_players.died_location,
+      died_time_of_day: game_players.died_time_of_day,
+    });
 
   if (!updated) {
     return NextResponse.json(
-      { success: false, error: "Player record not found or access denied" },
+      { success: false, error: "Player record not found, already dead or access denied" },
       { status: 404 },
     );
   }
 
-  // Publish real-time event after successful mutation.
-  if (process.env.ABLY_API_KEY) {
-    const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
-    await channel.publish(ABLY_EVENTS.player_died, {
-      player_id: updated.user_id,
-    });
-  }
-
-  // Check win conditions after every death event.
+  // Check win conditions first so a failed publish cannot skip them.
   await checkGameOver(gameId);
+
+  if (process.env.ABLY_API_KEY) {
+    try {
+      const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+      await channel.publish(ABLY_EVENTS.player_died, {
+        player_id: updated.user_id,
+      });
+    } catch (err) {
+      console.error("[die] player_died publish failed:", err);
+    }
+  }
 
   return NextResponse.json({ success: true, data: updated });
 }

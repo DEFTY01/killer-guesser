@@ -2,14 +2,15 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
-const { mockAuth } = vi.hoisted(() => ({
+const { mockAuth, mockPublish } = vi.hoisted(() => ({
   mockAuth: vi.fn(),
+  mockPublish: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 
 vi.mock("@/lib/ably", () => ({
-  ablyServer: { channels: { get: vi.fn(() => ({ publish: vi.fn().mockResolvedValue(undefined) })) } },
+  ablyServer: { channels: { get: vi.fn(() => ({ publish: mockPublish })) } },
   ABLY_CHANNELS: { game: (id: string) => `game-${id}` },
   ABLY_EVENTS: { player_revived: "player_revived" },
 }));
@@ -19,6 +20,8 @@ const dbState = vi.hoisted(() => ({
   selectResults: [] as unknown[][],
   callIndex: 0,
   updateCallIndex: 0,
+  updateResults: [] as unknown[][],
+  publish: undefined as unknown,
 }));
 
 vi.mock("@/db", () => ({
@@ -35,15 +38,17 @@ vi.mock("@/db", () => ({
       const from = vi.fn(() => ({ where, leftJoin }));
       return { from };
     }),
-    update: vi.fn(() => ({
-      set: vi.fn(() => ({
-        where: vi.fn(() => ({
-          returning: vi.fn().mockResolvedValue([{
-            id: 1, user_id: 20, game_id: "G1", is_dead: 0, is_revived: 1, revived_at: Math.floor(Date.now() / 1000),
-          }]),
+    update: vi.fn(() => {
+      const idx = dbState.updateCallIndex++;
+      const result = dbState.updateResults[idx] ?? [{
+        id: 1, user_id: 20, game_id: "G1", is_dead: 0, is_revived: 1, revived_at: Math.floor(Date.now() / 1000),
+      }];
+      return {
+        set: vi.fn(() => ({
+          where: vi.fn(() => ({ returning: vi.fn().mockResolvedValue(result) })),
         })),
-      })),
-    })),
+      };
+    }),
   },
 }));
 
@@ -51,11 +56,15 @@ vi.mock("@/db/schema", () => ({
   roles: { id: "id", permissions: "permissions", is_evil: "is_evil" },
   game_players: { id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", is_revived: "is_revived", revived_at: "ra", role_id: "rid", last_revive_at: "lra" },
   game_settings: { game_id: "gid", revive_cooldown_minutes: "rcm" },
+  games: { id: "id", status: "status" },
 }));
 
 vi.mock("drizzle-orm", () => ({
   eq: vi.fn(),
   and: vi.fn(),
+  or: vi.fn(),
+  isNull: vi.fn(),
+  lte: vi.fn(),
 }));
 
 vi.mock("@/lib/role-constants", () => ({
@@ -69,6 +78,8 @@ describe("POST /api/game/[id]/players/[playerId]/revive", () => {
     vi.clearAllMocks();
     dbState.callIndex = 0;
     dbState.selectResults = [];
+    dbState.updateCallIndex = 0;
+    dbState.updateResults = [];
     delete process.env.ABLY_API_KEY;
   });
 
@@ -194,6 +205,8 @@ describe("POST /api/game/[id]/players/[playerId]/revive", () => {
       [{ id: 2, is_dead: 1, is_revived: 0, role_is_evil: 0 }],
       // No cooldown settings
       [{ revive_cooldown_minutes: null }],
+      // Game
+      [{ status: "active" }],
     ];
 
     const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
@@ -308,6 +321,7 @@ describe("POST /api/game/[id]/players/[playerId]/revive", () => {
       [{ id: 5, permissions: '["revive_dead"]', is_dead: 0, last_revive_at: null }],
       [{ id: 2, is_dead: 1, is_revived: 0, role_is_evil: 0 }],
       [{ revive_cooldown_minutes: null }],
+      [{ status: "active" }],
     ];
 
     const req = new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" });
@@ -316,8 +330,51 @@ describe("POST /api/game/[id]/players/[playerId]/revive", () => {
     });
 
     expect(res.status).toBe(200);
+    // The public event must not carry role or team of the revived player.
+    const payload = mockPublish.mock.calls[0][1] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(
+      ["game_player_id", "is_revived", "player_id", "revived_at"],
+    );
     // Ably publish should have been called since ABLY_API_KEY is set
     delete process.env.ABLY_API_KEY;
+  });
+
+  const medicRows = () => [
+    [{ id: 5, permissions: '["revive_dead"]', is_dead: 0, last_revive_at: null }],
+    [{ id: 2, is_dead: 1, is_revived: 0, role_is_evil: 0 }],
+    [{ revive_cooldown_minutes: 30 }],
+    [{ status: "active" }],
+  ];
+  const call = () =>
+    postRevive(new NextRequest("http://localhost/api/game/G1/players/2/revive", { method: "POST" }), {
+      params: Promise.resolve({ id: "G1", playerId: "2" }),
+    });
+
+  it("parallel revive that loses the Medic's atomic claim → 403, target untouched", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    dbState.selectResults = medicRows();
+    dbState.updateResults = [[]]; // medic claim matched no row
+    const res = await call();
+    expect(res.status).toBe(403);
+    expect(dbState.updateCallIndex).toBe(1);
+  });
+
+  it("target already revived by someone else → 409 and the Medic's use is restored", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    dbState.selectResults = medicRows();
+    dbState.updateResults = [[{ id: 5 }], []]; // claim ok, target guard fails
+    const res = await call();
+    expect(res.status).toBe(409);
+    expect(dbState.updateCallIndex).toBe(3); // claim, target, restore
+  });
+
+  it("revive after the game ended → 403", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+    const rows = medicRows();
+    rows[3] = [{ status: "closed" }];
+    dbState.selectResults = rows;
+    expect((await call()).status).toBe(403);
+    expect(dbState.updateCallIndex).toBe(0);
   });
 });
 
