@@ -81,9 +81,6 @@ vi.mock("@/lib/ably", () => ({
   },
 }));
 
-vi.mock("@/lib/pollers", () => ({
-  cleanupPoller: vi.fn(),
-}));
 
 import {
   checkGameOver,

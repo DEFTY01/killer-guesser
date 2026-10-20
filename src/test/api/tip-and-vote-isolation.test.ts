@@ -17,6 +17,15 @@ const { mockAuth, mockCheckGameOver } = vi.hoisted(() => ({
   mockCheckGameOver: vi.fn().mockResolvedValue(undefined),
 }));
 
+const votingState = vi.hoisted(() => ({ current: null as unknown }));
+vi.mock("@/lib/votingState", () => ({
+  getVotingState: vi.fn(async () => votingState.current),
+}));
+const closedRound = { open: null, last: null, upcoming: null, currentNumber: 2 };
+const openRound = {
+  open: { date: "2026-01-15", number: 2, openMs: 0, closeMs: Number.MAX_SAFE_INTEGER },
+  last: null, upcoming: null, currentNumber: 2,
+};
 vi.mock("@/lib/auth", () => ({ auth: mockAuth }));
 vi.mock("@/lib/gameEnd", () => ({ checkGameOver: mockCheckGameOver }));
 
@@ -31,16 +40,6 @@ vi.mock("@/lib/role-constants", () => ({
   ROLE_PERMISSIONS: ["see_killer", "revive_dead", "see_votes", "extra_vote", "immunity_once"],
 }));
 
-// ── Hoist voteWindow mock ─────────────────────────────────────────
-const { mockIsVoteWindowOpen, mockResolveVoteWindow } = vi.hoisted(() => ({
-  mockIsVoteWindowOpen: vi.fn().mockReturnValue(false),
-  mockResolveVoteWindow: vi.fn().mockResolvedValue(null),
-}));
-
-vi.mock("@/lib/voteWindow", () => ({
-  resolveVoteWindow: mockResolveVoteWindow,
-  isVoteWindowOpen: mockIsVoteWindowOpen,
-}));
 
 // Track which route is being tested to return correct results
 const dbState = vi.hoisted(() => ({
@@ -109,12 +108,11 @@ import { POST as postVote } from "@/app/api/game/[id]/vote/route";
 
 describe("tip-and-vote-isolation", () => {
   beforeEach(() => {
+    votingState.current = closedRound;
     vi.clearAllMocks();
     dbState.callIndex = 0;
     dbState.selectResults = [];
     delete process.env.ABLY_API_KEY;
-    mockIsVoteWindowOpen.mockReturnValue(false);
-    mockResolveVoteWindow.mockResolvedValue(null);
   });
 
   it("tipping does NOT consume the player's vote for the evening", async () => {
@@ -139,8 +137,7 @@ describe("tip-and-vote-isolation", () => {
     expect(tipData.data.correct).toBe(false);
 
     // Second: vote should still work (player can tip AND vote)
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
+    votingState.current = openRound;
 
     dbState.callIndex = 0;
     dbState.selectResults = [
@@ -169,8 +166,7 @@ describe("tip-and-vote-isolation", () => {
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
 
     // First: vote
-    mockIsVoteWindowOpen.mockReturnValue(true);
-    mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
+    votingState.current = openRound;
 
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic

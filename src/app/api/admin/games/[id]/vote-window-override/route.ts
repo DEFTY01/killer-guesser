@@ -5,6 +5,7 @@ import { vote_window_overrides } from "@/db/schema";
 import { and, desc, eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { sql } from "drizzle-orm";
+import { isValidHhmm } from "@/lib/voteRound";
 
 // ── Zod schema ────────────────────────────────────────────────────
 
@@ -12,12 +13,8 @@ const overrideSchema = z.object({
   day_date: z
     .string()
     .regex(/^\d{4}-\d{2}-\d{2}$/, "Must be YYYY-MM-DD"),
-  window_start: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, "Must be HH:MM"),
-  window_end: z
-    .string()
-    .regex(/^\d{2}:\d{2}$/, "Must be HH:MM"),
+  window_start: z.string().refine(isValidHhmm, "Must be HH:MM (00:00–23:59)"),
+  window_end: z.string().refine(isValidHhmm, "Must be HH:MM (00:00–23:59)"),
 });
 
 // ── GET /api/admin/games/[id]/vote-window-override ────────────────

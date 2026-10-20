@@ -11,6 +11,7 @@ import {
 } from "@/db/schema";
 import { and, eq, inArray } from "drizzle-orm";
 import { activateGameIfReady } from "@/lib/activateGame";
+import { getVotingState } from "@/lib/votingState";
 import type { RolePermission } from "@/lib/role-constants";
 
 // ── Helpers ────────────────────────────────────────────────────────
@@ -108,6 +109,7 @@ export async function GET(
         vote_window_start: games.vote_window_start,
         vote_window_end: games.vote_window_end,
         timezone: games.timezone,
+        vote_closed_day: games.vote_closed_day,
       })
       .from(games)
       .where(eq(games.id, gameId))
@@ -188,12 +190,8 @@ export async function GET(
     }),
   );
 
-  // ── Current game day ──────────────────────────────────────────
-  const nowUnix = Math.floor(Date.now() / 1000);
-  const currentDay = Math.max(
-    1,
-    Math.floor((nowUnix - game.start_time) / 86400) + 1,
-  );
+  // ── Current vote round (same numbering as the vote route) ──────
+  const { currentNumber: currentDay } = await getVotingState(game);
 
   // ── Build base response ───────────────────────────────────────
   const data: {

@@ -6,6 +6,7 @@ import { blobImageSrc } from "@/lib/blob-image";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/Button";
 import type { GameStatus } from "@/types";
+import { localDate } from "@/lib/voteRound";
 
 // ── Types ─────────────────────────────────────────────────────────
 
@@ -127,7 +128,8 @@ export default function GameEditorClient({
   const [timezoneSaving, setTimezoneSaving] = useState(false);
 
   // Per-day override state
-  const todayStr = new Date().toISOString().slice(0, 10);
+  // Overrides are keyed by the game's local calendar date, not UTC.
+  const [todayStr] = useState(() => localDate(Date.now(), initialGame.timezone ?? "UTC"));
   const [overrideDate, setOverrideDate] = useState(todayStr);
   const [overrideStart, setOverrideStart] = useState("");
   const [overrideEnd, setOverrideEnd] = useState("");

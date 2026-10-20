@@ -3,6 +3,7 @@ import { z } from "zod";
 import { db } from "@/db";
 import { games, game_settings, game_players, roles } from "@/db/schema";
 import { generateJoinCode, generatePin, hashPin } from "@/lib/credentials";
+import { isValidHhmm, isValidTimezone } from "@/lib/voteRound";
 import { desc, eq, sql, inArray, and } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { assignTeamsAndRoles } from "@/lib/assignTeamsAndRoles";
@@ -23,15 +24,20 @@ const createGameSchema = z.object({
     .positive("start_time must be a positive unix timestamp"),
   vote_window_start: z
     .string()
-    .regex(/^\d{2}:\d{2}$/, "vote_window_start must be HH:MM")
+    .refine(isValidHhmm, "vote_window_start must be HH:MM")
     .optional()
     .nullable(),
   vote_window_end: z
     .string()
-    .regex(/^\d{2}:\d{2}$/, "vote_window_end must be HH:MM")
+    .refine(isValidHhmm, "vote_window_end must be HH:MM")
     .optional()
     .nullable(),
-  timezone: z.string().min(1).max(100).default("UTC"),
+  timezone: z
+    .string()
+    .min(1)
+    .max(100)
+    .refine(isValidTimezone, "Unknown IANA timezone")
+    .default("UTC"),
   team1_name: z.string().min(1, "team1_name is required").default("Evil"),
   team2_name: z.string().min(1, "team2_name is required").default("Good"),
   /** True if team1 is the Evil team. Defaults to true (team1 is always Evil). */

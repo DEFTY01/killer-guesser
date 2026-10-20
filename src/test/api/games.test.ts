@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
+import { closeGame, deleteGame } from "@/lib/gameEnd";
 
 // ── Hoist mocks ──────────────────────────────────────────────────
 const { mockRequireAdmin, mockTransaction, mockDbSelect, mockDbUpdate, mockDbDelete } = vi.hoisted(() => {
@@ -19,7 +20,7 @@ const { mockRequireAdmin, mockTransaction, mockDbSelect, mockDbUpdate, mockDbDel
       const tx = { insert: txInsert };
       return fn(tx);
     }),
-    mockDbSelect: vi.fn(() => ({ from: fromFn })),
+    mockDbSelect: vi.fn((): unknown => ({ from: fromFn })),
     mockDbUpdate: vi.fn(() => ({ set: setFn })),
     mockDbDelete: vi.fn(() => ({ where: vi.fn().mockResolvedValue(undefined) })),
   };
@@ -249,7 +250,49 @@ describe("PATCH /api/admin/games/[id]", () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
-    expect(data.data.status).toBe("closed");
+    expect(closeGame).toHaveBeenCalledWith("G1", null);
+  });
+
+  it("action='close' on an already closed game → 422, winner untouched", async () => {
+    mockRequireAdmin.mockResolvedValue(true);
+
+    const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "closed" }]);
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    mockDbSelect.mockReturnValue({ from: vi.fn(() => ({ where: whereFn })) });
+    vi.mocked(closeGame).mockClear();
+
+    const res = await patchGame(makeRequest("PATCH", { action: "close", winner_team: "team1" }), {
+      params: Promise.resolve({ id: "G1" }),
+    });
+
+    expect(res.status).toBe(422);
+    expect(closeGame).not.toHaveBeenCalled();
+  });
+
+  it("update_timezone rejects an unknown timezone", async () => {
+    mockRequireAdmin.mockResolvedValue(true);
+    const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    mockDbSelect.mockReturnValue({ from: vi.fn(() => ({ where: whereFn })) });
+
+    const res = await patchGame(
+      makeRequest("PATCH", { action: "update_timezone", timezone: "Mars/Olympus" }),
+      { params: Promise.resolve({ id: "G1" }) },
+    );
+    expect(res.status).toBe(422);
+  });
+
+  it("update_vote_window rejects out-of-range times", async () => {
+    mockRequireAdmin.mockResolvedValue(true);
+    const limitFn = vi.fn().mockResolvedValue([{ id: "G1", status: "active" }]);
+    const whereFn = vi.fn(() => ({ returning: vi.fn().mockResolvedValue([]), limit: limitFn }));
+    mockDbSelect.mockReturnValue({ from: vi.fn(() => ({ where: whereFn })) });
+
+    const res = await patchGame(
+      makeRequest("PATCH", { action: "update_vote_window", vote_window_start: "99:99", vote_window_end: "20:00" }),
+      { params: Promise.resolve({ id: "G1" }) },
+    );
+    expect(res.status).toBe(422);
   });
 
   it("action='delete' → all related rows removed", async () => {
@@ -266,6 +309,6 @@ describe("PATCH /api/admin/games/[id]", () => {
 
     expect(res.status).toBe(200);
     expect(data.data.id).toBe("G1");
-    expect(mockDbDelete).toHaveBeenCalled();
+    expect(deleteGame).toHaveBeenCalledWith("G1");
   });
 });

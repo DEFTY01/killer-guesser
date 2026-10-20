@@ -2,7 +2,6 @@ import { db } from "@/db";
 import { events, game_players, games } from "@/db/schema";
 import { and, eq, gt, lte, sql } from "drizzle-orm";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
-import { cleanupPoller } from "@/lib/pollers";
 
 // ── Internal helpers ──────────────────────────────────────────────
 
@@ -142,7 +141,6 @@ export async function handleGoodWins(
   // for the duration of the (slower) archival queries.
   await archiveAndCleanEvents(gameId);
 
-  cleanupPoller(gameId);
   await publishGameEnded(gameId, goodTeamId);
 }
 
@@ -177,7 +175,6 @@ export async function handleEvilWins(
   // for the duration of the (slower) archival queries.
   await archiveAndCleanEvents(gameId);
 
-  cleanupPoller(gameId);
   await publishGameEnded(gameId, evilTeamId);
 }
 
@@ -217,14 +214,16 @@ export async function deleteGame(gameId: string): Promise<void> {
  *
  * @param gameId - The game's nanoid10 identifier.
  */
-export async function closeGame(gameId: string): Promise<void> {
+export async function closeGame(
+  gameId: string,
+  winnerTeam: "team1" | "team2" | null = null,
+): Promise<void> {
   await db.transaction(async (tx) => {
     await tx
       .update(games)
-      .set({ status: "closed" })
+      .set(winnerTeam ? { status: "closed", winner_team: winnerTeam } : { status: "closed" })
       .where(eq(games.id, gameId));
   });
 
-  cleanupPoller(gameId);
-  await publishGameEnded(gameId, null);
+  await publishGameEnded(gameId, winnerTeam);
 }

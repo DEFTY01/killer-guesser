@@ -9,28 +9,31 @@ import {
   users,
   votes,
 } from "@/db/schema";
-import { and, count, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
 import { activateGameIfReady } from "@/lib/activateGame";
-import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
+import { closeGame, deleteGame } from "@/lib/gameEnd";
+import { closeRound } from "@/lib/voteClose";
+import { getVotingState } from "@/lib/votingState";
+import { isValidHhmm, isValidTimezone } from "@/lib/voteRound";
 
 // ── Zod schema ────────────────────────────────────────────────────
+
+const hhmm = z.string().refine(isValidHhmm, "Must be HH:MM (00:00–23:59)");
 
 const patchGameSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("update_vote_window"),
-    vote_window_start: z
-      .string()
-      .regex(/^\d{2}:\d{2}$/, "Must be HH:MM")
-      .nullable(),
-    vote_window_end: z
-      .string()
-      .regex(/^\d{2}:\d{2}$/, "Must be HH:MM")
-      .nullable(),
+    vote_window_start: hhmm.nullable(),
+    vote_window_end: hhmm.nullable(),
   }),
   z.object({
     action: z.literal("update_timezone"),
-    timezone: z.string().min(1).max(100),
+    timezone: z
+      .string()
+      .min(1)
+      .max(100)
+      .refine(isValidTimezone, "Unknown IANA timezone"),
   }),
   z.object({
     action: z.literal("close_voting"),
@@ -124,8 +127,8 @@ export async function GET(
  * Updates the game state based on the `action` field in the request body:
  *
  * - `"start"` — Activates a scheduled game by setting its status to `"active"`.
- * - `"close_voting"` — Closes the active vote window by nulling both
- *   `vote_window_start` and `vote_window_end` on the game record.
+ * - `"close_voting"` — Ends the vote round that is open right now: tallies it,
+ *   applies the majority rule and keeps the configured window for later days.
  * - `"close"` — Ends the game by setting its status to `"closed"`.
  *   An optional `winner_team` field ("team1" | "team2") may be provided.
  * - `"delete"` — Hard-deletes the game and all related records (game_players,
@@ -151,7 +154,15 @@ export async function PATCH(
 
   // Verify the game exists.
   const [existing] = await db
-    .select({ id: games.id, status: games.status })
+    .select({
+      id: games.id,
+      status: games.status,
+      start_time: games.start_time,
+      timezone: games.timezone,
+      vote_window_start: games.vote_window_start,
+      vote_window_end: games.vote_window_end,
+      vote_closed_day: games.vote_closed_day,
+    })
     .from(games)
     .where(eq(games.id, id))
     .limit(1);
@@ -191,8 +202,8 @@ export async function PATCH(
   }
 
   if (action === "delete") {
-    // Hard-delete the game; related records cascade automatically.
-    await db.delete(games).where(eq(games.id, id));
+    // Hard-delete the game (related records cascade) and tell connected players.
+    await deleteGame(id);
     return NextResponse.json({ success: true, data: { id } });
   }
 
@@ -217,58 +228,29 @@ export async function PATCH(
   }
 
   if (action === "close_voting") {
-    const [existing_game] = await db
-      .select({ vote_window_start: games.vote_window_start })
-      .from(games)
-      .where(eq(games.id, id))
-      .limit(1);
-
-    const [updated] = await db
-      .update(games)
-      .set({ vote_window_start: null, vote_window_end: null })
-      .where(eq(games.id, id))
-      .returning();
-
-    // Publish VOTE_CLOSED with vote results on the game channel.
-    if (process.env.ABLY_API_KEY && existing_game?.vote_window_start) {
-      const nowUnix = Math.floor(Date.now() / 1000);
-      const currentDay = await db
-        .select({ start_time: games.start_time })
-        .from(games)
-        .where(eq(games.id, id))
-        .limit(1)
-        .then(([g]) =>
-          g ? Math.max(1, Math.floor((nowUnix - g.start_time) / 86400) + 1) : 1,
-        );
-
-      const voteResults = await db
-        .select({
-          target_id: votes.target_id,
-          target_name: users.name,
-          vote_count: count(votes.id),
-        })
-        .from(votes)
-        .innerJoin(users, eq(votes.target_id, users.id))
-        .where(and(eq(votes.game_id, id), eq(votes.day, currentDay)))
-        .groupBy(votes.target_id, users.name);
-
-      const channel = ablyServer.channels.get(ABLY_CHANNELS.game(id));
-      await channel.publish(ABLY_EVENTS.vote_closed, { results: voteResults });
+    // Ends the round that is open right now, as if its window had run out.
+    const state = await getVotingState(existing);
+    if (!state.open) {
+      return NextResponse.json(
+        { success: false, error: "No vote round is open" },
+        { status: 422 },
+      );
     }
-
+    await closeRound(id, state.open);
+    const [updated] = await db.select().from(games).where(eq(games.id, id)).limit(1);
     return NextResponse.json({ success: true, data: updated });
   }
 
   // action === "close"
-  const closeData = parsed.data as { action: "close"; winner_team?: string | null };
-  const [updated] = await db
-    .update(games)
-    .set({
-      status: "closed",
-      winner_team: closeData.winner_team ?? null,
-    })
-    .where(eq(games.id, id))
-    .returning();
+  if (existing.status === "closed") {
+    return NextResponse.json(
+      { success: false, error: "Game is already closed" },
+      { status: 422 },
+    );
+  }
+  const closeData = parsed.data as { action: "close"; winner_team?: "team1" | "team2" | null };
+  await closeGame(id, closeData.winner_team ?? null);
+  const [updated] = await db.select().from(games).where(eq(games.id, id)).limit(1);
 
   return NextResponse.json({ success: true, data: updated });
 }
