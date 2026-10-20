@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/db";
 import { games, game_players, users } from "@/db/schema";
-import { and, eq, or } from "drizzle-orm";
+import { and, eq, or, sql } from "drizzle-orm";
 import { normalizeJoinCode, JOIN_CODE_LENGTH } from "@/lib/credentials";
 
 /**
  * GET /api/login/game?code=ABC234
  *
  * Public step 1 of player login: resolves a game code to the avatars that can
- * sign in to it. Only active or scheduled games are returned, and unknown
+ * sign in to it, and whether each already has a PIN (otherwise the player
+ * chooses one on first login). Only active or scheduled games are returned, and unknown
  * codes get the same 404 as closed ones.
  */
 export async function GET(req: NextRequest) {
@@ -26,6 +27,7 @@ export async function GET(req: NextRequest) {
       id: users.id,
       nickname: users.name,
       avatarUrl: users.avatar_url,
+      hasPin: sql<number>`${game_players.pin_hash} is not null`,
     })
     .from(games)
     .innerJoin(game_players, eq(game_players.game_id, games.id))
@@ -56,6 +58,7 @@ export async function GET(req: NextRequest) {
           id: String(r.id),
           nickname: r.nickname,
           avatarUrl: r.avatarUrl,
+          hasPin: Boolean(r.hasPin),
         })),
       },
     },

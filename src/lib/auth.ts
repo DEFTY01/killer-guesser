@@ -24,12 +24,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
         gameCode: { label: "Game code", type: "text" },
         userId: { label: "User ID", type: "text" },
         pin: { label: "PIN", type: "password" },
+        setPin: { label: "Choose PIN", type: "text" },
       },
       async authorize(credentials) {
         return verifyPlayerLogin({
           gameCode: String(credentials?.gameCode ?? ""),
           userId: Number(credentials?.userId),
           pin: String(credentials?.pin ?? ""),
+          setPin: credentials?.setPin === "1",
         });
       },
     }),

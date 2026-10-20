@@ -39,4 +39,4 @@ In GitHub → Settings → Branches → Add rule for `main`:
 
 Apply schema changes to a database with `npm run db:push` (this is what CI does). The Drizzle migration journal in `src/db/migrations/` is not complete enough to build a fresh database with `npm run db:migrate`: there are two `0013` migrations and some hand-written ones are missing from the journal. Keep adding migrations with `npm run db:generate`, but treat `db:push` as the source of truth until the journal is baselined.
 
-New games get a join code and every player a PIN when the game is created. Games created before that have no PIN until an admin opens the game page and uses "New PIN" for each player.
+New games get a join code when they are created. Players choose their own 4-digit PIN the first time they sign in; the admin sees "PIN set" or "No PIN yet" per player on the game page and can reset a PIN (the player chooses a new one) or set one directly. Nothing needs to be handed out per player except the game code.

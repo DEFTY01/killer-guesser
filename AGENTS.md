@@ -11,7 +11,7 @@ Real-time social-deduction game for ski trips: Next.js 16 App Router, TypeScript
 - Migrations: `src/db/migrations/` (generated, never hand-edit). Schema: `src/db/schema.ts`.
 - Team/role assignment: `src/lib/assignTeamsAndRoles.ts`; win conditions: `src/lib/gameEnd.ts`.
 - Vote rounds (overnight windows, DST, per-day overrides): `src/lib/voteRound.ts`, `votingState.ts`; tally and elimination: `voteClose.ts`. Use these; never derive the vote day from `start_time` arithmetic.
-- Player login is game code + per-game PIN: `src/lib/playerLogin.ts`, `credentials.ts`.
+- Player login is game code + per-game PIN: `src/lib/playerLogin.ts`, `credentials.ts`. Players choose their own PIN on first login (`setPin`); the admin only resets or sets it. Never generate or display PINs for players.
 
 ## Running and verifying
 

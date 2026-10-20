@@ -56,7 +56,7 @@ vi.mock("drizzle-orm", () => ({
   lte: vi.fn(),
 }));
 
-import { verifyPlayerLogin, INVALID_LOGIN } from "@/lib/playerLogin";
+import { verifyPlayerLogin, INVALID_LOGIN, PIN_NOT_SET } from "@/lib/playerLogin";
 
 let pinHash = "";
 const base = () => ({
@@ -124,11 +124,37 @@ describe("verifyPlayerLogin", () => {
     ).rejects.toThrow(INVALID_LOGIN);
   });
 
-  it("player without an issued PIN cannot log in", async () => {
+  it("no PIN yet and no explicit choice → PIN_NOT_SET, nothing is saved", async () => {
     state.row = { ...base(), pinHash: null };
     await expect(
-      verifyPlayerLogin({ gameCode: "ABC234", userId: 3, pin: "0420" }),
-    ).rejects.toThrow(/No PIN set/);
+      verifyPlayerLogin({ gameCode: "ABC234", userId: 3, pin: "4321" }),
+    ).rejects.toThrow(PIN_NOT_SET);
+    expect(state.updates).toHaveLength(0);
+  });
+
+  it("first login with setPin: the chosen PIN is stored (hashed) and the player is in", async () => {
+    state.row = { ...base(), pinHash: null };
+    state.claim = { attempts: 0 };
+    const user = await verifyPlayerLogin({ gameCode: "ABC234", userId: 3, pin: "4321", setPin: true });
+    expect(user).toMatchObject({ id: "3", activeGameId: "G1" });
+    const saved = state.updates[0].pin_hash as string;
+    expect(saved).toMatch(/^[0-9a-f]+:[0-9a-f]+$/);
+    expect(saved).not.toContain("4321");
+  });
+
+  it("parallel first claim that loses the race → refused", async () => {
+    state.row = { ...base(), pinHash: null };
+    state.claim = null;
+    await expect(
+      verifyPlayerLogin({ gameCode: "ABC234", userId: 3, pin: "4321", setPin: true }),
+    ).rejects.toThrow(INVALID_LOGIN);
+  });
+
+  it("setPin on a player who already has a PIN is just a normal (verified) login", async () => {
+    await expect(
+      verifyPlayerLogin({ gameCode: "ABC234", userId: 3, pin: "9999", setPin: true }),
+    ).rejects.toThrow(INVALID_LOGIN);
+    expect(state.updates.some((u) => u.pin_hash !== undefined)).toBe(false);
   });
 
   it("malformed PINs are rejected before touching the database", async () => {

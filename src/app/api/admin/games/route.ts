@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { z } from "zod";
 import { db } from "@/db";
 import { games, game_settings, game_players, roles } from "@/db/schema";
-import { generateJoinCode, generatePin, hashPin } from "@/lib/credentials";
+import { generateJoinCode } from "@/lib/credentials";
 import { isValidHhmm, isValidTimezone } from "@/lib/voteRound";
 import { desc, eq, sql, inArray, and } from "drizzle-orm";
 import { requireAdmin } from "@/lib/auth-helpers";
@@ -240,17 +240,6 @@ export async function POST(req: NextRequest) {
     team2SpecialCount,
   });
 
-  // PINs are shown to the admin once; only their hashes are stored.
-  const issuedPins = playerAssignments.map((p) => ({
-    userId: p.userId,
-    pin: generatePin(),
-  }));
-  const pinHashes = new Map(
-    await Promise.all(
-      issuedPins.map(async (i) => [i.userId, await hashPin(i.pin)] as const),
-    ),
-  );
-
   const createGame = () => db.transaction(async (tx) => {
     const [game] = await tx
       .insert(games)
@@ -287,7 +276,6 @@ export async function POST(req: NextRequest) {
           user_id: p.userId,
           team: p.team,
           role_id: p.roleId,
-          pin_hash: pinHashes.get(p.userId) ?? null,
         })),
       );
     }
@@ -313,7 +301,7 @@ export async function POST(req: NextRequest) {
   }
 
   return NextResponse.json(
-    { success: true, data: { ...newGame, pins: issuedPins } },
+    { success: true, data: newGame },
     { status: 201 },
   );
 }
