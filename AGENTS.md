@@ -1,5 +1,5 @@
 <!-- bmad:context -->
-<!-- Verified 2026-10-20 against 14dd2e2. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
+<!-- Verified 2026-10-20 against e4e07d8. Managed by bmad-project-context; edits inside this block are replaced on refresh. Keep anything you want preserved outside the markers. -->
 
 ## killer-guesser (Summit of Lies)
 
@@ -10,6 +10,8 @@ Real-time social-deduction game for ski trips: Next.js 16 App Router, TypeScript
 - Read `AGENT_MAP.md` before navigating; update it after adding, moving or removing files.
 - Migrations: `src/db/migrations/` (generated, never hand-edit). Schema: `src/db/schema.ts`.
 - Team/role assignment: `src/lib/assignTeamsAndRoles.ts`; win conditions: `src/lib/gameEnd.ts`.
+- Vote rounds (overnight windows, DST, per-day overrides): `src/lib/voteRound.ts`, `votingState.ts`; tally and elimination: `voteClose.ts`. Use these; never derive the vote day from `start_time` arithmetic.
+- Player login is game code + per-game PIN: `src/lib/playerLogin.ts`, `credentials.ts`.
 
 ## Running and verifying
 
@@ -27,6 +29,9 @@ Real-time social-deduction game for ski trips: Next.js 16 App Router, TypeScript
 ## Known pitfalls
 
 - Never commit real secrets to `.env.example`; use placeholders.
+- Never send a bare `.select()` of `game_players` to a browser: it carries `pin_hash`. Use `safeGamePlayerColumns` (`src/db/gamePlayerColumns.ts`).
+- Never put other players' role colours, teams or roles in an API response or a realtime event: each role colour is unique, so it reveals the Killer.
+- `drizzle-kit migrate` cannot build a fresh database (duplicate `0013` migrations, hand-written ones missing from the journal); build local and CI databases with `npm run db:push`, and add new schema changes with `npm run db:generate`.
 - Tests mock the db chain; type mock return as `unknown` (see `src/test/unit/gameEnd.test.ts`) or `tsc` fails.
 <!-- /bmad:context -->
 
