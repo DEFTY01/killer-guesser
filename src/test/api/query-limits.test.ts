@@ -33,6 +33,7 @@ vi.mock("@/lib/role-constants", () => ({
   ROLE_PERMISSIONS: ["see_killer", "revive_dead", "see_votes", "extra_vote", "immunity_once"],
 }));
 vi.mock("drizzle-orm", () => ({
+  lt: vi.fn(),
   eq: vi.fn(),
   and: vi.fn(),
   sql: vi.fn(),

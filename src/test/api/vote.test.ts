@@ -114,6 +114,7 @@ vi.mock("@/lib/voteWindow", () => ({
 }));
 
 vi.mock("drizzle-orm", () => ({
+  lt: vi.fn(),
   eq: vi.fn(),
   and: vi.fn(),
   sql: vi.fn(),
@@ -246,7 +247,7 @@ describe("GET /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with no window set
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil" }],
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", vote_closed_day: 0 }],
       // Caller row
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // Tally (empty)
@@ -266,7 +267,7 @@ describe("GET /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with no window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil" }],
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, team1_name: "Good", team2_name: "Evil", vote_closed_day: 0 }],
       // Caller row with see_votes
       [{ game_player_id: 1, permissions: '["see_votes"]', is_dead: 0, revived_at: null }],
       // Tally
@@ -337,7 +338,7 @@ describe("GET /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil", vote_closed_day: 0 }],
       // Caller row
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // Lazy close: update().set().where().returning() returns the cleared game ID
@@ -360,6 +361,30 @@ describe("GET /api/game/[id]/vote", () => {
     expect(data.data.windowOpen).toBe(false);
   });
 
+  it("lazy close: day already tallied → does not close again or clear the window", async () => {
+    mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
+
+    const now = new Date();
+    const pastEndH = String((now.getUTCHours() - 1 + 24) % 24).padStart(2, "0");
+    const pastEndM = String(now.getUTCMinutes()).padStart(2, "0");
+    const pastStartH = String((now.getUTCHours() - 2 + 24) % 24).padStart(2, "0");
+
+    dbMock.selectResults = [
+      // start_time is exactly one day ago → today is game day 2, already closed
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil", timezone: "UTC", vote_closed_day: 2 }],
+      [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
+    ];
+
+    const { db } = await import("@/db");
+    const updateMock = db.update as ReturnType<typeof vi.fn>;
+    updateMock.mockClear();
+
+    const req = new NextRequest("http://localhost/api/game/G1/vote");
+    await getVote(req, { params: Promise.resolve({ id: "G1" }) });
+
+    expect(updateMock).not.toHaveBeenCalled();
+  });
+
   it("lazy close: window ended + plurality elimination → updates game", async () => {
     process.env.ABLY_API_KEY = "test-key";
     mockAuth.mockResolvedValue({ user: { id: "10", role: "player" } });
@@ -372,7 +397,7 @@ describe("GET /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil", vote_closed_day: 0 }],
       // Caller row
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // Tally: player 20 has 2 votes, player 10 has 1 vote → plurality winner is 20
@@ -406,7 +431,7 @@ describe("GET /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil", vote_closed_day: 0 }],
       // Caller row
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // Tally: tie — both candidates have 3 votes, neither can be eliminated
@@ -455,7 +480,7 @@ describe("GET /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with ended window
-      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil" }],
+      [{ id: "G1", name: "Test", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `${pastStartH}:${pastEndM}`, vote_window_end: `${pastEndH}:${pastEndM}`, team1_name: "Good", team2_name: "Evil", vote_closed_day: 0 }],
       // Caller row
       [{ game_player_id: 1, permissions: null, is_dead: 0, revived_at: null }],
       // Tally: Alice has the most votes (4) but only 4/10 = 40% — no majority

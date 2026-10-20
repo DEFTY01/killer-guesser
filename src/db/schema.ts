@@ -53,6 +53,8 @@ export const games = sqliteTable("games", {
   /** 1 = team1 is the Evil team (default). 0 = team2 is the Evil team. */
   evil_team_is_team1: integer("evil_team_is_team1").notNull().default(1),
   winner_team: text("winner_team"),
+  /** Last game day whose vote has been tallied; the window itself stays configured. */
+  vote_closed_day: integer("vote_closed_day").notNull().default(0),
   created_at: integer("created_at")
     .notNull()
     .default(sql`(unixepoch())`),

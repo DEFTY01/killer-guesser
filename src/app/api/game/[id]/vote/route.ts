@@ -3,7 +3,7 @@ import { z } from "zod";
 import { auth } from "@/lib/auth";
 import { db } from "@/db";
 import { game_players, games, roles, users, votes } from "@/db/schema";
-import { and, count, eq, sql } from "drizzle-orm";
+import { and, count, eq, lt, sql } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
@@ -134,6 +134,7 @@ export async function GET(
       team1_name: games.team1_name,
       team2_name: games.team2_name,
       timezone: games.timezone,
+      vote_closed_day: games.vote_closed_day,
     })
     .from(games)
     .where(eq(games.id, gameId))
@@ -188,19 +189,16 @@ export async function GET(
   if (
     vote_window_start &&
     vote_window_end &&
+    game.vote_closed_day < day &&
     isWindowEnded(vote_window_end, timezone) &&
     !isWindowOpen(vote_window_start, vote_window_end, timezone)
   ) {
-    // Atomically clear the window to prevent concurrent re-processing.
+    // Atomically mark today as closed to prevent concurrent re-processing.
+    // The window itself stays configured so voting reopens on the next day.
     const [cleared] = await db
       .update(games)
-      .set({ vote_window_start: null, vote_window_end: null })
-      .where(
-        and(
-          eq(games.id, gameId),
-          eq(games.vote_window_start, vote_window_start),
-        ),
-      )
+      .set({ vote_closed_day: day })
+      .where(and(eq(games.id, gameId), lt(games.vote_closed_day, day)))
       .returning({ id: games.id });
 
     // Tally votes once — reused for both close logic (first caller) and response.
