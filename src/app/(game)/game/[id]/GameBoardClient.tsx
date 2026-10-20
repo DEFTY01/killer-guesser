@@ -679,6 +679,7 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
         if (json.success) {
           const boardData = json.data as BoardData;
           setData(boardData);
+          setError(null);
           if (boardData.votes) {
             const playerMap = new Map(
               boardData.players.map((p) => [p.user_id, p.name]),
@@ -704,6 +705,20 @@ export default function GameBoardClient({ gameId }: GameBoardClientProps) {
 
   useEffect(() => {
     fetchBoard();
+  }, [fetchBoard]);
+
+  // Phones sleep and drop realtime messages; resync when the tab is visible
+  // or the network returns so the board never stays stale.
+  useEffect(() => {
+    const resync = () => {
+      if (document.visibilityState === "visible") fetchBoard();
+    };
+    document.addEventListener("visibilitychange", resync);
+    window.addEventListener("online", resync);
+    return () => {
+      document.removeEventListener("visibilitychange", resync);
+      window.removeEventListener("online", resync);
+    };
   }, [fetchBoard]);
 
   // ── Show role reveal on first load (once per session) ───────

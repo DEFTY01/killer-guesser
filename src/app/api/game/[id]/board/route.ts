@@ -93,22 +93,69 @@ export async function GET(
   // Auto-activate if start_time has passed
   await activateGameIfReady(gameId);
 
-  // ── Load game ─────────────────────────────────────────────────
-  const [game] = await db
-    .select({
-      id: games.id,
-      name: games.name,
-      status: games.status,
-      start_time: games.start_time,
-      team1_name: games.team1_name,
-      team2_name: games.team2_name,
-      vote_window_start: games.vote_window_start,
-      vote_window_end: games.vote_window_end,
-      timezone: games.timezone,
-    })
-    .from(games)
-    .where(eq(games.id, gameId))
-    .limit(1);
+  // ── Load game, settings, caller and players in parallel ───────
+  // Team membership is intentionally omitted from the player list — it is
+  // private and must not be visible to any participant during an active game.
+  const [[game], [settings], [callerRow], players] = await Promise.all([
+    db
+      .select({
+        id: games.id,
+        name: games.name,
+        status: games.status,
+        start_time: games.start_time,
+        team1_name: games.team1_name,
+        team2_name: games.team2_name,
+        vote_window_start: games.vote_window_start,
+        vote_window_end: games.vote_window_end,
+        timezone: games.timezone,
+      })
+      .from(games)
+      .where(eq(games.id, gameId))
+      .limit(1),
+    db
+      .select({
+        murder_item_url: game_settings.murder_item_url,
+        murder_item_name: game_settings.murder_item_name,
+        death_animation_delay_ms: game_settings.death_animation_delay_ms,
+      })
+      .from(game_settings)
+      .where(eq(game_settings.game_id, gameId))
+      .limit(1),
+    db
+      .select({
+        game_player_id: game_players.id,
+        permissions: roles.permissions,
+        role_name: roles.name,
+        role_color: roles.color_hex,
+        role_description: roles.description,
+        team: game_players.team,
+        is_dead: game_players.is_dead,
+        is_revived: game_players.is_revived,
+        revived_at: game_players.revived_at,
+        has_tipped: game_players.has_tipped,
+      })
+      .from(game_players)
+      .leftJoin(roles, eq(game_players.role_id, roles.id))
+      .where(
+        and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
+      )
+      .limit(1),
+    db
+      .select({
+        id: game_players.id,
+        user_id: game_players.user_id,
+        name: users.name,
+        avatar_url: users.avatar_url,
+        is_dead: game_players.is_dead,
+        is_revived: game_players.is_revived,
+        revived_at: game_players.revived_at,
+      })
+      .from(game_players)
+      .innerJoin(users, eq(game_players.user_id, users.id))
+      .where(eq(game_players.game_id, gameId))
+      .orderBy(users.name)
+      .limit(50),
+  ]);
 
   if (!game) {
     return NextResponse.json(
@@ -116,38 +163,6 @@ export async function GET(
       { status: 404 },
     );
   }
-
-  // ── Load settings ─────────────────────────────────────────────
-  const [settings] = await db
-    .select({
-      murder_item_url: game_settings.murder_item_url,
-      murder_item_name: game_settings.murder_item_name,
-      death_animation_delay_ms: game_settings.death_animation_delay_ms,
-    })
-    .from(game_settings)
-    .where(eq(game_settings.game_id, gameId))
-    .limit(1);
-
-  // ── Verify caller is a participant and load their permissions ──
-  const [callerRow] = await db
-    .select({
-      game_player_id: game_players.id,
-      permissions: roles.permissions,
-      role_name: roles.name,
-      role_color: roles.color_hex,
-      role_description: roles.description,
-      team: game_players.team,
-      is_dead: game_players.is_dead,
-      is_revived: game_players.is_revived,
-      revived_at: game_players.revived_at,
-      has_tipped: game_players.has_tipped,
-    })
-    .from(game_players)
-    .leftJoin(roles, eq(game_players.role_id, roles.id))
-    .where(
-      and(eq(game_players.game_id, gameId), eq(game_players.user_id, userId)),
-    )
-    .limit(1);
 
   if (!callerRow) {
     return NextResponse.json(
@@ -157,25 +172,6 @@ export async function GET(
   }
 
   const callerPermissions = parsePermissions(callerRow.permissions);
-
-  // ── Load all players ──────────────────────────────────────────
-  // Team membership is intentionally omitted from the player list — it is
-  // private and must not be visible to any participant during an active game.
-  const players = await db
-    .select({
-      id: game_players.id,
-      user_id: game_players.user_id,
-      name: users.name,
-      avatar_url: users.avatar_url,
-      is_dead: game_players.is_dead,
-      is_revived: game_players.is_revived,
-      revived_at: game_players.revived_at,
-    })
-    .from(game_players)
-    .innerJoin(users, eq(game_players.user_id, users.id))
-    .where(eq(game_players.game_id, gameId))
-    .orderBy(users.name)
-    .limit(50);
 
   // Other players' role colours are never sent: each role has its own colour,
   // so they would reveal the Killer to anyone reading the network response.
