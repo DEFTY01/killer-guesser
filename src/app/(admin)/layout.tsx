@@ -25,7 +25,7 @@ export default async function AdminLayout({
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-950 flex flex-col">
+    <div className="min-h-dvh bg-gray-50 dark:bg-gray-950 flex flex-col">
       {/* ── Top header ─────────────────────────────────────────────── */}
       <header
         className="fixed top-0 inset-x-0 z-40 border-b border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 shadow-sm"

@@ -20,7 +20,7 @@ export default async function GameLayout({
   const user = session.user;
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-indigo-50 to-purple-50 flex flex-col">
+    <div className="min-h-dvh bg-gradient-to-br from-indigo-50 to-purple-50 flex flex-col">
       {/* ── Top header ─────────────────────────────────────────── */}
       <header
         className="fixed top-0 inset-x-0 z-40 border-b border-white/20 dark:border-white/10 bg-white/80 dark:bg-gray-900/80 backdrop-blur-md shadow-sm"

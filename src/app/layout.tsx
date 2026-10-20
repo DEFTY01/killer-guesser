@@ -1,11 +1,19 @@
 import type { Metadata, Viewport } from "next";
 import { GeistSans } from "geist/font/sans";
 import { GeistMono } from "geist/font/mono";
+import { Cinzel } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { db } from "@/db";
 import { app_settings } from "@/db/schema";
 import { eq } from "drizzle-orm";
+
+const cinzel = Cinzel({
+  subsets: ["latin"],
+  weight: ["400", "600", "700"],
+  variable: "--font-cinzel",
+  display: "swap",
+});
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -60,21 +68,9 @@ export default async function RootLayout({
             __html: `(function(){try{var t=localStorage.getItem("theme");if(t==="dark"||t==="light"){document.documentElement.classList.add(t)}else if(!t||t==="system"){if(window.matchMedia("(prefers-color-scheme:dark)").matches){document.documentElement.classList.add("dark")}}}catch(e){}})()`,
           }}
         />
-        {/* Cinzel display font for headings — loaded at runtime from Google Fonts */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link
-          rel="preconnect"
-          href="https://fonts.gstatic.com"
-          crossOrigin=""
-        />
-        {/* eslint-disable-next-line @next/next/no-page-custom-font */}
-        <link
-          href="https://fonts.googleapis.com/css2?family=Cinzel:wght@400;600;700&display=swap"
-          rel="stylesheet"
-        />
       </head>
       <body
-        className={`${GeistSans.variable} ${GeistMono.variable} antialiased night-bg overflow-x-hidden`}
+        className={`${GeistSans.variable} ${GeistMono.variable} ${cinzel.variable} antialiased night-bg overflow-x-hidden`}
         style={
           {
             ...(bgLightUrl

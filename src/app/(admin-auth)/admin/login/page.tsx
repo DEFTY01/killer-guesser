@@ -48,7 +48,7 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-gray-950 p-4">
+    <main className="flex min-h-dvh items-center justify-center bg-gray-950 p-4">
       <div className="w-full max-w-sm rounded-2xl bg-gray-900 p-8 shadow-xl">
         <div className="mb-6 flex items-center gap-3">
           <Link
