@@ -3,16 +3,25 @@ import { db } from "@/db";
 import { users } from "@/db/schema";
 import { playerRegisterSchema } from "@/lib/validations";
 import { eq } from "drizzle-orm";
+import { auth } from "@/lib/auth";
+import { requireAdmin } from "@/lib/auth-helpers";
 
 const SESSION_TTL_S = 24 * 60 * 60; // 24 hours in seconds
 
 /**
  * POST /api/player
  *
- * Create a new player user and issue a session token.
+ * Create a new player user and issue a session token. Admin only.
  * Body: { nickname: string }
  */
 export async function POST(req: NextRequest) {
+  if (!(await requireAdmin())) {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized" },
+      { status: 403 }
+    );
+  }
+
   const body = await req.json().catch(() => null);
   const parsed = playerRegisterSchema.safeParse(body);
 
@@ -54,6 +63,13 @@ export async function POST(req: NextRequest) {
  * Retrieve the player for the given user ID.
  */
 export async function GET(req: NextRequest) {
+  if (!(await auth())?.user) {
+    return NextResponse.json(
+      { success: false, error: "Unauthorized" },
+      { status: 401 }
+    );
+  }
+
   const id = req.nextUrl.searchParams.get("id");
   if (!id) {
     return NextResponse.json(

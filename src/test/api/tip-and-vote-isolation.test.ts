@@ -74,7 +74,7 @@ vi.mock("@/db", () => ({
       set: vi.fn(() => ({
         where: vi.fn(() => {
           const p = Promise.resolve([]);
-          return Object.assign(p, { returning: vi.fn().mockResolvedValue([]) });
+          return Object.assign(p, { returning: vi.fn().mockResolvedValue([{ id: 1 }]) });
         }),
       })),
     })),
@@ -123,6 +123,7 @@ describe("tip-and-vote-isolation", () => {
     dbState.selectResults = [
       [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
       [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Survivor" }],
+      [{ status: "active" }],
       [{ name: "Alice" }],
     ];
     dbState.callIndex = 0;
@@ -143,9 +144,10 @@ describe("tip-and-vote-isolation", () => {
     dbState.callIndex = 0;
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       // Caller is alive-after-revival (undead: is_dead=0, is_revived=1, can vote)
       [{ id: 1, is_dead: 0, is_revived: 1, revived_at: Math.floor(Date.now() / 1000) }],
+      [{ id: 99 }], // target is an alive participant
       [], // no existing vote
       [{ name: "Alice", avatar_url: null }],
       [{ name: "Bob", avatar_url: null }],
@@ -171,8 +173,9 @@ describe("tip-and-vote-isolation", () => {
 
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
+      [{ id: 99 }], // target is an alive participant
       [], // no existing vote
       [{ name: "Alice", avatar_url: null }],
       [{ name: "Bob", avatar_url: null }],
@@ -192,6 +195,7 @@ describe("tip-and-vote-isolation", () => {
     dbState.selectResults = [
       [{ id: 1, is_dead: 0, revived_at: null, has_tipped: 0, role_name: "Villager" }],
       [{ id: 2, user_id: 20, is_dead: 0, revived_at: null, role_name: "Survivor" }],
+      [{ status: "active" }],
       [{ name: "Alice" }],
     ];
 

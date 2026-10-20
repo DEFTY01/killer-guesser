@@ -512,7 +512,7 @@ describe("POST /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game lookup - no active window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: null, vote_window_end: null }],
     ];
 
     const req = new NextRequest("http://localhost/api/game/G1/vote", {
@@ -534,7 +534,7 @@ describe("POST /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       // Caller is dead, no revival
       [{ id: 1, is_dead: 1, revived_at: null }],
     ];
@@ -556,9 +556,11 @@ describe("POST /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       // Caller is alive
       [{ id: 1, is_dead: 0, revived_at: null }],
+      // Target is an alive participant
+      [{ id: 99 }],
       // Voter user info
       [{ name: "Alice", avatar_url: null }],
       // Target user info
@@ -609,8 +611,10 @@ describe("POST /api/game/[id]/vote", () => {
     mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
+      // Target is an alive participant
+      [{ id: 99 }],
       [{ name: "Alice", avatar_url: null }],
       [{ name: "Charlie", avatar_url: null }],
     ];
@@ -662,7 +666,7 @@ describe("POST /api/game/[id]/vote", () => {
     mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       [], // caller not a participant
     ];
 
@@ -684,8 +688,10 @@ describe("POST /api/game/[id]/vote", () => {
     mockResolveVoteWindow.mockResolvedValue({ start: "12:00", end: "13:00" });
 
     dbMock.selectResults = [
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
+      // Target is an alive participant
+      [{ id: 99 }],
       [{ name: "Alice" }],
       [{ name: "Bob" }],
     ];
@@ -726,7 +732,7 @@ describe("POST /api/game/[id]/vote", () => {
 
     dbMock.selectResults = [
       // Game with open window
-      [{ id: "G1", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
+      [{ id: "G1", status: "active", start_time: Math.floor(Date.now() / 1000) - 86400, vote_window_start: `12:00`, vote_window_end: `13:00`, timezone: "UTC" }],
       // Caller is alive but has see_killer permission (e.g. the Spy / Seer role)
       [{ id: 1, is_dead: 0, revived_at: null, permissions: '["see_killer"]' }],
     ];

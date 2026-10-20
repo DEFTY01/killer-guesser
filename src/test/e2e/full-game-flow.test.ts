@@ -183,8 +183,9 @@ describe("full-game-flow (API-level)", () => {
 
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic
-      [{ ...makeGameData(), vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
+      [{ ...makeGameData(), status: "active", vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       [{ id: 2, is_dead: 0, revived_at: null }],
+      [{ id: 99 }], // target is an alive participant
       [], // no existing vote
       [{ name: "Survivor1", avatar_url: null }],
       [{ name: "Killer", avatar_url: null }],
@@ -207,8 +208,9 @@ describe("full-game-flow (API-level)", () => {
 
     dbState.selectResults = [
       // Game — null vote_window to avoid triggering lazy close logic
-      [{ ...makeGameData(), vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
+      [{ ...makeGameData(), status: "active", vote_window_start: null, vote_window_end: null, timezone: "UTC" }],
       [{ id: 1, is_dead: 0, revived_at: null }],
+      [{ id: 99 }], // target is an alive participant
       [], // no existing vote
       [{ name: "Killer", avatar_url: null }],
       [{ name: "Killer", avatar_url: null }],

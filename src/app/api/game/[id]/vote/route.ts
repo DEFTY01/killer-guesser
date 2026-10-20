@@ -591,6 +591,7 @@ export async function POST(
   const [game] = await db
     .select({
       id: games.id,
+      status: games.status,
       start_time: games.start_time,
       vote_window_start: games.vote_window_start,
       vote_window_end: games.vote_window_end,
@@ -604,6 +605,13 @@ export async function POST(
     return NextResponse.json(
       { success: false, error: "Game not found" },
       { status: 404 },
+    );
+  }
+
+  if (game.status !== "active") {
+    return NextResponse.json(
+      { success: false, error: "Game is not active" },
+      { status: 403 },
     );
   }
 
@@ -653,6 +661,26 @@ export async function POST(
     return NextResponse.json(
       { success: false, error: "Players with killer knowledge cannot vote" },
       { status: 403 },
+    );
+  }
+
+  // ── Target must be a living participant ──────────────────────
+  const [targetPlayer] = await db
+    .select({ id: game_players.id })
+    .from(game_players)
+    .where(
+      and(
+        eq(game_players.game_id, gameId),
+        eq(game_players.user_id, targetId),
+        eq(game_players.is_dead, 0),
+      ),
+    )
+    .limit(1);
+
+  if (!targetPlayer) {
+    return NextResponse.json(
+      { success: false, error: "Target is not an alive participant" },
+      { status: 422 },
     );
   }
 
