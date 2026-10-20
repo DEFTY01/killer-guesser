@@ -1,8 +1,9 @@
 import { db } from "@/db";
 import { users, game_players, games } from "@/db/schema";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq, isNull, lte, or, sql } from "drizzle-orm";
 import {
   MAX_PIN_ATTEMPTS,
+  PIN_LENGTH,
   PIN_LOCK_SECONDS,
   normalizeJoinCode,
   verifyPin,
@@ -26,7 +27,7 @@ export type PlayerLoginInput = {
  */
 export async function verifyPlayerLogin({ gameCode, userId, pin }: PlayerLoginInput) {
   const code = normalizeJoinCode(gameCode);
-  if (!code || !Number.isInteger(userId) || !/^\d+$/.test(pin)) {
+  if (!code || !Number.isInteger(userId) || !/^\d+$/.test(pin) || pin.length !== PIN_LENGTH) {
     throw new Error(INVALID_LOGIN);
   }
 
@@ -54,24 +55,34 @@ export async function verifyPlayerLogin({ gameCode, userId, pin }: PlayerLoginIn
 
   if (!row) throw new Error(INVALID_LOGIN);
 
-  const now = Math.floor(Date.now() / 1000);
-  if (row.lockedUntil && row.lockedUntil > now) {
-    const minutes = Math.ceil((row.lockedUntil - now) / 60);
-    throw new Error(`Too many attempts. Try again in ${minutes} min.`);
-  }
-
   if (!row.pinHash) {
     throw new Error("No PIN set for you yet. Ask your host!");
   }
 
-  if (!verifyPin(pin, row.pinHash)) {
-    const [updated] = await db
-      .update(game_players)
-      .set({ pin_failed_attempts: sql`${game_players.pin_failed_attempts} + 1` })
-      .where(eq(game_players.id, row.gamePlayerId))
-      .returning({ attempts: game_players.pin_failed_attempts });
+  const now = Math.floor(Date.now() / 1000);
+  const locked = () => {
+    const minutes = Math.max(1, Math.ceil(((row.lockedUntil ?? now) - now) / 60));
+    return new Error(`Too many attempts. Try again in ${minutes} min.`);
+  };
 
-    if (updated && updated.attempts >= MAX_PIN_ATTEMPTS) {
+  // Spend an attempt BEFORE checking the PIN, atomically: a burst of parallel
+  // requests each gets its own counter value, so only the first
+  // MAX_PIN_ATTEMPTS ever reach the (expensive) hash comparison.
+  const [claim] = await db
+    .update(game_players)
+    .set({ pin_failed_attempts: sql`${game_players.pin_failed_attempts} + 1` })
+    .where(
+      and(
+        eq(game_players.id, row.gamePlayerId),
+        or(isNull(game_players.pin_locked_until), lte(game_players.pin_locked_until, now)),
+      ),
+    )
+    .returning({ attempts: game_players.pin_failed_attempts });
+
+  if (!claim || claim.attempts > MAX_PIN_ATTEMPTS) throw locked();
+
+  if (!(await verifyPin(pin, row.pinHash))) {
+    if (claim.attempts >= MAX_PIN_ATTEMPTS) {
       await db
         .update(game_players)
         .set({ pin_failed_attempts: 0, pin_locked_until: now + PIN_LOCK_SECONDS })
@@ -80,17 +91,10 @@ export async function verifyPlayerLogin({ gameCode, userId, pin }: PlayerLoginIn
     throw new Error(INVALID_LOGIN);
   }
 
-  if (row.lockedUntil !== null) {
-    await db
-      .update(game_players)
-      .set({ pin_failed_attempts: 0, pin_locked_until: null })
-      .where(eq(game_players.id, row.gamePlayerId));
-  } else {
-    await db
-      .update(game_players)
-      .set({ pin_failed_attempts: 0 })
-      .where(eq(game_players.id, row.gamePlayerId));
-  }
+  await db
+    .update(game_players)
+    .set({ pin_failed_attempts: 0, pin_locked_until: null })
+    .where(eq(game_players.id, row.gamePlayerId));
 
   return {
     id: String(userId),

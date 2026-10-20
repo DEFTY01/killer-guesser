@@ -57,6 +57,9 @@ export const games = sqliteTable("games", {
   join_code: text("join_code").unique(),
   /** Last game day whose vote has been tallied; the window itself stays configured. */
   vote_closed_day: integer("vote_closed_day").notNull().default(0),
+  /** Who the most recent tallied round eliminated, and which round that was. */
+  vote_eliminated_user_id: integer("vote_eliminated_user_id"),
+  vote_eliminated_day: integer("vote_eliminated_day"),
   created_at: integer("created_at")
     .notNull()
     .default(sql`(unixepoch())`),

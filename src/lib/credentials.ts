@@ -1,4 +1,12 @@
 import crypto from "crypto";
+import { promisify } from "util";
+
+// Async scrypt keeps the event loop free while hashing under login floods.
+const scrypt = promisify(crypto.scrypt) as (
+  password: string,
+  salt: Buffer,
+  keylen: number,
+) => Promise<Buffer>;
 
 /** Unambiguous alphabet: no 0/O, 1/I/L. */
 const CODE_ALPHABET = "ABCDEFGHJKMNPQRSTUVWXYZ23456789";
@@ -25,16 +33,16 @@ export function generatePin(): string {
 }
 
 /** Returns `salt:hash` (hex). */
-export function hashPin(pin: string): string {
+export async function hashPin(pin: string): Promise<string> {
   const salt = crypto.randomBytes(16);
-  const hash = crypto.scryptSync(pin, salt, 32);
+  const hash = await scrypt(pin, salt, 32);
   return `${salt.toString("hex")}:${hash.toString("hex")}`;
 }
 
-export function verifyPin(pin: string, stored: string): boolean {
+export async function verifyPin(pin: string, stored: string): Promise<boolean> {
   const [saltHex, hashHex] = stored.split(":");
   if (!saltHex || !hashHex) return false;
   const expected = Buffer.from(hashHex, "hex");
-  const actual = crypto.scryptSync(pin, Buffer.from(saltHex, "hex"), expected.length);
+  const actual = await scrypt(pin, Buffer.from(saltHex, "hex"), expected.length);
   return crypto.timingSafeEqual(actual, expected);
 }

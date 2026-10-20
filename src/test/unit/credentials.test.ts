@@ -28,12 +28,12 @@ describe("credentials", () => {
     }
   });
 
-  it("hash verifies only the right pin and is salted", () => {
-    const h1 = hashPin("0420");
-    const h2 = hashPin("0420");
+  it("hash verifies only the right pin and is salted", async () => {
+    const h1 = await hashPin("0420");
+    const h2 = await hashPin("0420");
     expect(h1).not.toBe(h2);
-    expect(verifyPin("0420", h1)).toBe(true);
-    expect(verifyPin("0421", h1)).toBe(false);
-    expect(verifyPin("0420", "garbage")).toBe(false);
+    expect(await verifyPin("0420", h1)).toBe(true);
+    expect(await verifyPin("0421", h1)).toBe(false);
+    expect(await verifyPin("0420", "garbage")).toBe(false);
   });
 });

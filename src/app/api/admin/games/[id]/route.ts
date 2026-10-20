@@ -229,6 +229,12 @@ export async function PATCH(
 
   if (action === "close_voting") {
     // Ends the round that is open right now, as if its window had run out.
+    if (existing.status !== "active") {
+      return NextResponse.json(
+        { success: false, error: "Only active games have vote rounds" },
+        { status: 422 },
+      );
+    }
     const state = await getVotingState(existing);
     if (!state.open) {
       return NextResponse.json(
@@ -242,7 +248,7 @@ export async function PATCH(
   }
 
   // action === "close"
-  if (existing.status === "closed") {
+  if (existing.status === "closed" || existing.status === "deleted") {
     return NextResponse.json(
       { success: false, error: "Game is already closed" },
       { status: 422 },

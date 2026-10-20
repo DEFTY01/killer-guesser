@@ -1,10 +1,11 @@
 import { db } from "@/db";
 import { game_players, games, roles, users, votes } from "@/db/schema";
-import { and, asc, count, eq, gte, lt, sql } from "drizzle-orm";
+import { and, count, eq, lt, sql } from "drizzle-orm";
 import type { RolePermission } from "@/lib/role-constants";
 import { ablyServer, ABLY_CHANNELS, ABLY_EVENTS } from "@/lib/ably";
 import { checkGameOver } from "@/lib/gameEnd";
-import type { Round } from "@/lib/voteRound";
+
+type Executor = Pick<typeof db, "select" | "update">;
 
 export function parsePermissions(raw: string | null | undefined): RolePermission[] {
   if (!raw) return [];
@@ -17,8 +18,8 @@ export function parsePermissions(raw: string | null | undefined): RolePermission
 }
 
 /** Vote counts per target for one round, with target names. */
-export async function loadResults(gameId: string, day: number) {
-  const tally = await db
+export async function loadResults(gameId: string, day: number, executor: Executor = db) {
+  const tally = await executor
     .select({
       target_id: votes.target_id,
       target_name: users.name,
@@ -37,89 +38,109 @@ export async function loadResults(gameId: string, day: number) {
 }
 
 /**
- * Tallies a round exactly once (the `vote_closed_day` claim is atomic) and
- * eliminates the player with a strict majority of the living voters. Returns
- * who was eliminated, or `undefined` when another request already closed it.
+ * Tallies a round exactly once and eliminates the player with a strict
+ * majority of the living voters.
+ *
+ * The claim (`vote_closed_day`), the kill and the recorded result happen in ONE
+ * transaction: a crash or a failed publish can never leave a round marked
+ * closed without its elimination. Realtime events go out after the commit and
+ * never fail the request.
+ *
+ * Returns `undefined` when another request already closed this round.
  */
 export async function closeRound(
   gameId: string,
-  round: Round,
+  round: { number: number },
+  options: { announce?: boolean } = {},
 ): Promise<{ eliminated: { id: number; name: string } | null } | undefined> {
-  const [claimed] = await db
-    .update(games)
-    .set({ vote_closed_day: round.number })
-    .where(and(eq(games.id, gameId), lt(games.vote_closed_day, round.number)))
-    .returning({ id: games.id });
-  if (!claimed) return undefined;
+  const { announce = true } = options;
 
-  const [results, voterRows] = await Promise.all([
-    loadResults(gameId, round.number),
-    db
+  const outcome = await db.transaction(async (tx) => {
+    const results = await loadResults(gameId, round.number, tx);
+    const voterRows = await tx
       .select({ is_dead: game_players.is_dead, permissions: roles.permissions })
       .from(game_players)
       .leftJoin(roles, eq(game_players.role_id, roles.id))
       .where(eq(game_players.game_id, gameId))
-      .limit(50),
-  ]);
+      .limit(50);
 
-  // Observers who know the killer cannot vote, so they do not count toward
-  // the majority either.
-  const eligibleVoters = voterRows.filter(
-    (p) => p.is_dead === 0 && !parsePermissions(p.permissions).includes("see_killer"),
-  ).length;
+    const [claimed] = await tx
+      .update(games)
+      .set({ vote_closed_day: round.number })
+      .where(and(eq(games.id, gameId), lt(games.vote_closed_day, round.number)))
+      .returning({ id: games.id });
+    if (!claimed) return undefined;
 
-  const sorted = [...results].sort((a, b) => b.voteCount - a.voteCount);
-  const top = sorted[0];
-  const isStrictlyTop = top !== undefined && (sorted.length < 2 || sorted[1].voteCount < top.voteCount);
-  const hasMajority = top !== undefined && top.voteCount * 2 > eligibleVoters;
-  const winner = isStrictlyTop && hasMajority ? top : undefined;
+    // Observers who know the killer cannot vote, so they do not count toward
+    // the majority either.
+    const eligibleVoters = voterRows.filter(
+      (p) => p.is_dead === 0 && !parsePermissions(p.permissions).includes("see_killer"),
+    ).length;
 
-  let eliminated: { id: number; name: string } | null = null;
-  if (winner) {
-    await db
-      .update(game_players)
-      .set({
-        is_dead: 1,
-        died_at: sql<number>`(unixepoch())`,
-        died_time_of_day: "evening",
-      })
-      .where(
-        and(
-          eq(game_players.game_id, gameId),
-          eq(game_players.user_id, winner.playerId),
-          eq(game_players.is_dead, 0),
-        ),
-      );
-    eliminated = { id: winner.playerId, name: winner.name };
-    await checkGameOver(gameId);
+    const sorted = [...results].sort((a, b) => b.voteCount - a.voteCount);
+    const top = sorted[0];
+    const isStrictlyTop =
+      top !== undefined && (sorted.length < 2 || sorted[1].voteCount < top.voteCount);
+    const hasMajority = top !== undefined && top.voteCount * 2 > eligibleVoters;
+    const winner = isStrictlyTop && hasMajority ? top : undefined;
+
+    let eliminated: { id: number; name: string } | null = null;
+    if (winner) {
+      await tx
+        .update(game_players)
+        .set({
+          is_dead: 1,
+          died_at: sql<number>`(unixepoch())`,
+          died_time_of_day: "evening",
+        })
+        .where(
+          and(
+            eq(game_players.game_id, gameId),
+            eq(game_players.user_id, winner.playerId),
+            eq(game_players.is_dead, 0),
+          ),
+        );
+      await tx
+        .update(games)
+        .set({ vote_eliminated_user_id: winner.playerId, vote_eliminated_day: round.number })
+        .where(eq(games.id, gameId));
+      eliminated = { id: winner.playerId, name: winner.name };
+    }
+    return { results, eliminated };
+  });
+
+  if (!outcome) return undefined;
+
+  if (outcome.eliminated) await checkGameOver(gameId);
+
+  if (announce && process.env.ABLY_API_KEY) {
+    try {
+      const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
+      await channel.publish(ABLY_EVENTS.vote_closed, {
+        eliminated: outcome.eliminated,
+        voteResults: outcome.results,
+      });
+    } catch (err) {
+      console.error("[vote] vote_closed publish failed:", err);
+    }
   }
 
-  if (process.env.ABLY_API_KEY) {
-    const channel = ablyServer.channels.get(ABLY_CHANNELS.game(gameId));
-    await channel.publish(ABLY_EVENTS.vote_closed, {
-      eliminated,
-      voteResults: results,
-    });
-  }
-
-  return { eliminated };
+  return { eliminated: outcome.eliminated };
 }
 
-/** The evening elimination that followed a round, for requests that did not close it. */
-export async function findEliminated(gameId: string, round: Round) {
+/** Who a finished round eliminated, for requests that did not close it themselves. */
+export async function findEliminated(gameId: string, round: { number: number }) {
   const [row] = await db
-    .select({ user_id: game_players.user_id, name: users.name })
-    .from(game_players)
-    .innerJoin(users, eq(game_players.user_id, users.id))
-    .where(
-      and(
-        eq(game_players.game_id, gameId),
-        eq(game_players.is_dead, 1),
-        eq(game_players.died_time_of_day, "evening"),
-        gte(game_players.died_at, Math.floor(round.closeMs / 1000)),
-      ),
-    )
-    .orderBy(asc(game_players.died_at))
+    .select({
+      id: games.vote_eliminated_user_id,
+      day: games.vote_eliminated_day,
+      name: users.name,
+    })
+    .from(games)
+    .innerJoin(users, eq(users.id, games.vote_eliminated_user_id))
+    .where(eq(games.id, gameId))
     .limit(1);
-  return row ? { id: row.user_id, name: row.name } : null;
+  return row && row.id !== null && row.day === round.number
+    ? { id: row.id, name: row.name }
+    : null;
 }

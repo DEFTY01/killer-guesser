@@ -185,13 +185,17 @@ export async function GET(
 
   // ── Round closed: tally the finished round once ───────────────
   let eliminated: { id: number; name: string } | null | undefined;
-  if (state.last && game.status === "active") {
-    if (state.last.number > game.vote_closed_day) {
-      const closed = await closeRound(gameId, state.last);
-      eliminated = closed ? closed.eliminated : await findEliminated(gameId, state.last);
-    } else {
-      eliminated = await findEliminated(gameId, state.last);
+  if (state.last && game.status === "active" && state.last.number > game.vote_closed_day) {
+    // Close every missed round in order (nobody may have polled while an
+    // earlier one ended); only the newest is announced to clients.
+    let closedLast: Awaited<ReturnType<typeof closeRound>>;
+    const first = Math.max(game.vote_closed_day + 1, state.last.number - 6);
+    for (let n = first; n <= state.last.number; n++) {
+      const isLast = n === state.last.number;
+      const closed = await closeRound(gameId, { number: n }, { announce: isLast });
+      if (isLast) closedLast = closed;
     }
+    eliminated = closedLast ? closedLast.eliminated : await findEliminated(gameId, state.last);
   } else if (state.last) {
     eliminated = await findEliminated(gameId, state.last);
   }
@@ -368,6 +372,23 @@ export async function POST(
       target: [votes.game_id, votes.day, votes.voter_id],
       set: { target_id: targetId },
     });
+
+  // The round may have been tallied between our open-check and the insert; a
+  // vote that missed the tally must not be acknowledged as counted.
+  const [{ vote_closed_day } = { vote_closed_day: 0 }] = await db
+    .select({ vote_closed_day: games.vote_closed_day })
+    .from(games)
+    .where(eq(games.id, gameId))
+    .limit(1);
+  if (vote_closed_day >= day) {
+    await db
+      .delete(votes)
+      .where(and(eq(votes.game_id, gameId), eq(votes.day, day), eq(votes.voter_id, userId)));
+    return NextResponse.json(
+      { success: false, error: "Voting is closed" },
+      { status: 403 },
+    );
+  }
 
   const [[voterUser], [targetUser]] = await Promise.all([
     db.select({ name: users.name }).from(users).where(eq(users.id, userId)).limit(1),

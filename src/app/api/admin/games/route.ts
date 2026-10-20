@@ -245,9 +245,13 @@ export async function POST(req: NextRequest) {
     userId: p.userId,
     pin: generatePin(),
   }));
-  const pinByUser = new Map(issuedPins.map((i) => [i.userId, i.pin]));
+  const pinHashes = new Map(
+    await Promise.all(
+      issuedPins.map(async (i) => [i.userId, await hashPin(i.pin)] as const),
+    ),
+  );
 
-  const newGame = await db.transaction(async (tx) => {
+  const createGame = () => db.transaction(async (tx) => {
     const [game] = await tx
       .insert(games)
       .values({
@@ -283,13 +287,30 @@ export async function POST(req: NextRequest) {
           user_id: p.userId,
           team: p.team,
           role_id: p.roleId,
-          pin_hash: hashPin(pinByUser.get(p.userId) ?? generatePin()),
+          pin_hash: pinHashes.get(p.userId) ?? null,
         })),
       );
     }
 
     return game;
   });
+
+  // A join-code collision (31^6 space) is rare; retry with a fresh code.
+  let newGame: Awaited<ReturnType<typeof createGame>> | undefined;
+  for (let attempt = 0; attempt < 3 && !newGame; attempt++) {
+    try {
+      newGame = await createGame();
+    } catch (err) {
+      const message = String((err as { message?: string })?.message ?? err);
+      if (!/UNIQUE|unique/.test(message) || attempt === 2) throw err;
+    }
+  }
+  if (!newGame) {
+    return NextResponse.json(
+      { success: false, error: "Could not create game" },
+      { status: 500 },
+    );
+  }
 
   return NextResponse.json(
     { success: true, data: { ...newGame, pins: issuedPins } },

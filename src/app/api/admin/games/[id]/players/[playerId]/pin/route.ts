@@ -35,7 +35,7 @@ export async function POST(
   const [updated] = await db
     .update(game_players)
     .set({
-      pin_hash: hashPin(pin),
+      pin_hash: await hashPin(pin),
       pin_failed_attempts: 0,
       pin_locked_until: null,
     })

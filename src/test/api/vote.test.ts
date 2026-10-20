@@ -13,6 +13,7 @@ const { mockAuth, mockGetVotingState, mockCheckGameOver, mockPublish, dbState } 
     claimResult: [{ id: "G1" }] as unknown[],
     setCalls: [] as Record<string, unknown>[],
     insertValues: [] as Record<string, unknown>[],
+    deleted: 0,
   },
 }));
 
@@ -29,8 +30,8 @@ vi.mock("@/lib/ably", () => ({
   ABLY_EVENTS: { vote_cast: "vote_cast", vote_closed: "vote_closed" },
 }));
 
-vi.mock("@/db", () => ({
-  db: {
+vi.mock("@/db", () => {
+  const db = {
     select: vi.fn(() => {
       const result = dbState.selectResults[dbState.callIndex] ?? [];
       dbState.callIndex++;
@@ -47,6 +48,7 @@ vi.mock("@/db", () => ({
         return { onConflictDoUpdate: vi.fn().mockResolvedValue([]) };
       }),
     })),
+    delete: vi.fn(() => ({ where: vi.fn(async () => { dbState.deleted += 1; }) })),
     update: vi.fn(() => ({
       set: vi.fn((v: Record<string, unknown>) => {
         dbState.setCalls.push(v);
@@ -59,13 +61,21 @@ vi.mock("@/db", () => ({
         };
       }),
     })),
-  },
-}));
+  };
+  // The route runs the tally inside a transaction; the mock just reuses itself.
+  const withTx = Object.assign(db, {
+    transaction: async (fn: (tx: unknown) => Promise<unknown>) => fn(db),
+  });
+  return { db: withTx };
+});
 
 vi.mock("@/db/schema", () => ({
   users: { id: "id", name: "name" },
   roles: { id: "id", name: "name", permissions: "permissions" },
-  games: { id: "id", status: "status", vote_closed_day: "vcd" },
+  games: {
+    id: "id", status: "status", vote_closed_day: "vcd",
+    vote_eliminated_user_id: "veu", vote_eliminated_day: "ved",
+  },
   game_players: {
     id: "id", game_id: "gid", user_id: "uid", is_dead: "dead", role_id: "rid",
     died_at: "da", died_time_of_day: "dtod",
@@ -116,6 +126,7 @@ function reset() {
   dbState.claimResult = [{ id: "G1" }];
   dbState.setCalls = [];
   dbState.insertValues = [];
+  dbState.deleted = 0;
   mockAuth.mockResolvedValue(player);
   mockGetVotingState.mockResolvedValue(state());
   delete process.env.ABLY_API_KEY;
@@ -214,7 +225,7 @@ describe("GET /api/game/[id]/vote — closing a finished round", () => {
 
   // game, caller, claim → tally, voters → (winner update) → shown results
   const seq = (tally: unknown[], voters: unknown[]) => [
-    [game()],
+    [game({ vote_closed_day: 1 })],
     [{ permissions: null }],
     tally,
     voters,
@@ -270,12 +281,43 @@ describe("GET /api/game/[id]/vote — closing a finished round", () => {
     expect((await (await get()).json()).data.eliminated).toEqual({ id: 20, name: "Bob" });
   });
 
+  it("missed rounds are closed in order, only the newest is announced", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = [
+      [game({ vote_closed_day: 0 })],
+      [{ permissions: null }],
+      [], // round 1 tally: no votes
+      [], // round 1 voters
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }], // round 2 tally
+      alive(4), // round 2 voters
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }], // shown results
+    ];
+    await get();
+    const claims = dbState.setCalls.filter((c) => "vote_closed_day" in c).map((c) => c.vote_closed_day);
+    expect(claims).toEqual([1, 2]);
+    expect(mockPublish).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed realtime publish does not fail the request or undo the tally", async () => {
+    process.env.ABLY_API_KEY = "k";
+    mockPublish.mockRejectedValueOnce(new Error("ably down"));
+    mockGetVotingState.mockResolvedValue(finished());
+    dbState.selectResults = seq(
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+      alive(5),
+    );
+    const res = await get();
+    expect(res.status).toBe(200);
+    expect((await res.json()).data.eliminated).toEqual({ id: 20, name: "Bob" });
+  });
+
   it("round already tallied → no second close, elimination is looked up", async () => {
     mockGetVotingState.mockResolvedValue(finished());
     dbState.selectResults = [
       [game({ vote_closed_day: 2 })],
       [{ permissions: null }],
-      [{ user_id: 20, name: "Bob" }],
+      [{ id: 20, day: 2, name: "Bob" }],
       [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
     ];
     const json = (await (await get()).json()).data;
@@ -288,9 +330,11 @@ describe("GET /api/game/[id]/vote — closing a finished round", () => {
     mockGetVotingState.mockResolvedValue(finished());
     dbState.claimResult = [];
     dbState.selectResults = [
-      [game()],
+      [game({ vote_closed_day: 1 })],
       [{ permissions: null }],
-      [{ user_id: 20, name: "Bob" }],
+      [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
+      [{ is_dead: 0, permissions: null }],
+      [{ id: 20, day: 2, name: "Bob" }],
       [{ target_id: 20, target_name: "Bob", vote_count: 3 }],
     ];
     await get();
@@ -323,6 +367,7 @@ describe("POST /api/game/[id]/vote", () => {
     [game()],
     [{ id: 1, is_dead: 0, permissions: null }],
     [{ id: 99 }],
+    [{ vote_closed_day: 0 }],
     [{ name: "Alice" }],
     [{ name: "Bob" }],
   ];
@@ -370,6 +415,18 @@ describe("POST /api/game/[id]/vote", () => {
     const res = await post({ targetId: 20 });
     expect(res.status).toBe(200);
     expect(dbState.insertValues[0]).toMatchObject({ game_id: "G1", day: 2, voter_id: 10, target_id: 20 });
+  });
+
+  it("a vote that lands after the round was tallied is dropped and refused", async () => {
+    dbState.selectResults = [
+      [game()],
+      [{ id: 1, is_dead: 0, permissions: null }],
+      [{ id: 99 }],
+      [{ vote_closed_day: 2 }],
+    ];
+    const res = await post({ targetId: 20 });
+    expect(res.status).toBe(403);
+    expect(dbState.deleted).toBe(1);
   });
 
   it("self-vote is allowed", async () => {
